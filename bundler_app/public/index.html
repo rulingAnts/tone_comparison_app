@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Tone Matching Bundler</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 30px;
+      text-align: center;
+    }
+
+    .section {
+      margin-bottom: 25px;
+      padding: 20px;
+      background: #f9f9f9;
+      border-radius: 6px;
+    }
+
+    .section h2 {
+      color: #555;
+      margin-bottom: 15px;
+      font-size: 18px;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: #666;
+      font-weight: 500;
+    }
+
+    input[type="text"],
+    textarea,
+    select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    textarea {
+      min-height: 100px;
+      font-family: monospace;
+    }
+
+    .file-selector {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .file-selector input {
+      flex: 1;
+    }
+
+    button {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    button:hover {
+      background: #0056b3;
+    }
+
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+
+    .btn-secondary {
+      background: #6c757d;
+    }
+
+    .btn-secondary:hover {
+      background: #545b62;
+    }
+
+    .btn-success {
+      background: #28a745;
+    }
+
+    .btn-success:hover {
+      background: #218838;
+    }
+
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .checkbox-group input[type="checkbox"] {
+      width: auto;
+    }
+
+    .multi-select {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 10px;
+      max-height: 150px;
+      overflow-y: auto;
+      background: white;
+    }
+
+    .multi-select label {
+      display: flex;
+      align-items: center;
+      padding: 5px;
+      margin-bottom: 5px;
+      cursor: pointer;
+    }
+
+    .multi-select input[type="checkbox"] {
+      width: auto;
+      margin-right: 8px;
+    }
+
+    .status {
+      padding: 15px;
+      border-radius: 4px;
+      margin-top: 20px;
+      display: none;
+    }
+
+    .status.success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+
+    .status.error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+
+    .status.warning {
+      background: #fff3cd;
+      color: #856404;
+      border: 1px solid #ffeaa7;
+    }
+
+    .info {
+      color: #666;
+      font-size: 13px;
+      margin-top: 5px;
+    }
+
+    .create-bundle-btn {
+      width: 100%;
+      padding: 15px;
+      font-size: 16px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Tone Matching Bundler</h1>
+
+    <div class="section">
+      <h2>1. XML File</h2>
+      <div class="form-group">
+        <label>Select Dekereke XML File</label>
+        <div class="file-selector">
+          <input type="text" id="xmlPath" readonly placeholder="No file selected">
+          <button onclick="selectXmlFile()">Browse</button>
+        </div>
+        <div class="info" id="xmlInfo"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>2. Display Settings</h2>
+      <div class="form-group">
+        <label>Written Form Elements (select one or more)</label>
+        <div id="writtenFormElements" class="multi-select">
+          <p class="info">Load XML file first to see available fields</p>
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="checkbox-group">
+          <input type="checkbox" id="showWrittenForm" checked>
+          <label for="showWrittenForm">Show written forms to user</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>3. Audio Settings</h2>
+      <div class="form-group">
+        <label>Audio Folder</label>
+        <div class="file-selector">
+          <input type="text" id="audioFolder" readonly placeholder="No folder selected">
+          <button onclick="selectAudioFolder()">Browse</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Audio File Suffix (optional)</label>
+        <input type="text" id="audioSuffix" placeholder="e.g., -phon">
+        <div class="info">Will be inserted before file extension (e.g., sound.wav → sound-phon.wav)</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>4. Record Filtering</h2>
+      <div class="form-group">
+        <label>Reference Numbers (one per line, or comma/space separated)</label>
+        <textarea id="referenceNumbers" placeholder="Leave empty to include all records&#10;Or enter specific reference numbers like:&#10;001&#10;002&#10;003"></textarea>
+        <div class="info">Only records with these reference numbers will be included</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>5. User Input Settings</h2>
+      <div class="form-group">
+        <div class="checkbox-group">
+          <input type="checkbox" id="requireUserSpelling">
+          <label for="requireUserSpelling">Require user to type spelling for each word</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Element to store user spelling</label>
+        <input type="text" id="userSpellingElement" value="Orthographic">
+      </div>
+      <div class="form-group">
+        <label>Element to store tone group assignment</label>
+        <input type="text" id="toneGroupElement" value="SurfaceMelodyGroup">
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>6. Output</h2>
+      <div class="form-group">
+        <label>Output Bundle File</label>
+        <div class="file-selector">
+          <input type="text" id="outputPath" readonly placeholder="No output file selected">
+          <button onclick="selectOutputFile()">Browse</button>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-success create-bundle-btn" onclick="createBundle()" id="createBtn" disabled>
+      Create Bundle
+    </button>
+
+    <div class="status" id="status"></div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

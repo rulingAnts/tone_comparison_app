@@ -1,0 +1,42 @@
+{
+  "name": "tone-matching-comparison",
+  "version": "1.0.0",
+  "description": "Desktop app for comparing tone matching results from multiple speakers",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "keywords": ["phonology", "tone", "linguistics", "analysis"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "adm-zip": "^0.5.10",
+    "fast-csv": "^5.0.1",
+    "fast-xml-parser": "^4.3.2"
+  },
+  "devDependencies": {
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.4"
+  },
+  "build": {
+    "appId": "com.tonematching.comparison",
+    "productName": "Tone Matching Comparison",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "public/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}

@@ -1,0 +1,77 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor/IDE
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+
+# Node / Electron
+node_modules/
+**/node_modules/
+yarn.lock
+# keep lockfiles if you prefer deterministic installs; comment out above line to track yarn.lock
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+.parcel-cache/
+.next/
+.nuxt/
+dist/
+**/dist/
+out/
+**/out/
+*.asar
+# Electron builder outputs
+release/
+**/release/
+
+# Flutter / Dart
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+.melos_tool/
+.fvm/
+coverage/
+# Flutter/Gradle build outputs
+build/
+**/build/
+
+# Android / Gradle
+.gradle/
+**/.gradle/
+**/local.properties
+**/captures/
+**/generated/
+**/android/app/release/
+# Keystores (never commit secrets)
+*.jks
+*.keystore
+
+# Java/Kotlin
+*.class
+hs_err_pid*
+replay_pid*
+
+# Logs
+*.log
+logs/
+**/logs/
+
+# Misc
+.env
+.env.*
+.env.local
+.sass-cache/
+.eslintcache
+.cache/
+.tmp/
+.temp/
+Thumbs.db
