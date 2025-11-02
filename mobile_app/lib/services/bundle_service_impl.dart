@@ -314,24 +314,24 @@ class BundleService {
         }
         final v = entry.value;
         if (v.isEmpty) continue;
-        written.add('  <${k}>${esc(v)}</${k}>');
+        written.add('  <$k>${esc(v)}</$k>');
       }
 
       // User spelling override/add
       if (r.userSpelling != null && r.userSpelling!.isNotEmpty) {
         written.add(
-          '  <${settings.userSpellingElement}>${esc(r.userSpelling!)}<\/${settings.userSpellingElement}>',
+          '  <${settings.userSpellingElement}>${esc(r.userSpelling!)}</${settings.userSpellingElement}>',
         );
       }
 
       // Tone group number
       if (r.toneGroup != null) {
-        written.add('  <${tgKey}>${r.toneGroup}<\/${tgKey}>');
+        written.add('  <$tgKey>${r.toneGroup}</$tgKey>');
       }
 
       // Tone group GUID
       if (r.toneGroupId != null && r.toneGroupId!.isNotEmpty) {
-        written.add('  <${tgIdKey}>${esc(r.toneGroupId!)}<\/${tgIdKey}>');
+        written.add('  <$tgIdKey>${esc(r.toneGroupId!)}</$tgIdKey>');
       }
 
       parts.add('<data_form>');
