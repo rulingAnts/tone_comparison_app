@@ -75,3 +75,4 @@ logs/
 .tmp/
 .temp/
 Thumbs.db
+mobile_app/.dart_tool/extension_discovery/vs_code.json
