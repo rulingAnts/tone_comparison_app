@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'services/app_state.dart';
 import 'screens/home_screen.dart';
+import 'package:tone_comparison_app/generated/app_localizations.dart';
 
 void main() {
   runApp(const ToneMatchingApp());
@@ -13,13 +14,21 @@ class ToneMatchingApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => AppState(),
-      child: MaterialApp(
-        title: 'Tone Matching',
-        theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
-        home: const HomeScreen(),
-        debugShowCheckedModeBanner: false,
-      ),
+      create: (_) => AppState()
+        ..initLocalization()
+        ..initIntents(),
+      builder: (context, _) {
+        final appState = Provider.of<AppState>(context);
+        return MaterialApp(
+          title: 'Tone Matching',
+          theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.blue),
+          home: const HomeScreen(),
+          debugShowCheckedModeBanner: false,
+          locale: appState.locale,
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+        );
+      },
     );
   }
 }

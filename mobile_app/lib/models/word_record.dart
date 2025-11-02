@@ -1,4 +1,7 @@
+import '../utils/ref_utils.dart';
+
 /// Represents a single word/data record from the Dekereke XML
+
 class WordRecord {
   /// The reference number for this record
   final String reference;
@@ -15,13 +18,20 @@ class WordRecord {
   /// Assigned tone group number (1-based)
   int? toneGroup;
 
+  /// Assigned tone group stable id (GUID)
+  String? toneGroupId;
+
   WordRecord({
     required this.reference,
     required this.soundFile,
     required this.fields,
     this.userSpelling,
     this.toneGroup,
+    this.toneGroupId,
   });
+
+  /// Numeric form of the reference for sorting (preserves original string elsewhere)
+  int? get numericReference => RefUtils.numericRef(reference);
 
   /// Get the display text based on written form elements
   String getDisplayText(List<String> writtenFormElements) {
@@ -58,6 +68,7 @@ class WordRecord {
       'fields': fields,
       'userSpelling': userSpelling,
       'toneGroup': toneGroup,
+      'toneGroupId': toneGroupId,
     };
   }
 
@@ -68,6 +79,7 @@ class WordRecord {
       fields: Map<String, String>.from(json['fields'] as Map),
       userSpelling: json['userSpelling'] as String?,
       toneGroup: json['toneGroup'] as int?,
+      toneGroupId: json['toneGroupId'] as String?,
     );
   }
 }

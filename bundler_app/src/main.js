@@ -3,6 +3,11 @@ const path = require('path');
 const fs = require('fs');
 const archiver = require('archiver');
 const { XMLParser } = require('fast-xml-parser');
+const {
+  normalizeRefString,
+  toNumericRef,
+  sortByNumericRef,
+} = require('./utils/refUtils');
 
 let mainWindow;
 
@@ -63,9 +68,12 @@ ipcMain.handle('parse-xml', async (event, xmlPath) => {
     const xmlData = fs.readFileSync(xmlPath, 'utf16le');
     
     const parser = new XMLParser({
-      ignoreAttributes: false,
-      attributeNamePrefix: '@_',
-    });
+        ignoreAttributes: false,
+        attributeNamePrefix: '@_',
+        trimValues: true,
+        parseAttributeValue: false,
+        parseTagValue: false,
+      });
     
     const result = parser.parse(xmlData);
     
@@ -113,6 +121,9 @@ ipcMain.handle('create-bundle', async (event, config) => {
     const parser = new XMLParser({
       ignoreAttributes: false,
       attributeNamePrefix: '@_',
+      trimValues: true,
+      parseAttributeValue: false,
+      parseTagValue: false,
     });
     const result = parser.parse(xmlData);
     
@@ -122,10 +133,17 @@ ipcMain.handle('create-bundle', async (event, config) => {
       : [phonData.data_form];
     
     // Filter records by reference numbers
-    const referenceNumbers = settings.referenceNumbers || [];
-    const filteredRecords = referenceNumbers.length > 0
-      ? dataForms.filter(df => referenceNumbers.includes(df.Reference))
+    const referenceNumbers = (settings.referenceNumbers || []).map((r) => normalizeRefString(r));
+    const refSet = new Set(referenceNumbers);
+    let filteredRecords = referenceNumbers.length > 0
+      ? dataForms.filter(df => {
+          const ref = df && df.Reference != null ? normalizeRefString(df.Reference) : '';
+          return refSet.has(ref);
+        })
       : dataForms;
+
+    // Optional: keep a stable numeric order without changing stored strings
+    filteredRecords = sortByNumericRef(filteredRecords);
     
     // Collect sound files
     const soundFiles = new Set();
@@ -156,14 +174,44 @@ ipcMain.handle('create-bundle', async (event, config) => {
       }
     }
     
+    // Create minimized XML with only filtered records and no prior tone grouping
+    const tgKey = settings.toneGroupElement || 'SurfaceMelodyGroup';
+    const tgIdKey = settings.toneGroupIdElement || 'SurfaceMelodyGroupId';
+    const escapeXml = (s) => String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+
+    const buildDataForm = (rec) => {
+      const keys = Object.keys(rec).filter((k) => !k.startsWith('@_'));
+      const parts = [];
+      for (const k of keys) {
+        if (k === tgKey || k === tgIdKey) continue; // strip previous tone grouping
+        const v = rec[k];
+        if (v == null) continue;
+        parts.push(`  <${k}>${escapeXml(v)}</${k}>`);
+      }
+      return ['<data_form>', ...parts, '</data_form>'].join('\n');
+    };
+
+    const subsetXml = [
+      '<?xml version="1.0" encoding="utf-8"?>',
+      '<phon_data>',
+      ...filteredRecords.map((r) => buildDataForm(r)),
+      '</phon_data>',
+      '',
+    ].join('\n');
+
     // Create zip bundle
     const output = fs.createWriteStream(outputPath);
     const archive = archiver('zip', { zlib: { level: 9 } });
     
     archive.pipe(output);
     
-    // Add XML file
-    archive.file(xmlPath, { name: 'data.xml' });
+  // Add minimized XML file
+  archive.append(subsetXml, { name: 'data.xml' });
     
     // Add settings file
     archive.append(JSON.stringify(settings, null, 2), { name: 'settings.json' });
@@ -192,8 +240,11 @@ ipcMain.handle('create-bundle', async (event, config) => {
 
 ipcMain.handle('select-output-file', async () => {
   const result = await dialog.showSaveDialog(mainWindow, {
-    filters: [{ name: 'Zip Files', extensions: ['zip'] }],
-    defaultPath: 'tone_matching_bundle.zip',
+    filters: [
+      { name: 'Tone Bundle', extensions: ['tncmp'] },
+      { name: 'Zip Files', extensions: ['zip'] },
+    ],
+    defaultPath: 'tone_matching_bundle.tncmp',
   });
   
   if (!result.canceled && result.filePath) {

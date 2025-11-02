@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:file_selector/file_selector.dart';
 import '../services/app_state.dart';
 import 'tone_matching_screen.dart';
+import 'package:tone_comparison_app/generated/app_localizations.dart';
 
 /// Home screen for loading bundles
 class HomeScreen extends StatelessWidget {
@@ -10,17 +11,19 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Scaffold(
+      appBar: AppBar(title: Text(l10n.appTitle), actions: [_LanguageMenu()]),
       body: Center(
         child: Consumer<AppState>(
           builder: (context, appState, child) {
             if (appState.isLoading) {
-              return const Column(
+              return Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Loading bundle...'),
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(l10n.home_loading),
                 ],
               );
             }
@@ -39,7 +42,7 @@ class HomeScreen extends StatelessWidget {
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: () => _loadBundle(context, appState),
-                    child: const Text('Try Again'),
+                    child: Text(l10n.home_tryAgain),
                   ),
                 ],
               );
@@ -51,10 +54,7 @@ class HomeScreen extends StatelessWidget {
                 children: [
                   const Icon(Icons.check_circle, size: 64, color: Colors.green),
                   const SizedBox(height: 16),
-                  Text(
-                    '${appState.records.length} words loaded',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
+                  Text(l10n.home_wordsLoaded(appState.records.length)),
                   const SizedBox(height: 32),
                   ElevatedButton.icon(
                     onPressed: () {
@@ -65,13 +65,13 @@ class HomeScreen extends StatelessWidget {
                       );
                     },
                     icon: const Icon(Icons.play_arrow),
-                    label: const Text('Start Tone Matching'),
+                    label: Text(l10n.tm_start),
                   ),
                   const SizedBox(height: 16),
                   OutlinedButton.icon(
                     onPressed: () => _loadBundle(context, appState),
                     icon: const Icon(Icons.folder_open),
-                    label: const Text('Load Different Bundle'),
+                    label: Text(l10n.home_loadBundle),
                   ),
                 ],
               );
@@ -87,19 +87,19 @@ class HomeScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 32),
                 Text(
-                  'Tone Matching App',
+                  l10n.tm_title,
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  'Load a bundle to begin',
-                  style: TextStyle(fontSize: 18),
+                Text(
+                  l10n.home_openFromFiles,
+                  style: const TextStyle(fontSize: 18),
                 ),
                 const SizedBox(height: 32),
                 ElevatedButton.icon(
                   onPressed: () => _loadBundle(context, appState),
                   icon: const Icon(Icons.folder_open),
-                  label: const Text('Load Bundle'),
+                  label: Text(l10n.home_loadBundle),
                 ),
               ],
             );
@@ -112,12 +112,66 @@ class HomeScreen extends StatelessWidget {
   Future<void> _loadBundle(BuildContext context, AppState appState) async {
     final XFile? file = await openFile(
       acceptedTypeGroups: [
-        const XTypeGroup(extensions: ['zip']),
+        const XTypeGroup(extensions: ['tncmp', 'zip']),
       ],
     );
 
     if (file != null && file.path.isNotEmpty) {
       await appState.loadBundle(file.path);
     }
+  }
+}
+
+class _LanguageMenu extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final appState = Provider.of<AppState>(context, listen: false);
+    final l10n = AppLocalizations.of(context);
+    final current = appState.locale?.languageCode;
+
+    final labels = <String, String>{
+      'en': 'English',
+      'de': 'Deutsch',
+      'nl': 'Nederlands',
+      'es': 'Español',
+      'pt': 'Português',
+      'fr': 'Français',
+      'it': 'Italiano',
+      'af': 'Afrikaans',
+      'ar': 'العربية',
+      'zh': '中文',
+      'id': 'Indonesia',
+      'tpi': 'Tok Pisin',
+    };
+
+    return PopupMenuButton<String?>(
+      icon: const Icon(Icons.language),
+      tooltip: l10n.settings_language,
+      initialValue: current,
+      onSelected: (code) async {
+        if (code == null) {
+          await appState.setLocale(null);
+        } else {
+          await appState.setLocale(Locale(code));
+        }
+      },
+      itemBuilder: (context) {
+        return <PopupMenuEntry<String?>>[
+          PopupMenuItem<String?>(
+            value: null,
+            child: Text(l10n.settings_systemDefault),
+          ),
+          const PopupMenuDivider(),
+          ...AppLocalizations.supportedLocales.map((loc) {
+            final code = loc.languageCode;
+            return CheckedPopupMenuItem<String?>(
+              value: code,
+              checked: code == current,
+              child: Text(labels[code] ?? code.toUpperCase()),
+            );
+          }),
+        ];
+      },
+    );
   }
 }

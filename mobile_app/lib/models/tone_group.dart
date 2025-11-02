@@ -2,6 +2,9 @@ import 'word_record.dart';
 
 /// Represents a tone melody group with an exemplar and members
 class ToneGroup {
+  /// Stable unique identifier for this tone group
+  final String id;
+
   /// The group number (1-based)
   final int groupNumber;
 
@@ -15,17 +18,23 @@ class ToneGroup {
   String? imagePath;
 
   ToneGroup({
+    required this.id,
     required this.groupNumber,
     required this.exemplar,
     List<WordRecord>? members,
     this.imagePath,
-  }) : members = members ?? [exemplar];
+  }) : members = members ?? [exemplar] {
+    // Ensure exemplar has this group's linkage
+    exemplar.toneGroup = groupNumber;
+    exemplar.toneGroupId = id;
+  }
 
   /// Add a word to this tone group
   void addMember(WordRecord word) {
     if (!members.contains(word)) {
       members.add(word);
       word.toneGroup = groupNumber;
+      word.toneGroupId = id;
     }
   }
 
@@ -34,11 +43,15 @@ class ToneGroup {
     members.remove(word);
     if (word.toneGroup == groupNumber) {
       word.toneGroup = null;
+      if (word.toneGroupId == id) {
+        word.toneGroupId = null;
+      }
     }
   }
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'groupNumber': groupNumber,
       'exemplar': exemplar.toJson(),
       'members': members.map((m) => m.toJson()).toList(),
@@ -55,6 +68,7 @@ class ToneGroup {
         .toList();
 
     return ToneGroup(
+      id: json['id'] as String,
       groupNumber: json['groupNumber'] as int,
       exemplar: exemplar,
       members: members,

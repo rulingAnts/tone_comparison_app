@@ -20,6 +20,19 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+
+                <!-- Open tone bundles directly from Android (WhatsApp, Files, etc.) -->
+                <intent-filter>
+                    <action android:name="android.intent.action.VIEW" />
+                    <category android:name="android.intent.category.DEFAULT" />
+                    <category android:name="android.intent.category.BROWSABLE" />
+                    <!-- Handle file:// URIs ending with .tncmp -->
+                    <data android:scheme="file" android:pathPattern=".*\\.tncmp" />
+                    <!-- Handle content:// URIs; MIME may not be mapped for .tncmp, accept zip and octet-stream -->
+                    <data android:scheme="content" android:mimeType="application/zip" />
+                    <data android:scheme="content" android:mimeType="application/octet-stream" />
+                    <data android:scheme="content" android:mimeType="application/x-zip-compressed" />
+                </intent-filter>
         </activity>
         <meta-data
             android:name="flutterEmbedding"

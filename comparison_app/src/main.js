@@ -3,6 +3,10 @@ const path = require('path');
 const fs = require('fs');
 const AdmZip = require('adm-zip');
 const { XMLParser } = require('fast-xml-parser');
+const {
+  normalizeRefString,
+  sortByNumericRef,
+} = require('./utils/refUtils');
 const csv = require('fast-csv');
 
 let mainWindow;
@@ -78,6 +82,9 @@ ipcMain.handle('load-results', async (event, filePaths) => {
       const parser = new XMLParser({
         ignoreAttributes: false,
         attributeNamePrefix: '@_',
+        trimValues: true,
+        parseAttributeValue: false,
+        parseTagValue: false,
       });
       const xmlResult = parser.parse(xmlData);
       
@@ -137,7 +144,7 @@ function analyzeResults(results) {
     const assignments = new Map();
     
     result.records.forEach(record => {
-      const reference = record.Reference;
+      const reference = normalizeRefString(record.Reference);
       const toneGroup = record.SurfaceMelodyGroup;
       
       if (toneGroup) {
@@ -155,7 +162,7 @@ function analyzeResults(results) {
   // Find all unique words across speakers
   const allWords = new Set();
   speakerAssignments.forEach(sa => {
-    sa.assignments.forEach((_, ref) => allWords.add(ref));
+    sa.assignments.forEach((_, ref) => allWords.add(normalizeRefString(ref)));
   });
   
   // Analyze agreement for each word
@@ -187,12 +194,17 @@ function analyzeResults(results) {
   const agreedWords = wordAnalysis.filter(w => w.agreement === 'full').length;
   const disagreedWords = wordAnalysis.filter(w => w.disagreement).length;
   
+  // Optional: sort disagreements by numeric reference for stable UI ordering
+  const disagreementsSorted = sortByNumericRef(
+    wordAnalysis.filter(w => w.disagreement).map(w => ({ Reference: w.word, ...w }))
+  ).map(({ Reference, ...rest }) => ({ word: Reference, ...rest }));
+
   return {
     totalWords,
     agreedWords,
     disagreedWords,
     agreementPercentage: totalWords > 0 ? (agreedWords / totalWords * 100).toFixed(1) : 0,
-    wordAnalysis: wordAnalysis.filter(w => w.disagreement), // Only return disagreements
+    wordAnalysis: disagreementsSorted, // Only return disagreements, sorted numerically
     mergedGroups,
     speakers: speakerAssignments.map(sa => ({
       speaker: sa.speaker,

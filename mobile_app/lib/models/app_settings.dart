@@ -21,6 +21,15 @@ class AppSettings {
   /// Which element to store tone group assignment
   final String toneGroupElement;
 
+  /// Which element to store tone group GUID
+  final String toneGroupIdElement;
+
+  /// Optional: show a gloss line beneath the written form
+  final bool showGloss;
+
+  /// Element name to read gloss from (e.g., 'Gloss')
+  final String? glossElement;
+
   AppSettings({
     this.writtenFormElements = const ['Phonetic'],
     this.showWrittenForm = true,
@@ -29,6 +38,9 @@ class AppSettings {
     this.requireUserSpelling = false,
     this.userSpellingElement = 'Orthographic',
     this.toneGroupElement = 'SurfaceMelodyGroup',
+    this.toneGroupIdElement = 'SurfaceMelodyGroupId',
+    this.showGloss = false,
+    this.glossElement,
   });
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
@@ -50,6 +62,10 @@ class AppSettings {
           json['userSpellingElement'] as String? ?? 'Orthographic',
       toneGroupElement:
           json['toneGroupElement'] as String? ?? 'SurfaceMelodyGroup',
+      toneGroupIdElement:
+          json['toneGroupIdElement'] as String? ?? 'SurfaceMelodyGroupId',
+      showGloss: json['showGloss'] as bool? ?? false,
+      glossElement: json['glossElement'] as String?,
     );
   }
 
@@ -62,6 +78,9 @@ class AppSettings {
       'requireUserSpelling': requireUserSpelling,
       'userSpellingElement': userSpellingElement,
       'toneGroupElement': toneGroupElement,
+      'toneGroupIdElement': toneGroupIdElement,
+      'showGloss': showGloss,
+      'glossElement': glossElement,
     };
   }
 }

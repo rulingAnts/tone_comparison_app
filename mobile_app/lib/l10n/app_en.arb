@@ -1,0 +1,53 @@
+{
+  "@@locale": "en",
+  "appTitle": "Tone Comparison",
+  "home_loadBundle": "Load bundle",
+  "home_or": "or",
+  "home_openFromFiles": "Open from Files",
+  "home_recent": "Recent",
+  "home_loading": "Loading…",
+  "home_error": "Failed to load bundle",
+  "home_tryAgain": "Try again",
+  "tm_title": "Tone Matching",
+  "tm_selectGroup": "Select a tone group",
+  "tm_swipeHint": "Swipe to switch groups",
+  "tm_addWord": "Add word",
+  "tm_undo": "Undo",
+  "tm_share": "Share",
+  "tm_audioError": "Audio couldn't be played",
+  "tm_allMatched": "All words matched!",
+  "export_creating": "Creating share package…",
+  "export_failed": "Share failed",
+  "intent_opening": "Opening bundle…",
+  "common_cancel": "Cancel",
+  "common_ok": "OK",
+  "settings_language": "Language",
+  "settings_systemDefault": "System default"
+,
+  "home_wordsLoaded": "{count, plural, one {# word loaded} other {# words loaded}}",
+  "@home_wordsLoaded": {
+    "description": "Shows how many words are loaded on the home screen.",
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "tm_wordOfTotal": "Word {current} of {total}",
+  "@tm_wordOfTotal": {
+    "description": "Progress indicator for current word index.",
+    "placeholders": {"current": {}, "total": {}}
+  },
+  "tm_groupNumber": "Group {number}",
+  "@tm_groupNumber": {
+    "description": "Displays a tone group number.",
+    "placeholders": {"number": {"type": "int"}}
+  },
+  "tm_groupMembers": "Group members",
+  "tm_createGroupTitle": "Create New Group",
+  "tm_createGroupSubtitle": "Take a photo and start a new tone group",
+  "tm_enterSpelling": "Enter spelling",
+  "tm_groupsCreated": "{count, plural, one {# tone group created} other {# tone groups created}}",
+  "@tm_groupsCreated": {
+    "description": "Summary line after completion showing number of groups created.",
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "tm_start": "Start Tone Matching",
+  "tm_noWords": "No words to match"
+}
