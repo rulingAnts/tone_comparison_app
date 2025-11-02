@@ -111,8 +111,8 @@ class HomeScreen extends StatelessWidget {
 
   Future<void> _loadBundle(BuildContext context, AppState appState) async {
     final XFile? file = await openFile(
-      acceptedTypeGroups: [
-        const XTypeGroup(extensions: ['tncmp', 'zip']),
+      acceptedTypeGroups: const [
+        XTypeGroup(extensions: ['tncmp']),
       ],
     );
 

@@ -242,13 +242,17 @@ ipcMain.handle('select-output-file', async () => {
   const result = await dialog.showSaveDialog(mainWindow, {
     filters: [
       { name: 'Tone Bundle', extensions: ['tncmp'] },
-      { name: 'Zip Files', extensions: ['zip'] },
     ],
     defaultPath: 'tone_matching_bundle.tncmp',
   });
-  
+
   if (!result.canceled && result.filePath) {
-    return result.filePath;
+    let out = result.filePath;
+    // Ensure .tncmp extension
+    if (path.extname(out).toLowerCase() !== '.tncmp') {
+      out = out + '.tncmp';
+    }
+    return out;
   }
   return null;
 });
