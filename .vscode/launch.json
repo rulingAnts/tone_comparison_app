@@ -15,6 +15,57 @@
       "flutterMode": "profile",
       "program": "${workspaceFolder}/mobile_app/lib/main.dart",
       "cwd": "${workspaceFolder}/mobile_app"
+    },
+    {
+      "name": "Bundler: Main (Electron)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/bundler_app",
+      "runtimeExecutable": "${workspaceFolder}/bundler_app/node_modules/.bin/electron",
+      "runtimeArgs": ["--remote-debugging-port=9223", "."],
+      "env": { "ELECTRON_ENABLE_LOGGING": "1" },
+      "console": "integratedTerminal",
+      "outputCapture": "std"
+    },
+    {
+      "name": "Bundler: Renderer (Attach)",
+      "type": "chrome",
+      "request": "attach",
+      "port": 9223,
+      "webRoot": "${workspaceFolder}/bundler_app",
+      "urlFilter": "*public/index.html*",
+      "timeout": 30000
+    },
+    {
+      "name": "Comparison: Main (Electron)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/comparison_app",
+      "runtimeExecutable": "${workspaceFolder}/comparison_app/node_modules/.bin/electron",
+      "runtimeArgs": ["--remote-debugging-port=9225", "."],
+      "env": { "ELECTRON_ENABLE_LOGGING": "1" },
+      "console": "integratedTerminal",
+      "outputCapture": "std"
+    },
+    {
+      "name": "Comparison: Renderer (Attach)",
+      "type": "chrome",
+      "request": "attach",
+      "port": 9225,
+      "webRoot": "${workspaceFolder}/comparison_app",
+      "urlFilter": "*public/index.html*",
+      "timeout": 30000
+    }
+  ]
+  ,
+  "compounds": [
+    {
+      "name": "Bundler: Main + Renderer",
+      "configurations": ["Bundler: Main (Electron)", "Bundler: Renderer (Attach)"]
+    },
+    {
+      "name": "Comparison: Main + Renderer",
+      "configurations": ["Comparison: Main (Electron)", "Comparison: Renderer (Attach)"]
     }
   ]
 }

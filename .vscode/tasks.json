@@ -1,4 +1,5 @@
 {
+  // VS Code build/run tasks for Flutter mobile and Electron desktop apps
   "version": "2.0.0",
   "tasks": [
     {
@@ -19,6 +20,62 @@
       "label": "AAB Release (Gradle)",
       "type": "shell",
       "command": "${workspaceFolder}/scripts/build_aab.sh",
+      "problemMatcher": []
+    },
+
+    // Electron: Bundler app builds
+    {
+      "label": "Bundler: Build mac (dmg)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build:mac"],
+      "options": { "cwd": "${workspaceFolder}/bundler_app" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Bundler: Build win (nsis)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build:win"],
+      "options": { "cwd": "${workspaceFolder}/bundler_app" },
+      "problemMatcher": []
+    },
+
+    // Electron: Comparison app builds
+    {
+      "label": "Comparison: Build mac (dmg)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build:mac"],
+      "options": { "cwd": "${workspaceFolder}/comparison_app" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Comparison: Build win (nsis)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build:win"],
+      "options": { "cwd": "${workspaceFolder}/comparison_app" },
+      "problemMatcher": []
+    },
+
+    // Optional: start Electron with remote debugging for renderer attach
+    {
+      "label": "Bundler: Start (debug)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "debug"],
+      "options": { "cwd": "${workspaceFolder}/bundler_app" },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Comparison: Start (debug)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "debug"],
+      "options": { "cwd": "${workspaceFolder}/comparison_app" },
+      "isBackground": true,
       "problemMatcher": []
     }
   ]
