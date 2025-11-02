@@ -80,3 +80,5 @@ Thumbs.db
 *.code-workspace
 .vscode/
 vs_code.json
+
+private
