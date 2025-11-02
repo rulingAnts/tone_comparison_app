@@ -1,0 +1,10 @@
+{
+  // Disable Java Gradle import in this workspace; Flutter projects don't need it in VS Code
+  "java.import.gradle.enabled": false,
+  // Keep Java tooling from scanning large or irrelevant folders
+  "java.import.exclusions": [
+    "**/node_modules/**",
+    "**/.template-build/**",
+    "**/mobile_app/**"
+  ]
+}

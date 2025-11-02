@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Flutter: Debug (mobile_app)",
+      "type": "dart",
+      "request": "launch",
+      "program": "${workspaceFolder}/mobile_app/lib/main.dart",
+      "cwd": "${workspaceFolder}/mobile_app"
+    },
+    {
+      "name": "Flutter: Profile (mobile_app)",
+      "type": "dart",
+      "request": "launch",
+      "flutterMode": "profile",
+      "program": "${workspaceFolder}/mobile_app/lib/main.dart",
+      "cwd": "${workspaceFolder}/mobile_app"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "APK Debug (install & launch)",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/build_apk.sh",
+      "args": ["--debug"],
+      "problemMatcher": []
+    },
+    {
+      "label": "APK Release (copy to dist)",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/build_apk.sh",
+      "args": ["--release", "--no-install", "--no-launch"],
+      "problemMatcher": []
+    },
+    {
+      "label": "AAB Release (Gradle)",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/build_aab.sh",
+      "problemMatcher": []
+    }
+  ]
+}
