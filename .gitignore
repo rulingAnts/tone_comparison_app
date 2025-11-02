@@ -75,4 +75,8 @@ logs/
 .tmp/
 .temp/
 Thumbs.db
-mobile_app/.dart_tool/extension_discovery/vs_code.json
+
+# Visual Studio Code Workspace Settings
+*.code-workspace
+.vscode/
+vs_code.json
