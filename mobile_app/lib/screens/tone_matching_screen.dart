@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_selector/file_selector.dart';
 import '../services/app_state.dart';
 import '../models/tone_group.dart';
 import 'package:tone_comparison_app/generated/app_localizations.dart';
@@ -387,10 +388,57 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
   }
 
   Future<void> _createNewToneGroup(AppState appState) async {
-    // Take photo for exemplar
+    // Desktop (Windows/macOS/Linux): choose an image file via file_selector
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      final XFile? file = await openFile(
+        acceptedTypeGroups: const [
+          XTypeGroup(
+            label: 'Images',
+            extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp'],
+          ),
+        ],
+      );
+      if (file != null) {
+        appState.createNewToneGroup(file.path);
+        _moveToNextWord(appState);
+      }
+      return;
+    }
+
+    // Mobile: let the user choose Camera or Gallery
+    final ImageSource? source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Take photo'),
+              onTap: () => Navigator.of(ctx).pop(ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Choose from gallery'),
+              onTap: () => Navigator.of(ctx).pop(ImageSource.gallery),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.close),
+              title: const Text('Cancel'),
+              onTap: () => Navigator.of(ctx).pop(null),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (!mounted || source == null) return;
+
     final XFile? image = await _imagePicker.pickImage(
-      source: ImageSource.camera,
-      preferredCameraDevice: CameraDevice.rear,
+      source: source,
+      preferredCameraDevice: source == ImageSource.camera
+          ? CameraDevice.rear
+          : CameraDevice.rear,
     );
 
     if (image != null) {
@@ -399,8 +447,36 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
     }
   }
 
-  void _selectToneGroup(AppState appState, ToneGroup group) {
+  void _selectToneGroup(AppState appState, ToneGroup group) async {
     appState.addToToneGroup(group);
+    // If the group reached the review threshold, prompt the user to review.
+    if (group.requiresReview) {
+      final proceedToReview = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Review tone group?'),
+          content: Text(
+            'You\'ve added ${AppState.reviewThreshold} new words to Group ${group.groupNumber}. Please double-check this group.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Later'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Review now'),
+            ),
+          ],
+        ),
+      );
+
+      if (proceedToReview == true && mounted) {
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => GroupReviewScreen(groups: [group])),
+        );
+      }
+    }
     _moveToNextWord(appState);
   }
 
@@ -420,6 +496,38 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
     final l10n = AppLocalizations.of(context);
 
     try {
+      // Strongly suggest reviewing all groups before sharing
+      final reviewAll = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Review before sharing?'),
+          content: const Text(
+            'To ensure accuracy, please review all tone groups before exporting. Do you want to review them now?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Skip'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Review all'),
+            ),
+          ],
+        ),
+      );
+
+      if (!mounted) return;
+
+      if (reviewAll == true) {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => GroupReviewScreen(groups: appState.toneGroups),
+          ),
+        );
+        if (!mounted) return;
+      }
+
       await appState.shareResults();
 
       messenger.showSnackBar(
@@ -436,5 +544,95 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
         ),
       );
     }
+  }
+}
+
+/// A simple flow to review one or more tone groups and mark them as reviewed.
+class GroupReviewScreen extends StatefulWidget {
+  final List<ToneGroup> groups;
+  const GroupReviewScreen({super.key, required this.groups});
+
+  @override
+  State<GroupReviewScreen> createState() => _GroupReviewScreenState();
+}
+
+class _GroupReviewScreenState extends State<GroupReviewScreen> {
+  int index = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = Provider.of<AppState>(context, listen: false);
+    final group = widget.groups[index];
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Review groups (${index + 1}/${widget.groups.length})'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Group ${group.groupNumber}',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: ListView(
+                children: [
+                  if (group.imagePath != null && group.imagePath!.isNotEmpty)
+                    Image.file(
+                      File(group.imagePath!),
+                      height: 200,
+                      fit: BoxFit.cover,
+                    ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Members:',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  ...group.members.map(
+                    (w) => ListTile(
+                      dense: true,
+                      title: Text(
+                        '${w.reference} • ${w.getDisplayText(appState.settings!.writtenFormElements)}',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Row(
+              children: [
+                OutlinedButton(
+                  onPressed: () {
+                    if (index > 0) setState(() => index -= 1);
+                  },
+                  child: const Text('Back'),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () {
+                    appState.markGroupReviewed(group);
+                    if (index < widget.groups.length - 1) {
+                      setState(() => index += 1);
+                    } else {
+                      Navigator.of(context).pop();
+                    }
+                  },
+                  child: Text(
+                    index < widget.groups.length - 1
+                        ? 'Mark reviewed & Next'
+                        : 'Mark reviewed & Finish',
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

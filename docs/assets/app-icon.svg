@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#1E88E5"/>
+      <stop offset="100%" stop-color="#1565C0"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="1024" height="1024" rx="200" fill="url(#bg)"/>
+  <!-- Tone contours: rising, level, falling -->
+  <g stroke="#fff" stroke-width="64" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M160,640 L864,416"/>
+    <path d="M160,800 L864,800"/>
+    <path d="M160,480 L864,640"/>
+  </g>
+  <!-- Check mark (review/verification) -->
+  <path d="M680,240 L760,320 L920,160" stroke="#fff" stroke-width="56" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <!-- Minimal label chips to hint at words (optional subtle opacity) -->
+  <g fill="#ffffff" opacity="0.12">
+    <rect x="120" y="590" width="200" height="48" rx="12"/>
+    <rect x="120" y="750" width="200" height="48" rx="12"/>
+    <rect x="120" y="430" width="200" height="48" rx="12"/>
+  </g>
+</svg>

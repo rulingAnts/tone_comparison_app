@@ -24,7 +24,7 @@
   "settings_language": "Idioma",
   "settings_systemDefault": "Padrão do sistema"
 ,
-  "home_wordsLoaded": "{count, plural, one {# palavra carregada} other {# palavras carregadas}}",
+  "home_wordsLoaded": "{count, plural, one {{count} palavra carregada} other {{count} palavras carregadas}}",
   "@home_wordsLoaded": {"placeholders": {"count": {"type": "int"}}},
   "tm_wordOfTotal": "Palavra {current} de {total}",
   "@tm_wordOfTotal": {"placeholders": {"current": {}, "total": {}}},
@@ -34,7 +34,7 @@
   "tm_createGroupTitle": "Criar novo grupo",
   "tm_createGroupSubtitle": "Tire uma foto e inicie um novo grupo de tons",
   "tm_enterSpelling": "Inserir ortografia",
-  "tm_groupsCreated": "{count, plural, one {# grupo de tons criado} other {# grupos de tons criados}}",
+  "tm_groupsCreated": "{count, plural, one {{count} grupo de tons criado} other {{count} grupos de tons criados}}",
   "@tm_groupsCreated": {"placeholders": {"count": {"type": "int"}}},
   "tm_start": "Iniciar correspondência de tons",
   "tm_noWords": "Não há palavras para corresponder"

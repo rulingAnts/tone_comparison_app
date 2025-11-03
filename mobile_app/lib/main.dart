@@ -35,6 +35,6 @@ class ToneMatchingApp extends StatelessWidget {
 
 // Backward-compat alias: some older code/tests may still reference `MyApp`.
 // Keep this lightweight shim so `const MyApp()` works the same as `ToneMatchingApp()`.
-//class MyApp extends ToneMatchingApp {
-//  const MyApp({super.key});
-//}
+class MyApp extends ToneMatchingApp {
+  const MyApp({super.key});
+}

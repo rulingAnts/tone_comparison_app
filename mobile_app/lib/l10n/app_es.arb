@@ -23,7 +23,7 @@
   "common_ok": "OK",
   "settings_language": "Idioma",
   "settings_systemDefault": "Predeterminado del sistema"
-  ,"home_wordsLoaded": "{count, plural, one {# palabra cargada} other {# palabras cargadas}}",
+  ,"home_wordsLoaded": "{count, plural, one {{count} palabra cargada} other {{count} palabras cargadas}}",
   "@home_wordsLoaded": {"placeholders": {"count": {"type": "int"}}},
   "tm_wordOfTotal": "Palabra {current} de {total}",
   "@tm_wordOfTotal": {"placeholders": {"current": {}, "total": {}}},
@@ -33,7 +33,7 @@
   "tm_createGroupTitle": "Crear nuevo grupo",
   "tm_createGroupSubtitle": "Toma una foto y comienza un nuevo grupo de tonos",
   "tm_enterSpelling": "Ingresar ortografía",
-  "tm_groupsCreated": "{count, plural, one {# grupo de tonos creado} other {# grupos de tonos creados}}",
+  "tm_groupsCreated": "{count, plural, one {{count} grupo de tonos creado} other {{count} grupos de tonos creados}}",
   "@tm_groupsCreated": {"placeholders": {"count": {"type": "int"}}},
   "tm_start": "Iniciar coincidencia de tonos",
   "tm_noWords": "No hay palabras para coincidir"

@@ -23,7 +23,7 @@
   "common_ok": "OK",
   "settings_language": "Sprache",
   "settings_systemDefault": "Systemstandard",
-    "home_wordsLoaded": "{count, plural, one {# Wort geladen} other {# Wörter geladen}}",
+  "home_wordsLoaded": "{count, plural, one {{count} Wort geladen} other {{count} Wörter geladen}}",
     "@home_wordsLoaded": {"placeholders": {"count": {"type": "int"}}},
     "tm_wordOfTotal": "Wort {current} von {total}",
     "@tm_wordOfTotal": {"placeholders": {"current": {}, "total": {}}},
@@ -33,7 +33,7 @@
     "tm_createGroupTitle": "Neue Gruppe erstellen",
     "tm_createGroupSubtitle": "Foto aufnehmen und eine neue Tongruppe starten",
     "tm_enterSpelling": "Schreibweise eingeben",
-    "tm_groupsCreated": "{count, plural, one {# Tongruppe erstellt} other {# Tongruppen erstellt}}",
+  "tm_groupsCreated": "{count, plural, one {{count} Tongruppe erstellt} other {{count} Tongruppen erstellt}}",
     "@tm_groupsCreated": {"placeholders": {"count": {"type": "int"}}},
     "tm_start": "Ton-Zuordnung starten",
     "tm_noWords": "Keine Wörter zuzuordnen"

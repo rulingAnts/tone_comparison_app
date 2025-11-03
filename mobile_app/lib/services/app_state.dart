@@ -11,6 +11,7 @@ import 'package:uuid/uuid.dart';
 
 /// Main application state provider
 class AppState extends ChangeNotifier {
+  static const int reviewThreshold = 5;
   BundleData? _bundleData;
   final List<ToneGroup> _toneGroups = [];
   final AudioService _audioService = AudioService();
@@ -192,6 +193,12 @@ class AppState extends ChangeNotifier {
     );
 
     group.addMember(currentWord!);
+    // Track additions for review prompting
+    group.incrementSinceReview();
+    if (group.additionsSinceReview >= reviewThreshold &&
+        !group.requiresReview) {
+      group.requiresReview = true;
+    }
     notifyListeners();
   }
 
@@ -215,6 +222,16 @@ class AppState extends ChangeNotifier {
     group.imagePath = imagePath;
     notifyListeners();
   }
+
+  /// Mark a group's review as complete, resetting the counter.
+  void markGroupReviewed(ToneGroup group) {
+    group.markReviewed();
+    notifyListeners();
+  }
+
+  /// Returns the list of groups currently flagged for review.
+  List<ToneGroup> groupsNeedingReview() =>
+      _toneGroups.where((g) => g.requiresReview).toList(growable: false);
 
   /// Move to next word
   void nextWord() {

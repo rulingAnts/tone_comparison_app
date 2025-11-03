@@ -23,7 +23,7 @@
   "common_ok": "OK",
   "settings_language": "Taal",
   "settings_systemDefault": "Systeemstandaard"
-  ,"home_wordsLoaded": "{count, plural, one {# woord geladen} other {# woorden geladen}}",
+  ,"home_wordsLoaded": "{count, plural, one {{count} woord geladen} other {{count} woorden geladen}}",
   "@home_wordsLoaded": {"placeholders": {"count": {"type": "int"}}},
   "tm_wordOfTotal": "Woord {current} van {total}",
   "@tm_wordOfTotal": {"placeholders": {"current": {}, "total": {}}},
@@ -33,7 +33,7 @@
   "tm_createGroupTitle": "Nieuwe groep maken",
   "tm_createGroupSubtitle": "Neem een foto en start een nieuwe toongroep",
   "tm_enterSpelling": "Spelling invoeren",
-  "tm_groupsCreated": "{count, plural, one {# toongroep gemaakt} other {# toongroepen gemaakt}}",
+  "tm_groupsCreated": "{count, plural, one {{count} toongroep gemaakt} other {{count} toongroepen gemaakt}}",
   "@tm_groupsCreated": {"placeholders": {"count": {"type": "int"}}},
   "tm_start": "Toonmatchen starten",
   "tm_noWords": "Geen woorden om te matchen"

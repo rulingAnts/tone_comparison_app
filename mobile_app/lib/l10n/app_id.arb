@@ -23,7 +23,7 @@
   "common_ok": "OK",
   "settings_language": "Bahasa",
   "settings_systemDefault": "Bawaan sistem"
-  ,"home_wordsLoaded": "{count, plural, one {# kata dimuat} other {# kata dimuat}}",
+  ,"home_wordsLoaded": "{count, plural, one {{count} kata dimuat} other {{count} kata dimuat}}",
   "@home_wordsLoaded": {"placeholders": {"count": {"type": "int"}}},
   "tm_wordOfTotal": "Kata {current} dari {total}",
   "@tm_wordOfTotal": {"placeholders": {"current": {}, "total": {}}},
@@ -33,7 +33,7 @@
   "tm_createGroupTitle": "Buat grup baru",
   "tm_createGroupSubtitle": "Ambil foto dan mulai grup nada baru",
   "tm_enterSpelling": "Masukkan ejaan",
-  "tm_groupsCreated": "{count, plural, one {# grup nada dibuat} other {# grup nada dibuat}}",
+  "tm_groupsCreated": "{count, plural, one {{count} grup nada dibuat} other {{count} grup nada dibuat}}",
   "@tm_groupsCreated": {"placeholders": {"count": {"type": "int"}}},
   "tm_start": "Mulai pencocokan nada",
   "tm_noWords": "Tidak ada kata untuk dicocokkan"

@@ -23,7 +23,7 @@
   "common_ok": "موافق",
   "settings_language": "اللغة",
   "settings_systemDefault": "افتراضي النظام"
-  ,"home_wordsLoaded": "{count, plural, one {تم تحميل # كلمة} other {تم تحميل # كلمات}}",
+  ,"home_wordsLoaded": "{count, plural, one {تم تحميل {count} كلمة} other {تم تحميل {count} كلمات}}",
   "@home_wordsLoaded": {"placeholders": {"count": {"type": "int"}}},
   "tm_wordOfTotal": "الكلمة {current} من {total}",
   "@tm_wordOfTotal": {"placeholders": {"current": {}, "total": {}}},
@@ -33,7 +33,7 @@
   "tm_createGroupTitle": "إنشاء مجموعة جديدة",
   "tm_createGroupSubtitle": "التقط صورة وابدأ مجموعة نغمات جديدة",
   "tm_enterSpelling": "أدخل التهجئة",
-  "tm_groupsCreated": "{count, plural, one {تم إنشاء # مجموعة نغمات} other {تم إنشاء # مجموعات نغمات}}",
+  "tm_groupsCreated": "{count, plural, one {تم إنشاء {count} مجموعة نغمات} other {تم إنشاء {count} مجموعات نغمات}}",
   "@tm_groupsCreated": {"placeholders": {"count": {"type": "int"}}},
   "tm_start": "بدء مطابقة النغمات",
   "tm_noWords": "لا توجد كلمات للمطابقة"

@@ -17,12 +17,20 @@ class ToneGroup {
   /// Path to the exemplar image file
   String? imagePath;
 
+  /// Number of members added since the last review confirmation
+  int additionsSinceReview;
+
+  /// Whether this group currently requires a review
+  bool requiresReview;
+
   ToneGroup({
     required this.id,
     required this.groupNumber,
     required this.exemplar,
     List<WordRecord>? members,
     this.imagePath,
+    this.additionsSinceReview = 0,
+    this.requiresReview = false,
   }) : members = members ?? [exemplar] {
     // Ensure exemplar has this group's linkage
     exemplar.toneGroup = groupNumber;
@@ -49,6 +57,17 @@ class ToneGroup {
     }
   }
 
+  /// Increment the counter indicating new words added since last review.
+  void incrementSinceReview() {
+    additionsSinceReview += 1;
+  }
+
+  /// Mark this group as reviewed by the user.
+  void markReviewed() {
+    additionsSinceReview = 0;
+    requiresReview = false;
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -56,6 +75,8 @@ class ToneGroup {
       'exemplar': exemplar.toJson(),
       'members': members.map((m) => m.toJson()).toList(),
       'imagePath': imagePath,
+      'additionsSinceReview': additionsSinceReview,
+      'requiresReview': requiresReview,
     };
   }
 
@@ -68,11 +89,13 @@ class ToneGroup {
         .toList();
 
     return ToneGroup(
-      id: json['id'] as String,
-      groupNumber: json['groupNumber'] as int,
-      exemplar: exemplar,
-      members: members,
-      imagePath: json['imagePath'] as String?,
-    );
+        id: json['id'] as String,
+        groupNumber: json['groupNumber'] as int,
+        exemplar: exemplar,
+        members: members,
+        imagePath: json['imagePath'] as String?,
+      )
+      ..additionsSinceReview = (json['additionsSinceReview'] as int?) ?? 0
+      ..requiresReview = (json['requiresReview'] as bool?) ?? false;
   }
 }

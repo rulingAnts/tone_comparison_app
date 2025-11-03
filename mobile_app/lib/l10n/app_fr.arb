@@ -23,7 +23,7 @@
   "common_ok": "OK",
   "settings_language": "Langue",
   "settings_systemDefault": "Par défaut du système"
-  ,"home_wordsLoaded": "{count, plural, one {# mot chargé} other {# mots chargés}}",
+  ,"home_wordsLoaded": "{count, plural, one {{count} mot chargé} other {{count} mots chargés}}",
   "@home_wordsLoaded": {"placeholders": {"count": {"type": "int"}}},
   "tm_wordOfTotal": "Mot {current} sur {total}",
   "@tm_wordOfTotal": {"placeholders": {"current": {}, "total": {}}},
@@ -33,7 +33,7 @@
   "tm_createGroupTitle": "Créer un nouveau groupe",
   "tm_createGroupSubtitle": "Prenez une photo et démarrez un nouveau groupe de tons",
   "tm_enterSpelling": "Saisir l'orthographe",
-  "tm_groupsCreated": "{count, plural, one {# groupe de tons créé} other {# groupes de tons créés}}",
+  "tm_groupsCreated": "{count, plural, one {{count} groupe de tons créé} other {{count} groupes de tons créés}}",
   "@tm_groupsCreated": {"placeholders": {"count": {"type": "int"}}},
   "tm_start": "Démarrer l'appariement des tons",
   "tm_noWords": "Aucun mot à apparier"

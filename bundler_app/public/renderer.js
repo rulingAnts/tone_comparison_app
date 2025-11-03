@@ -17,6 +17,7 @@ async function selectXmlFile() {
     if (result.success) {
       availableFields = result.fields;
       updateWrittenFormElements();
+      updateGlossOptions();
       document.getElementById('xmlInfo').textContent = 
         `✓ Loaded ${result.recordCount} records`;
       document.getElementById('xmlInfo').style.color = 'green';
@@ -49,6 +50,33 @@ function updateWrittenFormElements() {
     label.appendChild(document.createTextNode(field));
     container.appendChild(label);
   });
+}
+
+function updateGlossOptions() {
+  const select = document.getElementById('glossElement');
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = '— Select element —';
+  select.appendChild(placeholder);
+
+  availableFields.forEach((f) => {
+    const opt = document.createElement('option');
+    opt.value = f;
+    opt.textContent = f;
+    select.appendChild(opt);
+  });
+
+  // Prefer "Gloss" if present
+  if (availableFields.includes('Gloss')) {
+    select.value = 'Gloss';
+  } else if (availableFields.includes(current)) {
+    select.value = current;
+  } else {
+    select.value = '';
+  }
 }
 
 async function selectAudioFolder() {
@@ -109,7 +137,16 @@ async function createBundle() {
     requireUserSpelling: document.getElementById('requireUserSpelling').checked,
     userSpellingElement: document.getElementById('userSpellingElement').value.trim(),
     toneGroupElement: document.getElementById('toneGroupElement').value.trim(),
+    showGloss: document.getElementById('showGloss').checked,
+    glossElement: (document.getElementById('showGloss').checked
+      ? (document.getElementById('glossElement').value || null)
+      : null),
   };
+
+  if (settings.showGloss && !settings.glossElement) {
+    showStatus('error', 'Please select a gloss element, or uncheck "Include gloss".');
+    return;
+  }
   
   const config = {
     xmlPath: xmlFilePath,

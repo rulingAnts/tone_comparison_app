@@ -24,7 +24,7 @@
   "settings_language": "Language",
   "settings_systemDefault": "System default"
 ,
-  "home_wordsLoaded": "{count, plural, one {# word loaded} other {# words loaded}}",
+  "home_wordsLoaded": "{count, plural, one {{count} word loaded} other {{count} words loaded}}",
   "@home_wordsLoaded": {
     "description": "Shows how many words are loaded on the home screen.",
     "placeholders": {"count": {"type": "int"}}
@@ -43,7 +43,7 @@
   "tm_createGroupTitle": "Create New Group",
   "tm_createGroupSubtitle": "Take a photo and start a new tone group",
   "tm_enterSpelling": "Enter spelling",
-  "tm_groupsCreated": "{count, plural, one {# tone group created} other {# tone groups created}}",
+  "tm_groupsCreated": "{count, plural, one {{count} tone group created} other {{count} tone groups created}}",
   "@tm_groupsCreated": {
     "description": "Summary line after completion showing number of groups created.",
     "placeholders": {"count": {"type": "int"}}

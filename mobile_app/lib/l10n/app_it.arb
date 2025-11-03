@@ -23,7 +23,7 @@
   "common_ok": "OK",
   "settings_language": "Lingua",
   "settings_systemDefault": "Predefinita di sistema"
-  ,"home_wordsLoaded": "{count, plural, one {# parola caricata} other {# parole caricate}}",
+  ,"home_wordsLoaded": "{count, plural, one {{count} parola caricata} other {{count} parole caricate}}",
   "@home_wordsLoaded": {"placeholders": {"count": {"type": "int"}}},
   "tm_wordOfTotal": "Parola {current} di {total}",
   "@tm_wordOfTotal": {"placeholders": {"current": {}, "total": {}}},
@@ -33,7 +33,7 @@
   "tm_createGroupTitle": "Crea nuovo gruppo",
   "tm_createGroupSubtitle": "Scatta una foto e avvia un nuovo gruppo di toni",
   "tm_enterSpelling": "Inserisci ortografia",
-  "tm_groupsCreated": "{count, plural, one {# gruppo di toni creato} other {# gruppi di toni creati}}",
+  "tm_groupsCreated": "{count, plural, one {{count} gruppo di toni creato} other {{count} gruppi di toni creati}}",
   "@tm_groupsCreated": {"placeholders": {"count": {"type": "int"}}},
   "tm_start": "Avvia abbinamento toni",
   "tm_noWords": "Nessuna parola da abbinare"

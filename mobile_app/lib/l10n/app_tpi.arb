@@ -23,7 +23,7 @@
   "common_ok": "Orait",
   "settings_language": "Tokples",
   "settings_systemDefault": "Sistem i makim"
-  ,"home_wordsLoaded": "{count, plural, one {# tok i kamap} other {# ol tok i kamap}}",
+  ,"home_wordsLoaded": "{count, plural, one {{count} tok i kamap} other {{count} ol tok i kamap}}",
   "@home_wordsLoaded": {"placeholders": {"count": {"type": "int"}}},
   "tm_wordOfTotal": "Tok {current} bilong {total}",
   "@tm_wordOfTotal": {"placeholders": {"current": {}, "total": {}}},
@@ -33,7 +33,7 @@
   "tm_createGroupTitle": "Kirapim nupela grup",
   "tm_createGroupSubtitle": "Tekim piksa na statim nupela grup bilong ton",
   "tm_enterSpelling": "Raitim spelling",
-  "tm_groupsCreated": "{count, plural, one {# grup bilong ton i kamap} other {# ol grup bilong ton i kamap}}",
+  "tm_groupsCreated": "{count, plural, one {{count} grup bilong ton i kamap} other {{count} ol grup bilong ton i kamap}}",
   "@tm_groupsCreated": {"placeholders": {"count": {"type": "int"}}},
   "tm_start": "Stat long makim ton",
   "tm_noWords": "Nogat ol tok bilong makim"

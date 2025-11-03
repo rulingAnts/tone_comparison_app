@@ -23,7 +23,7 @@
   "common_ok": "OK",
   "settings_language": "Taal",
   "settings_systemDefault": "Stelselverstek"
-  ,"home_wordsLoaded": "{count, plural, one {# woord gelaai} other {# woorde gelaai}}",
+  ,"home_wordsLoaded": "{count, plural, one {{count} woord gelaai} other {{count} woorde gelaai}}",
   "@home_wordsLoaded": {"placeholders": {"count": {"type": "int"}}},
   "tm_wordOfTotal": "Woord {current} van {total}",
   "@tm_wordOfTotal": {"placeholders": {"current": {}, "total": {}}},
@@ -33,7 +33,7 @@
   "tm_createGroupTitle": "Skep nuwe groep",
   "tm_createGroupSubtitle": "Neem 'n foto en begin 'n nuwe toongroep",
   "tm_enterSpelling": "Voer spelling in",
-  "tm_groupsCreated": "{count, plural, one {# toongroep geskep} other {# toongroepe geskep}}",
+  "tm_groupsCreated": "{count, plural, one {{count} toongroep geskep} other {{count} toongroepe geskep}}",
   "@tm_groupsCreated": {"placeholders": {"count": {"type": "int"}}},
   "tm_start": "Begin toonpassing",
   "tm_noWords": "Geen woorde om te pas nie"
