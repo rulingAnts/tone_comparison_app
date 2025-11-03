@@ -61,4 +61,6 @@
   "review_screen_back": "Terug",
   "review_screen_markNext": "Gemarkeerd & Volgende",
   "review_screen_markFinish": "Gemarkeerd & Voltooien"
+  ,
+  "tm_moved_prompt": "Verplaatst. Kies een andere groep of maak een nieuwe."
 }

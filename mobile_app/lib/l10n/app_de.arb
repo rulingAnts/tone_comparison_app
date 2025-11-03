@@ -61,4 +61,6 @@
     "review_screen_back": "Zurück",
     "review_screen_markNext": "Bestätigen & Weiter",
     "review_screen_markFinish": "Bestätigen & Fertig"
+  ,
+    "tm_moved_prompt": "Verschoben. Wähle eine andere Gruppe oder erstelle eine neue."
   }

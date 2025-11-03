@@ -129,4 +129,7 @@
   "@review_screen_markNext": {"description": "Button to mark current group reviewed and go to next"},
   "review_screen_markFinish": "Mark reviewed & Finish",
   "@review_screen_markFinish": {"description": "Button to mark last group reviewed and finish"}
+  ,
+  "tm_moved_prompt": "Moved. Select a different group or create a new one.",
+  "@tm_moved_prompt": {"description": "Snackbar prompting the user to select another group or create a new one after moving a word out of its group"}
 }

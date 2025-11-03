@@ -61,4 +61,6 @@
   "review_screen_back": "返回",
   "review_screen_markNext": "标记已检查并下一步",
   "review_screen_markFinish": "标记已检查并完成"
+  ,
+  "tm_moved_prompt": "已移出。请选择其他分组或创建新分组。"
 }

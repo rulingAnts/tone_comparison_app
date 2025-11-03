@@ -61,4 +61,6 @@
   "review_screen_back": "Bek",
   "review_screen_markNext": "Makim stret & Neks",
   "review_screen_markFinish": "Makim stret & Pinis"
+  ,
+  "tm_moved_prompt": "I muv pinis. Makim narapela grup o kirapim nupela."
 }

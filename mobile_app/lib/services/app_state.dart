@@ -368,6 +368,70 @@ class AppState extends ChangeNotifier {
         final word = records[_currentWordIndex];
         word.userSpelling = entry.previousSpelling;
         break;
+      case _UndoType.reassign:
+        final word = records[_currentWordIndex];
+        final snap = entry.groupSnapshot;
+        final prevNum = entry.previousGroupNumber;
+        if (snap != null && prevNum != null) {
+          // Build reference map
+          final byRef = <String, WordRecord>{
+            for (final r in records) r.reference: r,
+          };
+          // Recreate or replace the previous group from snapshot
+          final existingIdx = _toneGroups.indexWhere(
+            (g) => g.groupNumber == prevNum,
+          );
+          final exemplarRef = snap['exemplarRef'] as String?;
+          final membersRefs = (snap['members'] as List<dynamic>? ?? [])
+              .map((e) => e.toString())
+              .toList();
+          final exemplar = exemplarRef != null ? byRef[exemplarRef] : null;
+          if (exemplar != null) {
+            final members = <WordRecord>[];
+            for (final ref in membersRefs) {
+              final rec = byRef[ref];
+              if (rec != null) members.add(rec);
+            }
+            if (members.isEmpty || !members.contains(exemplar)) {
+              if (!members.contains(exemplar)) {
+                members.insert(0, exemplar);
+              }
+            }
+            final restored =
+                ToneGroup(
+                    id:
+                        (snap['id'] as String?) ??
+                        (existingIdx != -1
+                            ? _toneGroups[existingIdx].id
+                            : const Uuid().v4()),
+                    groupNumber: prevNum,
+                    exemplar: exemplar,
+                    members: members,
+                    imagePath: snap['imagePath'] as String?,
+                  )
+                  ..additionsSinceReview =
+                      (snap['additionsSinceReview'] as int?) ?? 0
+                  ..requiresReview = (snap['requiresReview'] as bool?) ?? false;
+
+            if (existingIdx != -1) {
+              _toneGroups[existingIdx] = restored;
+            } else {
+              _toneGroups.add(restored);
+              _toneGroups.sort(
+                (a, b) => a.groupNumber.compareTo(b.groupNumber),
+              );
+            }
+          }
+        }
+        // Ensure the word is part of the previous group again
+        if (entry.previousGroupNumber != null) {
+          final prevGroup = _toneGroups.firstWhere(
+            (g) => g.groupNumber == entry.previousGroupNumber,
+            orElse: () => throw Exception('Previous group not found'),
+          );
+          prevGroup.addMember(word);
+        }
+        break;
     }
 
     notifyListeners();
@@ -437,15 +501,29 @@ class AppState extends ChangeNotifier {
   /// Remove a word from its current tone group (if any) and make it the
   /// current word to be reassigned to another group or a new group.
   void moveWordForReassignment(WordRecord word) {
+    // Determine word index first for undo
+    final idx = records.indexOf(word);
+    // Build snapshot of previous group if any
     // Detach from current group if present
     final prevGroupNumber = word.toneGroup;
+    bool wasExemplar = false;
+    Map<String, dynamic>? snapshot;
     if (prevGroupNumber != null) {
       final gIndex = _toneGroups.indexWhere(
         (g) => g.groupNumber == prevGroupNumber,
       );
       if (gIndex != -1) {
         final group = _toneGroups[gIndex];
-        final wasExemplar = identical(group.exemplar, word);
+        wasExemplar = identical(group.exemplar, word);
+        snapshot = {
+          'id': group.id,
+          'groupNumber': group.groupNumber,
+          'imagePath': group.imagePath,
+          'additionsSinceReview': group.additionsSinceReview,
+          'requiresReview': group.requiresReview,
+          'exemplarRef': group.exemplar.reference,
+          'members': group.members.map((m) => m.reference).toList(),
+        };
         group.removeMember(word);
 
         if (group.members.isEmpty) {
@@ -470,10 +548,21 @@ class AppState extends ChangeNotifier {
       }
     }
 
+    // Push undo entry capturing the previous group snapshot
+    if (prevGroupNumber != null && snapshot != null) {
+      _pushUndo(
+        _UndoEntry.reassign(
+          wordIndex: idx == -1 ? _currentWordIndex : idx,
+          previousGroupNumber: prevGroupNumber,
+          groupSnapshot: snapshot,
+          wasExemplar: wasExemplar,
+        ),
+      );
+    }
+
     // Clear assignment and focus this word as current for reassignment
     word.toneGroup = null;
     word.toneGroupId = null;
-    final idx = records.indexOf(word);
     if (idx != -1) {
       _currentWordIndex = idx;
     }
@@ -694,7 +783,7 @@ class AppState extends ChangeNotifier {
   }
 }
 
-enum _UndoType { assign, createGroup, spelling }
+enum _UndoType { assign, createGroup, spelling, reassign }
 
 class _UndoEntry {
   final _UndoType type;
@@ -702,6 +791,9 @@ class _UndoEntry {
   final int? previousGroupNumber;
   final int? newGroupNumber;
   final String? previousSpelling;
+  // Snapshot of a group's state for reassign undo (nullable for other types)
+  final Map<String, dynamic>? groupSnapshot;
+  final bool? wasExemplar;
 
   _UndoEntry._({
     required this.type,
@@ -709,6 +801,8 @@ class _UndoEntry {
     this.previousGroupNumber,
     this.newGroupNumber,
     this.previousSpelling,
+    this.groupSnapshot,
+    this.wasExemplar,
   });
 
   factory _UndoEntry.assign({
@@ -738,5 +832,18 @@ class _UndoEntry {
     type: _UndoType.spelling,
     wordIndex: wordIndex,
     previousSpelling: previousSpelling,
+  );
+
+  factory _UndoEntry.reassign({
+    required int wordIndex,
+    required int previousGroupNumber,
+    required Map<String, dynamic> groupSnapshot,
+    required bool wasExemplar,
+  }) => _UndoEntry._(
+    type: _UndoType.reassign,
+    wordIndex: wordIndex,
+    previousGroupNumber: previousGroupNumber,
+    groupSnapshot: groupSnapshot,
+    wasExemplar: wasExemplar,
   );
 }

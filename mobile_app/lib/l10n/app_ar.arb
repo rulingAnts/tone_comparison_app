@@ -61,4 +61,6 @@
   "review_screen_back": "رجوع",
   "review_screen_markNext": "وضع علامة تمت المراجعة & التالي",
   "review_screen_markFinish": "وضع علامة تمت المراجعة & إنهاء"
+  ,
+  "tm_moved_prompt": "تم النقل. اختر مجموعة مختلفة أو أنشئ واحدة جديدة."
 }

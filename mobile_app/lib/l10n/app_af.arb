@@ -61,4 +61,6 @@
   "review_screen_back": "Terug",
   "review_screen_markNext": "Merk hersien & Volgende",
   "review_screen_markFinish": "Merk hersien & Klaar"
+  ,
+  "tm_moved_prompt": "Verskuif. Kies ’n ander groep of skep ’n nuwe een."
 }

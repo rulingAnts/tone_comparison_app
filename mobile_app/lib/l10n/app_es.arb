@@ -61,4 +61,6 @@
   "review_screen_back": "Atrás",
   "review_screen_markNext": "Marcar revisado y siguiente",
   "review_screen_markFinish": "Marcar revisado y finalizar"
+  ,
+  "tm_moved_prompt": "Movido. Selecciona otro grupo o crea uno nuevo."
 }

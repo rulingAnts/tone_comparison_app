@@ -61,4 +61,6 @@
   "review_screen_back": "Retour",
   "review_screen_markNext": "Marquer revu & Suivant",
   "review_screen_markFinish": "Marquer revu & Terminer"
+  ,
+  "tm_moved_prompt": "Déplacé. Sélectionnez un autre groupe ou créez-en un nouveau."
 }

@@ -380,19 +380,41 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
                             .isNotEmpty)
                     ? Text(word.fields[appState.settings!.glossElement!]!)
                     : null,
-                trailing: IconButton(
-                  icon: const Icon(Icons.play_arrow),
-                  onPressed: () async {
-                    try {
-                      await appState.playWord(word);
-                    } catch (e) {
-                      if (!mounted) return;
-                      final l10n = AppLocalizations.of(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(l10n.tm_audioError)),
-                      );
-                    }
-                  },
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.open_in_new),
+                      onPressed: () {
+                        Provider.of<AppState>(
+                          context,
+                          listen: false,
+                        ).moveWordForReassignment(word);
+                        if (!mounted) return;
+                        final l10n = AppLocalizations.of(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(l10n.tm_selectGroup),
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.play_arrow),
+                      onPressed: () async {
+                        try {
+                          await appState.playWord(word);
+                        } catch (e) {
+                          if (!mounted) return;
+                          final l10n = AppLocalizations.of(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(l10n.tm_audioError)),
+                          );
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ),
             ),

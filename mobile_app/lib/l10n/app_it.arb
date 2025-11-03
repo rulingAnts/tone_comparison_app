@@ -61,4 +61,6 @@
   "review_screen_back": "Indietro",
   "review_screen_markNext": "Segna come rivisto e Avanti",
   "review_screen_markFinish": "Segna come rivisto e Fine"
+  ,
+  "tm_moved_prompt": "Spostato. Seleziona un altro gruppo o creane uno nuovo."
 }
