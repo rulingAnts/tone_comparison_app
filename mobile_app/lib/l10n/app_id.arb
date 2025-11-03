@@ -37,4 +37,28 @@
   "@tm_groupsCreated": {"placeholders": {"count": {"type": "int"}}},
   "tm_start": "Mulai pencocokan nada",
   "tm_noWords": "Tidak ada kata untuk dicocokkan"
+,
+  "tm_menu_resetSortingLabel": "Atur ulang pengurutan",
+  "tm_resetDialog_title": "Atur ulang pengurutan?",
+  "tm_resetDialog_message": "Ini akan menghapus semua grup nada, gambar, dan ejaan. Paket asli akan tetap dimuat sehingga Anda bisa memulai ulang.",
+  "tm_resetDialog_confirm": "Atur ulang",
+  "tm_reset_snackbar": "Pengurutan diatur ulang.",
+  "home_confirmLoadNew_title": "Muat paket lain?",
+  "home_confirmLoadNew_message": "Memuat paket lain akan menghapus grup nada, gambar, dan ejaan Anda saat ini. Lanjutkan?",
+  "home_confirmLoadNew_confirm": "Muat"
+  ,
+  "tm_takePhoto": "Ambil foto",
+  "tm_chooseFromGallery": "Pilih dari galeri",
+  "tm_reviewPrompt_title": "Tinjau grup nada?",
+  "tm_reviewPrompt_message": "Anda menambahkan {threshold} kata baru ke Grup {groupNumber}. Harap periksa grup ini.",
+  "tm_reviewPrompt_later": "Nanti",
+  "tm_reviewPrompt_now": "Tinjau sekarang",
+  "share_reviewAll_title": "Tinjau sebelum berbagi?",
+  "share_reviewAll_message": "Untuk memastikan ketepatan, tinjau semua grup nada sebelum mengekspor. Ingin meninjaunya sekarang?",
+  "share_reviewAll_skip": "Lewati",
+  "share_reviewAll_reviewAll": "Tinjau semua",
+  "review_screen_title": "Tinjau grup ({current}/{total})",
+  "review_screen_back": "Kembali",
+  "review_screen_markNext": "Tandai ditinjau & Lanjut",
+  "review_screen_markFinish": "Tandai ditinjau & Selesai"
 }

@@ -16,6 +16,7 @@ class ToneMatchingApp extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (_) => AppState()
         ..initLocalization()
+        ..initPersistentBundle()
         ..initIntents(),
       builder: (context, _) {
         final appState = Provider.of<AppState>(context);

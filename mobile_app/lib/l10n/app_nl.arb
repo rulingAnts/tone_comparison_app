@@ -37,4 +37,28 @@
   "@tm_groupsCreated": {"placeholders": {"count": {"type": "int"}}},
   "tm_start": "Toonmatchen starten",
   "tm_noWords": "Geen woorden om te matchen"
+,
+  "tm_menu_resetSortingLabel": "Sortering resetten",
+  "tm_resetDialog_title": "Sortering resetten?",
+  "tm_resetDialog_message": "Hiermee worden alle toongroepen, afbeeldingen en spellingen gewist. Je oorspronkelijke bundel blijft geladen zodat je opnieuw kunt beginnen.",
+  "tm_resetDialog_confirm": "Reset",
+  "tm_reset_snackbar": "Sortering gereset.",
+  "home_confirmLoadNew_title": "Ander bundel laden?",
+  "home_confirmLoadNew_message": "Het laden van een andere bundel wist je huidige toongroepen, afbeeldingen en spellingen. Doorgaan?",
+  "home_confirmLoadNew_confirm": "Laden"
+  ,
+  "tm_takePhoto": "Foto maken",
+  "tm_chooseFromGallery": "Kiezen uit galerij",
+  "tm_reviewPrompt_title": "Toongroep beoordelen?",
+  "tm_reviewPrompt_message": "Je hebt {threshold} nieuwe woorden toegevoegd aan Groep {groupNumber}. Controleer deze groep.",
+  "tm_reviewPrompt_later": "Later",
+  "tm_reviewPrompt_now": "Nu beoordelen",
+  "share_reviewAll_title": "Beoordelen vóór delen?",
+  "share_reviewAll_message": "Beoordeel alle toongroepen vóór het exporteren om de nauwkeurigheid te waarborgen. Wil je ze nu beoordelen?",
+  "share_reviewAll_skip": "Overslaan",
+  "share_reviewAll_reviewAll": "Alles beoordelen",
+  "review_screen_title": "Groepen beoordelen ({current}/{total})",
+  "review_screen_back": "Terug",
+  "review_screen_markNext": "Gemarkeerd & Volgende",
+  "review_screen_markFinish": "Gemarkeerd & Voltooien"
 }

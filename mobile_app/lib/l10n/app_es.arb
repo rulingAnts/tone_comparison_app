@@ -37,4 +37,28 @@
   "@tm_groupsCreated": {"placeholders": {"count": {"type": "int"}}},
   "tm_start": "Iniciar coincidencia de tonos",
   "tm_noWords": "No hay palabras para coincidir"
+,
+  "tm_menu_resetSortingLabel": "Restablecer clasificación",
+  "tm_resetDialog_title": "¿Restablecer la clasificación?",
+  "tm_resetDialog_message": "Esto borrará todos los grupos de tono, imágenes y ortografías. El paquete original permanecerá cargado para que puedas empezar de nuevo.",
+  "tm_resetDialog_confirm": "Restablecer",
+  "tm_reset_snackbar": "Clasificación restablecida.",
+  "home_confirmLoadNew_title": "¿Cargar un paquete diferente?",
+  "home_confirmLoadNew_message": "Cargar un paquete diferente borrará tus grupos de tono, imágenes y ortografías actuales. ¿Continuar?",
+  "home_confirmLoadNew_confirm": "Cargar"
+,
+  "tm_takePhoto": "Tomar foto",
+  "tm_chooseFromGallery": "Elegir de la galería",
+  "tm_reviewPrompt_title": "¿Revisar grupo de tonos?",
+  "tm_reviewPrompt_message": "Has agregado {threshold} palabras nuevas al Grupo {groupNumber}. Por favor revisa este grupo.",
+  "tm_reviewPrompt_later": "Más tarde",
+  "tm_reviewPrompt_now": "Revisar ahora",
+  "share_reviewAll_title": "¿Revisar antes de compartir?",
+  "share_reviewAll_message": "Para asegurar precisión, revisa todos los grupos de tonos antes de exportar. ¿Quieres revisarlos ahora?",
+  "share_reviewAll_skip": "Omitir",
+  "share_reviewAll_reviewAll": "Revisar todo",
+  "review_screen_title": "Revisar grupos ({current}/{total})",
+  "review_screen_back": "Atrás",
+  "review_screen_markNext": "Marcar revisado y siguiente",
+  "review_screen_markFinish": "Marcar revisado y finalizar"
 }

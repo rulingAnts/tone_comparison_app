@@ -15,6 +15,7 @@ class BundleService {
   static const String settingsFileName = 'settings.json';
   static const String xmlFileName = 'data.xml';
   static const String audioFolderName = 'audio';
+  static const String imagesFolderName = 'images';
 
   /// Load a bundle from a zip file
   static Future<BundleData> loadBundle(String zipFilePath) async {
@@ -59,6 +60,37 @@ class BundleService {
       records: parsedXml.records,
       xmlDocument: parsedXml.document,
       xmlPath: xmlFile,
+      bundlePath: bundleDir.path,
+      originalXmlDeclaration: parsedXml.originalDeclaration,
+      encoding: parsedXml.encoding,
+      utf8Bom: parsedXml.utf8Bom,
+      lineEnding: parsedXml.lineEnding,
+    );
+  }
+
+  /// Load an already-extracted bundle from the app's documents directory
+  /// (i.e., the previously loaded bundle persisted in 'current_bundle').
+  static Future<BundleData?> loadExistingExtracted() async {
+    final appDir = await getApplicationDocumentsDirectory();
+    final bundleDir = Directory(path.join(appDir.path, 'current_bundle'));
+    if (!await bundleDir.exists()) return null;
+
+    final settingsFile = File(path.join(bundleDir.path, settingsFileName));
+    final xmlFilePath = path.join(bundleDir.path, xmlFileName);
+    if (!await settingsFile.exists() || !await File(xmlFilePath).exists()) {
+      return null;
+    }
+
+    final settingsJson =
+        jsonDecode(await settingsFile.readAsString()) as Map<String, dynamic>;
+    final settings = AppSettings.fromJson(settingsJson);
+
+    final parsedXml = await XmlService.parseXml(xmlFilePath, settings);
+    return BundleData(
+      settings: settings,
+      records: parsedXml.records,
+      xmlDocument: parsedXml.document,
+      xmlPath: xmlFilePath,
       bundlePath: bundleDir.path,
       originalXmlDeclaration: parsedXml.originalDeclaration,
       encoding: parsedXml.encoding,

@@ -37,4 +37,28 @@
   "@tm_groupsCreated": {"placeholders": {"count": {"type": "int"}}},
   "tm_start": "Avvia abbinamento toni",
   "tm_noWords": "Nessuna parola da abbinare"
+,
+  "tm_menu_resetSortingLabel": "Reimposta ordinamento",
+  "tm_resetDialog_title": "Reimpostare l’ordinamento?",
+  "tm_resetDialog_message": "Questo cancellerà tutti i gruppi tonali, immagini e grafie. Il pacchetto originale resterà caricato per ricominciare.",
+  "tm_resetDialog_confirm": "Reimposta",
+  "tm_reset_snackbar": "Ordinamento reimpostato.",
+  "home_confirmLoadNew_title": "Caricare un pacchetto diverso?",
+  "home_confirmLoadNew_message": "Caricare un altro pacchetto cancellerà i gruppi tonali, le immagini e le grafie correnti. Continuare?",
+  "home_confirmLoadNew_confirm": "Carica"
+  ,
+  "tm_takePhoto": "Scatta foto",
+  "tm_chooseFromGallery": "Scegli dalla galleria",
+  "tm_reviewPrompt_title": "Rivedere il gruppo tonale?",
+  "tm_reviewPrompt_message": "Hai aggiunto {threshold} nuove parole al Gruppo {groupNumber}. Controlla questo gruppo.",
+  "tm_reviewPrompt_later": "Più tardi",
+  "tm_reviewPrompt_now": "Rivedi ora",
+  "share_reviewAll_title": "Rivedere prima di condividere?",
+  "share_reviewAll_message": "Per garantire l’accuratezza, rivedi tutti i gruppi tonali prima di esportare. Vuoi rivederli ora?",
+  "share_reviewAll_skip": "Salta",
+  "share_reviewAll_reviewAll": "Rivedi tutto",
+  "review_screen_title": "Rivedi gruppi ({current}/{total})",
+  "review_screen_back": "Indietro",
+  "review_screen_markNext": "Segna come rivisto e Avanti",
+  "review_screen_markFinish": "Segna come rivisto e Fine"
 }

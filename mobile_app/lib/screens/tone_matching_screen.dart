@@ -61,6 +61,53 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
             tooltip: AppLocalizations.of(context).tm_share,
             onPressed: _shareResults,
           ),
+          PopupMenuButton<String>(
+            onSelected: (value) async {
+              if (value == 'reset') {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) {
+                    final l10n = AppLocalizations.of(ctx);
+                    return AlertDialog(
+                      title: Text(l10n.tm_resetDialog_title),
+                      content: Text(l10n.tm_resetDialog_message),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(false),
+                          child: Text(l10n.common_cancel),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => Navigator.of(ctx).pop(true),
+                          child: Text(l10n.tm_resetDialog_confirm),
+                        ),
+                      ],
+                    );
+                  },
+                );
+                if (!context.mounted) return;
+                if (confirm == true) {
+                  final appState = Provider.of<AppState>(
+                    context,
+                    listen: false,
+                  );
+                  await appState.resetSorting();
+                  if (!context.mounted) return;
+                  final l10n = AppLocalizations.of(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(l10n.tm_reset_snackbar)),
+                  );
+                }
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem<String>(
+                value: 'reset',
+                child: Text(
+                  AppLocalizations.of(context).tm_menu_resetSortingLabel,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
       body: Consumer<AppState>(
@@ -132,12 +179,12 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
                       iconSize: 64,
                       color: Theme.of(context).primaryColor,
                       onPressed: () async {
-                        final messenger = ScaffoldMessenger.of(context);
-                        final l10n = AppLocalizations.of(context);
                         try {
                           await appState.playWord(currentWord);
                         } catch (e) {
-                          messenger.showSnackBar(
+                          if (!context.mounted) return;
+                          final l10n = AppLocalizations.of(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text(l10n.tm_audioError)),
                           );
                         }
@@ -291,32 +338,62 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
           const SizedBox(height: 8),
           // Members list with play buttons
           ...group.members.map(
-            (word) => ListTile(
-              dense: true,
-              title: Text(
-                '${word.reference}  •  '
-                '${word.getDisplayText(appState.settings!.writtenFormElements)}',
+            (word) => Dismissible(
+              key: ValueKey('member-${word.reference}'),
+              background: Container(
+                color: Colors.blueAccent.withValues(alpha: 0.2),
+                alignment: Alignment.centerLeft,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: const Icon(Icons.open_in_new),
               ),
-              subtitle:
-                  (appState.settings!.showGloss &&
-                      appState.settings!.glossElement != null &&
-                      (word.fields[appState.settings!.glossElement!] ?? '')
-                          .isNotEmpty)
-                  ? Text(word.fields[appState.settings!.glossElement!]!)
-                  : null,
-              trailing: IconButton(
-                icon: const Icon(Icons.play_arrow),
-                onPressed: () async {
-                  final messenger = ScaffoldMessenger.of(context);
-                  final l10n = AppLocalizations.of(context);
-                  try {
-                    await appState.playWord(word);
-                  } catch (e) {
-                    messenger.showSnackBar(
-                      SnackBar(content: Text(l10n.tm_audioError)),
-                    );
-                  }
-                },
+              secondaryBackground: Container(
+                color: Colors.blueAccent.withValues(alpha: 0.2),
+                alignment: Alignment.centerRight,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: const Icon(Icons.open_in_new),
+              ),
+              onDismissed: (direction) {
+                // Move this word out of the group and make it current to reassign
+                Provider.of<AppState>(
+                  context,
+                  listen: false,
+                ).moveWordForReassignment(word);
+                if (!mounted) return;
+                final l10n = AppLocalizations.of(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(l10n.tm_selectGroup),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+              child: ListTile(
+                dense: true,
+                title: Text(
+                  '${word.reference}  •  '
+                  '${word.getDisplayText(appState.settings!.writtenFormElements)}',
+                ),
+                subtitle:
+                    (appState.settings!.showGloss &&
+                        appState.settings!.glossElement != null &&
+                        (word.fields[appState.settings!.glossElement!] ?? '')
+                            .isNotEmpty)
+                    ? Text(word.fields[appState.settings!.glossElement!]!)
+                    : null,
+                trailing: IconButton(
+                  icon: const Icon(Icons.play_arrow),
+                  onPressed: () async {
+                    try {
+                      await appState.playWord(word);
+                    } catch (e) {
+                      if (!mounted) return;
+                      final l10n = AppLocalizations.of(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(l10n.tm_audioError)),
+                      );
+                    }
+                  },
+                ),
               ),
             ),
           ),
@@ -413,18 +490,18 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
           children: [
             ListTile(
               leading: const Icon(Icons.camera_alt),
-              title: const Text('Take photo'),
+              title: Text(AppLocalizations.of(ctx).tm_takePhoto),
               onTap: () => Navigator.of(ctx).pop(ImageSource.camera),
             ),
             ListTile(
               leading: const Icon(Icons.photo_library),
-              title: const Text('Choose from gallery'),
+              title: Text(AppLocalizations.of(ctx).tm_chooseFromGallery),
               onTap: () => Navigator.of(ctx).pop(ImageSource.gallery),
             ),
             const Divider(height: 1),
             ListTile(
               leading: const Icon(Icons.close),
-              title: const Text('Cancel'),
+              title: Text(AppLocalizations.of(ctx).common_cancel),
               onTap: () => Navigator.of(ctx).pop(null),
             ),
           ],
@@ -453,22 +530,28 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
     if (group.requiresReview) {
       final proceedToReview = await showDialog<bool>(
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Review tone group?'),
-          content: Text(
-            'You\'ve added ${AppState.reviewThreshold} new words to Group ${group.groupNumber}. Please double-check this group.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Later'),
+        builder: (ctx) {
+          final l10n = AppLocalizations.of(ctx);
+          return AlertDialog(
+            title: Text(l10n.tm_reviewPrompt_title),
+            content: Text(
+              l10n.tm_reviewPrompt_message(
+                AppState.reviewThreshold,
+                group.groupNumber,
+              ),
             ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Review now'),
-            ),
-          ],
-        ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text(l10n.tm_reviewPrompt_later),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: Text(l10n.tm_reviewPrompt_now),
+              ),
+            ],
+          );
+        },
       );
 
       if (proceedToReview == true && mounted) {
@@ -492,29 +575,28 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
 
   Future<void> _shareResults() async {
     final appState = Provider.of<AppState>(context, listen: false);
-    final messenger = ScaffoldMessenger.of(context);
-    final l10n = AppLocalizations.of(context);
 
     try {
       // Strongly suggest reviewing all groups before sharing
       final reviewAll = await showDialog<bool>(
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Review before sharing?'),
-          content: const Text(
-            'To ensure accuracy, please review all tone groups before exporting. Do you want to review them now?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Skip'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Review all'),
-            ),
-          ],
-        ),
+        builder: (ctx) {
+          final l10n = AppLocalizations.of(ctx);
+          return AlertDialog(
+            title: Text(l10n.share_reviewAll_title),
+            content: Text(l10n.share_reviewAll_message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text(l10n.share_reviewAll_skip),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: Text(l10n.share_reviewAll_reviewAll),
+              ),
+            ],
+          );
+        },
       );
 
       if (!mounted) return;
@@ -530,14 +612,18 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
 
       await appState.shareResults();
 
-      messenger.showSnackBar(
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(l10n.export_creating),
           duration: const Duration(seconds: 2),
         ),
       );
     } catch (e) {
-      messenger.showSnackBar(
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(l10n.export_failed),
           backgroundColor: Colors.red,
@@ -563,10 +649,11 @@ class _GroupReviewScreenState extends State<GroupReviewScreen> {
   Widget build(BuildContext context) {
     final appState = Provider.of<AppState>(context, listen: false);
     final group = widget.groups[index];
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Review groups (${index + 1}/${widget.groups.length})'),
+        title: Text(l10n.review_screen_title(index + 1, widget.groups.length)),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -574,7 +661,7 @@ class _GroupReviewScreenState extends State<GroupReviewScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Group ${group.groupNumber}',
+              l10n.tm_groupNumber(group.groupNumber),
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 12),
@@ -589,15 +676,37 @@ class _GroupReviewScreenState extends State<GroupReviewScreen> {
                     ),
                   const SizedBox(height: 12),
                   Text(
-                    'Members:',
+                    l10n.tm_groupMembers,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
                   ...group.members.map(
-                    (w) => ListTile(
-                      dense: true,
-                      title: Text(
-                        '${w.reference} • ${w.getDisplayText(appState.settings!.writtenFormElements)}',
+                    (w) => Dismissible(
+                      key: ValueKey('review-${w.reference}'),
+                      background: Container(
+                        color: Colors.blueAccent.withValues(alpha: 0.2),
+                        alignment: Alignment.centerLeft,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: const Icon(Icons.open_in_new),
+                      ),
+                      secondaryBackground: Container(
+                        color: Colors.blueAccent.withValues(alpha: 0.2),
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: const Icon(Icons.open_in_new),
+                      ),
+                      onDismissed: (direction) {
+                        Provider.of<AppState>(
+                          context,
+                          listen: false,
+                        ).moveWordForReassignment(w);
+                        Navigator.of(context).pop();
+                      },
+                      child: ListTile(
+                        dense: true,
+                        title: Text(
+                          '${w.reference} • ${w.getDisplayText(appState.settings!.writtenFormElements)}',
+                        ),
                       ),
                     ),
                   ),
@@ -610,7 +719,7 @@ class _GroupReviewScreenState extends State<GroupReviewScreen> {
                   onPressed: () {
                     if (index > 0) setState(() => index -= 1);
                   },
-                  child: const Text('Back'),
+                  child: Text(l10n.review_screen_back),
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
@@ -624,8 +733,8 @@ class _GroupReviewScreenState extends State<GroupReviewScreen> {
                   },
                   child: Text(
                     index < widget.groups.length - 1
-                        ? 'Mark reviewed & Next'
-                        : 'Mark reviewed & Finish',
+                        ? l10n.review_screen_markNext
+                        : l10n.review_screen_markFinish,
                   ),
                 ),
               ],

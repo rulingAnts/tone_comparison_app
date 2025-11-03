@@ -9,6 +9,40 @@ import 'package:tone_comparison_app/generated/app_localizations.dart';
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
+  Future<void> _handlePendingIntent(
+    BuildContext context,
+    AppState appState,
+  ) async {
+    // Take pending path (clears it so we don't re-enter)
+    final pending = appState.takePendingBundlePath();
+    if (pending == null) return;
+
+    // If replacing existing work, confirm with the user
+    if (appState.bundleData != null && appState.hasUserProgress) {
+      final l10n = AppLocalizations.of(context);
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(l10n.home_confirmLoadNew_title),
+          content: Text(l10n.home_confirmLoadNew_message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(l10n.common_cancel),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(l10n.home_confirmLoadNew_confirm),
+            ),
+          ],
+        ),
+      );
+      if (!context.mounted || confirmed != true) return;
+    }
+
+    await appState.loadBundle(pending);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -17,6 +51,14 @@ class HomeScreen extends StatelessWidget {
       body: Center(
         child: Consumer<AppState>(
           builder: (context, appState, child) {
+            // If an Android VIEW intent delivered a file, confirm with the
+            // user before loading (deferred until after this frame).
+            if (appState.hasPendingBundle) {
+              WidgetsBinding.instance.addPostFrameCallback((_) async {
+                if (!context.mounted) return;
+                await _handlePendingIntent(context, appState);
+              });
+            }
             if (appState.isLoading) {
               return Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -116,7 +158,30 @@ class HomeScreen extends StatelessWidget {
       ],
     );
 
+    if (!context.mounted) return;
     if (file != null && file.path.isNotEmpty) {
+      // If a bundle is already loaded and there's user progress, confirm reset
+      if (appState.bundleData != null && appState.hasUserProgress) {
+        final l10n = AppLocalizations.of(context);
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(l10n.home_confirmLoadNew_title),
+            content: Text(l10n.home_confirmLoadNew_message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text(l10n.common_cancel),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: Text(l10n.home_confirmLoadNew_confirm),
+              ),
+            ],
+          ),
+        );
+        if (!context.mounted || confirm != true) return;
+      }
       await appState.loadBundle(file.path);
     }
   }

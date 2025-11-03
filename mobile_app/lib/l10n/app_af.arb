@@ -37,4 +37,28 @@
   "@tm_groupsCreated": {"placeholders": {"count": {"type": "int"}}},
   "tm_start": "Begin toonpassing",
   "tm_noWords": "Geen woorde om te pas nie"
+,
+  "tm_menu_resetSortingLabel": "Stel sortering terug",
+  "tm_resetDialog_title": "Stel sortering terug?",
+  "tm_resetDialog_message": "Dit sal alle toongroepe, beelde en spellinge uitvee. Jou oorspronklike bondel bly gelaai sodat jy weer kan begin.",
+  "tm_resetDialog_confirm": "Stel terug",
+  "tm_reset_snackbar": "Sortering is teruggestel.",
+  "home_confirmLoadNew_title": "Laai ’n ander bondel?",
+  "home_confirmLoadNew_message": "As jy ’n ander bondel laai, sal jou huidige toongroepe, beelde en spellinge uitgevee word. Gaan voort?",
+  "home_confirmLoadNew_confirm": "Laai"
+  ,
+  "tm_takePhoto": "Neem foto",
+  "tm_chooseFromGallery": "Kies uit galery",
+  "tm_reviewPrompt_title": "Hersien toongroep?",
+  "tm_reviewPrompt_message": "Jy het {threshold} nuwe woorde by Groep {groupNumber} gevoeg. Gaan asseblief hierdie groep na.",
+  "tm_reviewPrompt_later": "Later",
+  "tm_reviewPrompt_now": "Hersien nou",
+  "share_reviewAll_title": "Hersien voor deel?",
+  "share_reviewAll_message": "Om akkuraatheid te verseker, hersien asseblief alle toongroepe voor uitvoer. Wil jy dit nou hersien?",
+  "share_reviewAll_skip": "Slaan oor",
+  "share_reviewAll_reviewAll": "Hersien alles",
+  "review_screen_title": "Hersien groepe ({current}/{total})",
+  "review_screen_back": "Terug",
+  "review_screen_markNext": "Merk hersien & Volgende",
+  "review_screen_markFinish": "Merk hersien & Klaar"
 }

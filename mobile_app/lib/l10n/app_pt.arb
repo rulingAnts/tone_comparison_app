@@ -38,4 +38,28 @@
   "@tm_groupsCreated": {"placeholders": {"count": {"type": "int"}}},
   "tm_start": "Iniciar correspondência de tons",
   "tm_noWords": "Não há palavras para corresponder"
+,
+  "tm_menu_resetSortingLabel": "Redefinir classificação",
+  "tm_resetDialog_title": "Redefinir a classificação?",
+  "tm_resetDialog_message": "Isso apagará todos os grupos de tom, imagens e grafias. Seu pacote original permanecerá carregado para você recomeçar.",
+  "tm_resetDialog_confirm": "Redefinir",
+  "tm_reset_snackbar": "Classificação redefinida.",
+  "home_confirmLoadNew_title": "Carregar um pacote diferente?",
+  "home_confirmLoadNew_message": "Carregar um pacote diferente limpará seus grupos de tom, imagens e grafias atuais. Continuar?",
+  "home_confirmLoadNew_confirm": "Carregar"
+  ,
+  "tm_takePhoto": "Tirar foto",
+  "tm_chooseFromGallery": "Escolher da galeria",
+  "tm_reviewPrompt_title": "Revisar grupo de tom?",
+  "tm_reviewPrompt_message": "Você adicionou {threshold} novas palavras ao Grupo {groupNumber}. Por favor, verifique este grupo.",
+  "tm_reviewPrompt_later": "Mais tarde",
+  "tm_reviewPrompt_now": "Revisar agora",
+  "share_reviewAll_title": "Revisar antes de compartilhar?",
+  "share_reviewAll_message": "Para garantir a precisão, revise todos os grupos de tom antes de exportar. Deseja revisar agora?",
+  "share_reviewAll_skip": "Pular",
+  "share_reviewAll_reviewAll": "Revisar tudo",
+  "review_screen_title": "Revisar grupos ({current}/{total})",
+  "review_screen_back": "Voltar",
+  "review_screen_markNext": "Marcar revisado e Próximo",
+  "review_screen_markFinish": "Marcar revisado e Finalizar"
 }

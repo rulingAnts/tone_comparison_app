@@ -37,4 +37,28 @@
   "@tm_groupsCreated": {"placeholders": {"count": {"type": "int"}}},
   "tm_start": "Démarrer l'appariement des tons",
   "tm_noWords": "Aucun mot à apparier"
+,
+  "tm_menu_resetSortingLabel": "Réinitialiser le tri",
+  "tm_resetDialog_title": "Réinitialiser le tri ?",
+  "tm_resetDialog_message": "Cela effacera tous les groupes de tons, images et orthographes. Votre paquet original restera chargé pour recommencer.",
+  "tm_resetDialog_confirm": "Réinitialiser",
+  "tm_reset_snackbar": "Tri réinitialisé.",
+  "home_confirmLoadNew_title": "Charger un autre paquet ?",
+  "home_confirmLoadNew_message": "Le chargement d’un autre paquet effacera vos groupes de tons, images et orthographes actuels. Continuer ?",
+  "home_confirmLoadNew_confirm": "Charger"
+  ,
+  "tm_takePhoto": "Prendre une photo",
+  "tm_chooseFromGallery": "Choisir depuis la galerie",
+  "tm_reviewPrompt_title": "Revoir le groupe de tons ?",
+  "tm_reviewPrompt_message": "Vous avez ajouté {threshold} nouveaux mots au groupe {groupNumber}. Veuillez vérifier ce groupe.",
+  "tm_reviewPrompt_later": "Plus tard",
+  "tm_reviewPrompt_now": "Revoir maintenant",
+  "share_reviewAll_title": "Revoir avant de partager ?",
+  "share_reviewAll_message": "Pour garantir l’exactitude, veuillez revoir tous les groupes de tons avant d’exporter. Voulez-vous les revoir maintenant ?",
+  "share_reviewAll_skip": "Ignorer",
+  "share_reviewAll_reviewAll": "Tout revoir",
+  "review_screen_title": "Revoir les groupes ({current}/{total})",
+  "review_screen_back": "Retour",
+  "review_screen_markNext": "Marquer revu & Suivant",
+  "review_screen_markFinish": "Marquer revu & Terminer"
 }

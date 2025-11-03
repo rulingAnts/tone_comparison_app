@@ -37,4 +37,28 @@
   "@tm_groupsCreated": {"placeholders": {"count": {"type": "int"}}},
   "tm_start": "开始声调匹配",
   "tm_noWords": "没有可匹配的词"
+,
+  "tm_menu_resetSortingLabel": "重置排序",
+  "tm_resetDialog_title": "要重置排序吗？",
+  "tm_resetDialog_message": "这将清除所有声调组、图片和拼写。原始包将保持加载，便于重新开始。",
+  "tm_resetDialog_confirm": "重置",
+  "tm_reset_snackbar": "已重置排序。",
+  "home_confirmLoadNew_title": "加载其他包？",
+  "home_confirmLoadNew_message": "加载其他包会清除你当前的声调组、图片和拼写。是否继续？",
+  "home_confirmLoadNew_confirm": "加载"
+  ,
+  "tm_takePhoto": "拍照",
+  "tm_chooseFromGallery": "从相册选择",
+  "tm_reviewPrompt_title": "检查声调组？",
+  "tm_reviewPrompt_message": "你已向第 {groupNumber} 组添加了 {threshold} 个新词。请仔细检查该组。",
+  "tm_reviewPrompt_later": "稍后",
+  "tm_reviewPrompt_now": "立即检查",
+  "share_reviewAll_title": "分享前检查？",
+  "share_reviewAll_message": "为确保准确性，请在导出前检查所有声调组。现在要检查吗？",
+  "share_reviewAll_skip": "跳过",
+  "share_reviewAll_reviewAll": "检查全部",
+  "review_screen_title": "检查分组（{current}/{total}）",
+  "review_screen_back": "返回",
+  "review_screen_markNext": "标记已检查并下一步",
+  "review_screen_markFinish": "标记已检查并完成"
 }

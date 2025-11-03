@@ -14,14 +14,14 @@ class IntentService {
         'getInitialSharedPath',
       );
       if (initialPath != null && initialPath.isNotEmpty) {
-        await appState.loadBundle(initialPath);
+        appState.setPendingBundlePath(initialPath);
       }
     } catch (_) {}
 
     // Listen for new intents while app is running
     _sub ??= _events.receiveBroadcastStream().listen((event) async {
       if (event is String && event.isNotEmpty) {
-        await appState.loadBundle(event);
+        appState.setPendingBundlePath(event);
       }
     }, onError: (_) {});
   }

@@ -37,4 +37,28 @@
   "@tm_groupsCreated": {"placeholders": {"count": {"type": "int"}}},
   "tm_start": "بدء مطابقة النغمات",
   "tm_noWords": "لا توجد كلمات للمطابقة"
+,
+  "tm_menu_resetSortingLabel": "إعادة تعيين الفرز",
+  "tm_resetDialog_title": "هل تريد إعادة تعيين الفرز؟",
+  "tm_resetDialog_message": "سيؤدي هذا إلى مسح جميع مجموعات النغمات والصور والتهجئات. ستبقى الحزمة الأصلية محمّلة لتبدأ من جديد.",
+  "tm_resetDialog_confirm": "إعادة التعيين",
+  "tm_reset_snackbar": "تم إعادة تعيين الفرز.",
+  "home_confirmLoadNew_title": "تحميل حزمة مختلفة؟",
+  "home_confirmLoadNew_message": "سيؤدي تحميل حزمة مختلفة إلى مسح مجموعات النغمات والصور والتهجئات الحالية لديك. المتابعة؟",
+  "home_confirmLoadNew_confirm": "تحميل"
+  ,
+  "tm_takePhoto": "التقاط صورة",
+  "tm_chooseFromGallery": "اختيار من المعرض",
+  "tm_reviewPrompt_title": "مراجعة مجموعة النغمات؟",
+  "tm_reviewPrompt_message": "لقد أضفت {threshold} كلمات جديدة إلى المجموعة {groupNumber}. يرجى التحقق من هذه المجموعة.",
+  "tm_reviewPrompt_later": "لاحقًا",
+  "tm_reviewPrompt_now": "راجع الآن",
+  "share_reviewAll_title": "المراجعة قبل المشاركة؟",
+  "share_reviewAll_message": "لضمان الدقة، يُرجى مراجعة جميع مجموعات النغمات قبل التصدير. هل تريد مراجعتها الآن؟",
+  "share_reviewAll_skip": "تخطي",
+  "share_reviewAll_reviewAll": "مراجعة الكل",
+  "review_screen_title": "مراجعة المجموعات ({current}/{total})",
+  "review_screen_back": "رجوع",
+  "review_screen_markNext": "وضع علامة تمت المراجعة & التالي",
+  "review_screen_markFinish": "وضع علامة تمت المراجعة & إنهاء"
 }

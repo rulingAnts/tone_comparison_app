@@ -37,4 +37,28 @@
   "@tm_groupsCreated": {"placeholders": {"count": {"type": "int"}}},
   "tm_start": "Stat long makim ton",
   "tm_noWords": "Nogat ol tok bilong makim"
+,
+  "tm_menu_resetSortingLabel": "Risetim oda",
+  "tm_resetDialog_title": "Risetim oda?",
+  "tm_resetDialog_message": "Dispela bai rausim olgeta ton grup, piksa na spelling. Olpela bundle bai stap load olsem yu inap stat gen.",
+  "tm_resetDialog_confirm": "Risetim",
+  "tm_reset_snackbar": "Oda i riseti pinis.",
+  "home_confirmLoadNew_title": "Lodim narapela bundle?",
+  "home_confirmLoadNew_message": "Sapos yu lodim narapela bundle, bai kliaim ol ton grup, piksa na spelling bilong yu nau. Yu laik go yet?",
+  "home_confirmLoadNew_confirm": "Lodim"
+  ,
+  "tm_takePhoto": "Tekim foto",
+  "tm_chooseFromGallery": "Makim long galeri",
+  "tm_reviewPrompt_title": "Luklukim grup?",
+  "tm_reviewPrompt_message": "Yu putim {threshold} nupela tok i go long Grup {groupNumber}. Plis lukluk gut long dispela grup.",
+  "tm_reviewPrompt_later": "Bihain",
+  "tm_reviewPrompt_now": "Lukluk nau",
+  "share_reviewAll_title": "Lukluk pastaim bipo yu serem?",
+  "share_reviewAll_message": "Long mekim stret, plis lukluk long olgeta grup bilong ton bipo yu eksport. Yu laik lukluk nau?",
+  "share_reviewAll_skip": "Skipim",
+  "share_reviewAll_reviewAll": "Lukluk long olgeta",
+  "review_screen_title": "Luklukim ol grup ({current}/{total})",
+  "review_screen_back": "Bek",
+  "review_screen_markNext": "Makim stret & Neks",
+  "review_screen_markFinish": "Makim stret & Pinis"
 }

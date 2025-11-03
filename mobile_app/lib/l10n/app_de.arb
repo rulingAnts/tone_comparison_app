@@ -37,4 +37,28 @@
     "@tm_groupsCreated": {"placeholders": {"count": {"type": "int"}}},
     "tm_start": "Ton-Zuordnung starten",
     "tm_noWords": "Keine Wörter zuzuordnen"
-}
+  ,
+    "tm_menu_resetSortingLabel": "Sortierung zurücksetzen",
+    "tm_resetDialog_title": "Sortierung zurücksetzen?",
+    "tm_resetDialog_message": "Dadurch werden alle Tongruppen, Bilder und Schreibungen gelöscht. Ihr ursprüngliches Bundle bleibt geladen, sodass Sie neu beginnen können.",
+    "tm_resetDialog_confirm": "Zurücksetzen",
+    "tm_reset_snackbar": "Sortierung zurückgesetzt.",
+    "home_confirmLoadNew_title": "Anderes Bundle laden?",
+    "home_confirmLoadNew_message": "Das Laden eines anderen Bundles löscht Ihre aktuellen Tongruppen, Bilder und Schreibungen. Fortfahren?",
+    "home_confirmLoadNew_confirm": "Laden"
+    ,
+    "tm_takePhoto": "Foto aufnehmen",
+    "tm_chooseFromGallery": "Aus Galerie wählen",
+    "tm_reviewPrompt_title": "Gruppe überprüfen?",
+    "tm_reviewPrompt_message": "Sie haben {threshold} neue Wörter zu Gruppe {groupNumber} hinzugefügt. Bitte überprüfen Sie diese Gruppe.",
+    "tm_reviewPrompt_later": "Später",
+    "tm_reviewPrompt_now": "Jetzt überprüfen",
+    "share_reviewAll_title": "Vor dem Teilen überprüfen?",
+    "share_reviewAll_message": "Um die Genauigkeit zu gewährleisten, überprüfe bitte alle Tongruppen vor dem Export. Möchtest du sie jetzt überprüfen?",
+    "share_reviewAll_skip": "Überspringen",
+    "share_reviewAll_reviewAll": "Alle überprüfen",
+    "review_screen_title": "Gruppen überprüfen ({current}/{total})",
+    "review_screen_back": "Zurück",
+    "review_screen_markNext": "Bestätigen & Weiter",
+    "review_screen_markFinish": "Bestätigen & Fertig"
+  }
