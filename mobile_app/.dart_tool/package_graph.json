@@ -5,7 +5,7 @@
   "packages": [
     {
       "name": "tone_comparison_app",
-      "version": "0.1.0+1",
+      "version": "1.0.0+1",
       "dependencies": [
         "archive",
         "audio_session",

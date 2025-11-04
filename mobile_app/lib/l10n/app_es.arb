@@ -78,6 +78,6 @@
     "placeholders": {"completed": {"type": "int"}, "total": {"type": "int"}}
   }
   ,
-  "share_android_picker_missing_message": "If no save picker appears, ensure these system apps are enabled: Files (DocumentsUI), Google Drive, Google Play services, and their storage providers. Then try again from Save to Drive.",
-  "share_android_save_failed_message": "Saving failed. Make sure Files (DocumentsUI), Google Drive, and Google Play services are enabled on this device, then try again."
+  "share_android_picker_missing_message": "Si no aparece el selector de guardado, asegúrate de que estas apps del sistema estén habilitadas: Archivos (DocumentsUI), Google Drive, Google Play Services y sus proveedores de almacenamiento. Luego inténtalo de nuevo con Guardar en Drive.",
+  "share_android_save_failed_message": "Error al guardar. Asegúrate de que Archivos (DocumentsUI), Google Drive y Google Play Services estén habilitados en este dispositivo y vuelve a intentarlo."
 }
