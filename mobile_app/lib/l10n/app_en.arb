@@ -65,7 +65,7 @@
   "@tm_groupMembers": {"description": "Header label for members list in a tone group"},
   "tm_createGroupTitle": "Create New Group",
   "@tm_createGroupTitle": {"description": "Card title for creating a new tone group"},
-  "tm_createGroupSubtitle": "Take a photo and start a new tone group",
+  "tm_createGroupSubtitle": "Take a photo or choose from gallery to start a new tone group",
   "@tm_createGroupSubtitle": {"description": "Subtitle guiding user to add a photo and create a group"},
   "tm_enterSpelling": "Enter spelling",
   "@tm_enterSpelling": {"description": "Text field label to enter spelling"},
@@ -132,4 +132,37 @@
   ,
   "tm_moved_prompt": "Moved. Select a different group or create a new one.",
   "@tm_moved_prompt": {"description": "Snackbar prompting the user to select another group or create a new one after moving a word out of its group"}
+  ,
+  "tm_drawPicture": "Draw a picture",
+  "@tm_drawPicture": {"description": "Bottom sheet option to draw a picture instead of taking/choosing a photo"},
+  "draw_title": "Draw picture",
+  "@draw_title": {"description": "Title for the drawing screen"},
+  "draw_save": "Save",
+  "@draw_save": {"description": "Action to save the drawn image"},
+  "draw_clear": "Clear",
+  "@draw_clear": {"description": "Action to clear the drawing canvas"}
+  ,
+  "draw_undo": "Undo",
+  "@draw_undo": {"description": "Action to undo the last stroke"}
+  ,
+  "share_option_shareApps": "Share via apps",
+  "@share_option_shareApps": {"description": "Sheet option to share using other apps"},
+  "share_option_saveFiles": "Save to Files",
+  "@share_option_saveFiles": {"description": "Sheet option to save the export ZIP using the system file picker"},
+  "share_option_saveDrive": "Save to Drive",
+  "@share_option_saveDrive": {"description": "Sheet option to save the export ZIP directly to Google Drive using the system save dialog"},
+  "share_saved_ok": "Saved",
+  "@share_saved_ok": {"description": "Snackbar after successful save"},
+  "share_saved_failed": "Save failed",
+  "@share_saved_failed": {"description": "Snackbar after failed save"}
+  ,
+  "share_android_picker_missing_message": "If no save picker appears, ensure these system apps are enabled: Files (DocumentsUI), Google Drive, Google Play services, and their storage providers. Then try again from Save to Drive.",
+  "@share_android_picker_missing_message": {"description": "Guidance shown on Android when no save picker appears for the Create Document flow"},
+  "share_android_save_failed_message": "Saving failed. Make sure Files (DocumentsUI), Google Drive, and Google Play services are enabled on this device, then try again.",
+  "@share_android_save_failed_message": {"description": "Guidance shown on Android when saving fails during the Create Document flow"},
+  "tm_completedOfTotal": "Completed {completed} of {total}",
+  "@tm_completedOfTotal": {
+    "description": "Progress indicator showing how many words have been completed out of total.",
+    "placeholders": {"completed": {"type": "int"}, "total": {"type": "int"}}
+  }
 }

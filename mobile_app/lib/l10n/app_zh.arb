@@ -31,7 +31,7 @@
   "@tm_groupNumber": {"placeholders": {"number": {"type": "int"}}},
   "tm_groupMembers": "组成员",
   "tm_createGroupTitle": "创建新组",
-  "tm_createGroupSubtitle": "拍照并开始新的声调组",
+  "tm_createGroupSubtitle": "拍照或从相册选择，开始新的声调组",
   "tm_enterSpelling": "输入拼写",
   "tm_groupsCreated": "已创建 {count} 个声调组",
   "@tm_groupsCreated": {"placeholders": {"count": {"type": "int"}}},
@@ -62,5 +62,20 @@
   "review_screen_markNext": "标记已检查并下一步",
   "review_screen_markFinish": "标记已检查并完成"
   ,
-  "tm_moved_prompt": "已移出。请选择其他分组或创建新分组。"
+  "tm_moved_prompt": "已移出。请选择其他分组或创建新分组。",
+  "tm_drawPicture": "手绘图片",
+  "draw_title": "手绘图片",
+  "draw_save": "保存",
+  "draw_clear": "清除",
+  "draw_undo": "撤销"
+  ,
+  "share_option_shareApps": "通过应用分享",
+  "share_option_saveFiles": "保存到文件",
+  "share_option_saveDrive": "保存到云端硬盘",
+  "share_saved_ok": "已保存",
+  "share_saved_failed": "保存失败",
+  "share_android_picker_missing_message": "If no save picker appears, ensure these system apps are enabled: Files (DocumentsUI), Google Drive, Google Play services, and their storage providers. Then try again from Save to Drive.",
+  "share_android_save_failed_message": "Saving failed. Make sure Files (DocumentsUI), Google Drive, and Google Play services are enabled on this device, then try again.",
+  "tm_completedOfTotal": "已完成 {completed} 个，共 {total} 个",
+  "@tm_completedOfTotal": {"placeholders": {"completed": {"type": "int"}, "total": {"type": "int"}}}
 }

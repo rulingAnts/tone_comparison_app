@@ -64,4 +64,25 @@
   "review_screen_markFinish": "Marcar revisado e Finalizar"
   ,
   "tm_moved_prompt": "Movido. Selecione um grupo diferente ou crie um novo."
+  ,
+  "tm_drawPicture": "Desenhar uma imagem",
+  "draw_title": "Desenhar imagem",
+  "draw_save": "Salvar",
+  "draw_clear": "Limpar",
+  "draw_undo": "Desfazer",
+  "share_option_shareApps": "Compartilhar via aplicativos",
+  "share_option_saveFiles": "Salvar em Arquivos",
+  "share_option_saveDrive": "Salvar no Drive",
+  "share_saved_ok": "Salvo",
+  "share_saved_failed": "Falha ao salvar",
+  "tm_completedOfTotal": "Concluídos {completed} de {total}",
+  "@tm_completedOfTotal": {
+    "placeholders": {
+      "completed": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  }
+    ,
+    "share_android_picker_missing_message": "If no save picker appears, ensure these system apps are enabled: Files (DocumentsUI), Google Drive, Google Play services, and their storage providers. Then try again from Save to Drive.",
+    "share_android_save_failed_message": "Saving failed. Make sure Files (DocumentsUI), Google Drive, and Google Play services are enabled on this device, then try again."
 }

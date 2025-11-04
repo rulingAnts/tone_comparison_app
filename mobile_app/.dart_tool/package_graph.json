@@ -13,6 +13,7 @@
         "cupertino_icons",
         "file_selector",
         "flutter",
+        "flutter_file_dialog",
         "flutter_localizations",
         "image",
         "image_picker",
@@ -54,6 +55,13 @@
         "stream_channel",
         "test_api",
         "vector_math"
+      ]
+    },
+    {
+      "name": "flutter_file_dialog",
+      "version": "3.0.2",
+      "dependencies": [
+        "flutter"
       ]
     },
     {

@@ -62,5 +62,20 @@
   "review_screen_markNext": "Tandai ditinjau & Lanjut",
   "review_screen_markFinish": "Tandai ditinjau & Selesai"
   ,
-  "tm_moved_prompt": "Dipindahkan. Pilih grup lain atau buat yang baru."
+  "tm_moved_prompt": "Dipindahkan. Pilih grup lain atau buat yang baru.",
+  "tm_drawPicture": "Buat gambar",
+  "draw_title": "Buat gambar",
+  "draw_save": "Simpan",
+  "draw_clear": "Hapus",
+  "draw_undo": "Urungkan",
+  "share_option_shareApps": "Bagikan via aplikasi",
+  "share_option_saveFiles": "Simpan ke File",
+  "share_option_saveDrive": "Simpan ke Drive",
+  "share_saved_ok": "Tersimpan",
+  "share_saved_failed": "Gagal menyimpan",
+  "tm_completedOfTotal": "Selesai {completed} dari {total}",
+  "@tm_completedOfTotal": {"placeholders": {"completed": {"type": "int"}, "total": {"type": "int"}}}
+  ,
+  "share_android_picker_missing_message": "If no save picker appears, ensure these system apps are enabled: Files (DocumentsUI), Google Drive, Google Play services, and their storage providers. Then try again from Save to Drive.",
+  "share_android_save_failed_message": "Saving failed. Make sure Files (DocumentsUI), Google Drive, and Google Play services are enabled on this device, then try again."
 }

@@ -21,11 +21,16 @@ class AppState extends ChangeNotifier {
   BundleData? _bundleData;
   final List<ToneGroup> _toneGroups = [];
   final AudioService _audioService = AudioService();
+  String?
+  _bundleFileBaseName; // Base name (without extension) of the imported bundle file
 
   // Localization
   Locale? _locale;
 
   int _currentWordIndex = 0;
+  // Queue of word references that are not yet assigned to a tone group.
+  // This drives navigation to avoid loops and ensures persistence.
+  final List<String> _unsortedQueue = [];
   bool _isLoading = false;
   String? _error;
 
@@ -43,17 +48,27 @@ class AppState extends ChangeNotifier {
 
   AppSettings? get settings => _bundleData?.settings;
   List<WordRecord> get records => _bundleData?.records ?? [];
+  int get remainingUnsortedCount => _unsortedQueue.length;
+  int get totalCount => records.length;
 
   WordRecord? get currentWord {
-    if (_bundleData == null || _currentWordIndex >= records.length) {
-      return null;
+    if (_bundleData == null) return null;
+    // Prefer queue head if present; fallback to index for legacy
+    if (_unsortedQueue.isNotEmpty) {
+      final ref = _unsortedQueue.first;
+      return records.firstWhere(
+        (r) => r.reference == ref,
+        orElse: () => records[_currentWordIndex],
+      );
     }
+    if (_currentWordIndex >= records.length) return null;
     return records[_currentWordIndex];
   }
 
-  bool get hasNextWord => _currentWordIndex < records.length - 1;
-  bool get hasPreviousWord => _currentWordIndex > 0;
-  bool get isComplete => _currentWordIndex >= records.length;
+  bool get hasNextWord =>
+      _unsortedQueue.isNotEmpty || _currentWordIndex < records.length - 1;
+  bool get hasPreviousWord => _currentWordIndex > 0; // legacy back nav
+  bool get isComplete => _unsortedQueue.isEmpty;
   bool get canUndo => _undoStack.isNotEmpty;
   bool get hasUserProgress =>
       _toneGroups.isNotEmpty ||
@@ -83,14 +98,27 @@ class AppState extends ChangeNotifier {
 
     try {
       _bundleData = await BundleService.loadBundle(zipFilePath);
+      // Remember the original bundle file base name for naming exports
+      try {
+        _bundleFileBaseName = p.basenameWithoutExtension(zipFilePath);
+      } catch (_) {
+        _bundleFileBaseName = null;
+      }
       _audioService.setBundlePath(_bundleData!.bundlePath);
       _currentWordIndex = 0;
       _toneGroups.clear();
+      _unsortedQueue.clear();
       // Try loading any saved state for this extracted bundle; if none, fall back
       final loaded = await _loadSavedState();
       if (!loaded) {
         // Load existing tone groups from records (if any)
         _loadExistingToneGroups();
+        // Build initial queue: all records not assigned to any group, in original order
+        for (final r in records) {
+          if (r.toneGroup == null) {
+            _unsortedQueue.add(r.reference);
+          }
+        }
       }
 
       notifyListeners();
@@ -137,6 +165,7 @@ class AppState extends ChangeNotifier {
       final existing = await BundleService.loadExistingExtracted();
       if (existing == null) return;
       _bundleData = existing;
+      // No known original filename in this path; keep null to fall back later
       _audioService.setBundlePath(_bundleData!.bundlePath);
       _currentWordIndex = 0;
       _toneGroups.clear();
@@ -212,6 +241,8 @@ class AppState extends ChangeNotifier {
     );
 
     currentWord!.toneGroup = groupNumber;
+    // Remove from queue since it's now assigned
+    _unsortedQueue.remove(currentWord!.reference);
     _toneGroups.add(group);
     // If an image was provided, copy it into the bundle's images folder and update path
     if (imagePath != null && imagePath.isNotEmpty) {
@@ -254,6 +285,8 @@ class AppState extends ChangeNotifier {
         !group.requiresReview) {
       group.requiresReview = true;
     }
+    // Remove from queue since it's assigned now; the next head becomes current automatically
+    _unsortedQueue.remove(currentWord!.reference);
     _saveState();
     notifyListeners();
   }
@@ -294,11 +327,9 @@ class AppState extends ChangeNotifier {
 
   /// Move to next word
   void nextWord() {
-    if (hasNextWord) {
-      _currentWordIndex++;
-      _saveState();
-      notifyListeners();
-    }
+    _advanceToNextUnsorted();
+    _saveState();
+    notifyListeners();
   }
 
   /// Move to previous word
@@ -477,14 +508,11 @@ class AppState extends ChangeNotifier {
         _bundleData!,
         _toneGroups,
       );
+      // Share bytes directly to improve compatibility with some targets (e.g., Drive)
+      final bytes = await File(zipPath).readAsBytes();
+      final exportName = '${_bundleFileBaseName ?? 'tone_matching_xml'}.zip';
       await Share.shareXFiles(
-        [
-          XFile(
-            zipPath,
-            mimeType: 'application/zip',
-            name: 'tone_matching_xml.zip',
-          ),
-        ],
+        [XFile.fromData(bytes, mimeType: 'application/zip', name: exportName)],
         subject: 'Tone Matching XML',
         text: 'Original and updated XML from tone matching',
       );
@@ -492,6 +520,19 @@ class AppState extends ChangeNotifier {
       _setLoading(false);
     }
   }
+
+  /// Prepare the share zip and return its file path without invoking the share sheet.
+  /// Useful for workflows that want to save the file via a system file picker.
+  Future<String> prepareShareZip() async {
+    if (_bundleData == null) {
+      throw Exception('No bundle loaded');
+    }
+    return await BundleService.createShareZip(_bundleData!, _toneGroups);
+  }
+
+  /// Suggested filename for the exported/share ZIP based on the imported bundle.
+  String get suggestedExportFileName =>
+      '${_bundleFileBaseName ?? 'tone_matching_xml'}.zip';
 
   /// Play audio for a word
   Future<void> playWord(WordRecord word) async {
@@ -563,6 +604,10 @@ class AppState extends ChangeNotifier {
     // Clear assignment and focus this word as current for reassignment
     word.toneGroup = null;
     word.toneGroupId = null;
+    // Ensure it's added to the unsorted queue exactly once (at front for immediate reassignment)
+    _unsortedQueue.remove(word.reference);
+    _unsortedQueue.insert(0, word.reference);
+    // Make this the current word by index fallback as well
     if (idx != -1) {
       _currentWordIndex = idx;
     }
@@ -604,6 +649,7 @@ class AppState extends ChangeNotifier {
 
       final data = <String, dynamic>{
         'currentWordIndex': _currentWordIndex,
+        'unsortedQueue': List<String>.from(_unsortedQueue),
         'groups': _toneGroups.map((g) {
           final imageName = (g.imagePath != null && g.imagePath!.isNotEmpty)
               ? p.basename(g.imagePath!)
@@ -656,6 +702,7 @@ class AppState extends ChangeNotifier {
         r.toneGroupId = null;
       }
       _toneGroups.clear();
+      _unsortedQueue.clear();
 
       final groups = (json['groups'] as List<dynamic>? ?? []);
       for (final g in groups) {
@@ -711,7 +758,20 @@ class AppState extends ChangeNotifier {
       // Sort groups by group number for consistent UI
       _toneGroups.sort((a, b) => a.groupNumber.compareTo(b.groupNumber));
 
-      // Restore index
+      // Restore queue if present, else compute from records (those without a group)
+      final q = (json['unsortedQueue'] as List<dynamic>?);
+      if (q != null) {
+        for (final e in q) {
+          final ref = e.toString();
+          if (byRef.containsKey(ref)) _unsortedQueue.add(ref);
+        }
+      } else {
+        for (final r in records) {
+          if (r.toneGroup == null) _unsortedQueue.add(r.reference);
+        }
+      }
+
+      // Restore index (legacy fallback only)
       final idx = (json['currentWordIndex'] as int?) ?? 0;
       _currentWordIndex = idx.clamp(
         0,
@@ -720,6 +780,24 @@ class AppState extends ChangeNotifier {
       return true;
     } catch (_) {
       return false;
+    }
+  }
+
+  void _advanceToNextUnsorted() {
+    if (_unsortedQueue.isNotEmpty) {
+      // Pop the head only if the currentWord matches the head (after assignment)
+      final cw = currentWord;
+      if (cw != null &&
+          _unsortedQueue.isNotEmpty &&
+          _unsortedQueue.first == cw.reference) {
+        _unsortedQueue.removeAt(0);
+      }
+      // No need to change _currentWordIndex; currentWord derives from queue
+    } else {
+      // Fallback: advance index if queue empty but legacy index remains
+      if (_currentWordIndex < records.length - 1) {
+        _currentWordIndex++;
+      }
     }
   }
 
@@ -737,6 +815,9 @@ class AppState extends ChangeNotifier {
       final destPath = p.join(imagesDir.path, fileName);
       await File(sourcePath).copy(destPath);
       group.imagePath = destPath;
+      // Persist and notify so UI updates immediately after async copy completes
+      await _saveState();
+      notifyListeners();
     } catch (_) {
       // ignore copy errors
     }

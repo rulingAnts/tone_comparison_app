@@ -62,5 +62,22 @@
   "review_screen_markNext": "Gemarkeerd & Volgende",
   "review_screen_markFinish": "Gemarkeerd & Voltooien"
   ,
-  "tm_moved_prompt": "Verplaatst. Kies een andere groep of maak een nieuwe."
+  "tm_moved_prompt": "Verplaatst. Kies een andere groep of maak een nieuwe.",
+  "tm_drawPicture": "Teken een afbeelding",
+  "draw_title": "Afbeelding tekenen",
+  "draw_save": "Opslaan",
+  "draw_clear": "Wissen",
+  "draw_undo": "Ongedaan maken",
+  "share_option_shareApps": "Delen via apps",
+  "share_option_saveFiles": "Opslaan in Bestanden",
+  "share_option_saveDrive": "Opslaan op Drive",
+  "share_saved_ok": "Opgeslagen",
+  "share_saved_failed": "Opslaan mislukt",
+  "tm_completedOfTotal": "Voltooid {completed} van {total}",
+  "@tm_completedOfTotal": {
+    "placeholders": {"completed": {"type": "int"}, "total": {"type": "int"}}
+  }
+  ,
+  "share_android_picker_missing_message": "If no save picker appears, ensure these system apps are enabled: Files (DocumentsUI), Google Drive, Google Play services, and their storage providers. Then try again from Save to Drive.",
+  "share_android_save_failed_message": "Saving failed. Make sure Files (DocumentsUI), Google Drive, and Google Play services are enabled on this device, then try again."
 }

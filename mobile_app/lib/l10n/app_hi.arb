@@ -28,7 +28,7 @@
   "tm_groupNumber": "समूह {number}",
   "tm_groupMembers": "समूह सदस्य",
   "tm_createGroupTitle": "नया समूह बनाएँ",
-  "tm_createGroupSubtitle": "एक फोटो लें और नया टोन समूह शुरू करें",
+  "tm_createGroupSubtitle": "फ़ोटो लें या गैलरी से चुनें और नया टोन समूह शुरू करें",
   "tm_enterSpelling": "वर्तनी दर्ज करें",
   "tm_groupsCreated": "{count, plural, one {{count} टोन समूह बनाया गया} other {{count} टोन समूह बनाए गए}}",
   "tm_start": "टोन मिलान शुरू करें",
@@ -55,5 +55,21 @@
   "review_screen_back": "वापस",
   "review_screen_markNext": "समीक्षित चिह्नित करें और अगला",
   "review_screen_markFinish": "समीक्षित चिह्नित करें और समाप्त",
-  "tm_moved_prompt": "स्थानांतरित किया गया। कोई अन्य समूह चुनें या नया बनाएँ।"
+  "tm_moved_prompt": "स्थानांतरित किया गया। कोई अन्य समूह चुनें या नया बनाएँ।",
+  "tm_drawPicture": "चित्र बनाएं",
+  "draw_title": "चित्र बनाएं",
+  "draw_save": "सहेजें",
+  "draw_clear": "साफ़ करें",
+  "draw_undo": "पूर्ववत"
+  ,
+  "share_option_shareApps": "ऐप्स के जरिए साझा करें",
+  "share_option_saveFiles": "फ़ाइलों में सहेजें",
+  "share_option_saveDrive": "ड्राइव पर सहेजें",
+  "share_saved_ok": "सहेजा गया",
+  "share_saved_failed": "सहेजना विफल",
+  "tm_completedOfTotal": "कुल {total} में से {completed} पूर्ण",
+  "@tm_completedOfTotal": {"placeholders": {"completed": {"type": "int"}, "total": {"type": "int"}}}
+  ,
+  "share_android_picker_missing_message": "If no save picker appears, ensure these system apps are enabled: Files (DocumentsUI), Google Drive, Google Play services, and their storage providers. Then try again from Save to Drive.",
+  "share_android_save_failed_message": "Saving failed. Make sure Files (DocumentsUI), Google Drive, and Google Play services are enabled on this device, then try again."
 }

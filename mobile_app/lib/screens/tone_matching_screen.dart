@@ -3,9 +3,12 @@ import 'dart:io';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_selector/file_selector.dart';
+import 'package:path/path.dart' as p;
+import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 import '../services/app_state.dart';
 import '../models/tone_group.dart';
 import 'package:tone_comparison_app/generated/app_localizations.dart';
+// drawing feature removed; camera and gallery only
 // import '../widgets/tone_group_card.dart'; // no longer used with pager UI
 
 /// Main tone matching workflow screen
@@ -20,6 +23,10 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
   final TextEditingController _spellingController = TextEditingController();
   final ImagePicker _imagePicker = ImagePicker();
   bool _spellingEntered = false;
+  bool _reassignTipDismissed = false;
+  // When true and all words are matched, show the groups pager so users can review
+  // and reassign within the main sorting UI (no separate review interface).
+  bool _reviewMode = false;
 
   @override
   void dispose() {
@@ -109,10 +116,29 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
             ],
           ),
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(2),
+          child: Consumer<AppState>(
+            builder: (context, appState, _) {
+              final total = appState.totalCount;
+              final completed = total - appState.remainingUnsortedCount;
+              final progress = total == 0 ? 0.0 : completed / total;
+              return SizedBox(
+                height: 2,
+                child: LinearProgressIndicator(value: progress.clamp(0.0, 1.0)),
+              );
+            },
+          ),
+        ),
       ),
       body: Consumer<AppState>(
         builder: (context, appState, child) {
           if (appState.isComplete) {
+            // If the user opted to review before sharing, surface the pager UI
+            // instead of the completion summary.
+            if (_reviewMode) {
+              return _buildToneGroupsPager(appState);
+            }
             return _buildCompleteView(appState);
           }
 
@@ -127,21 +153,15 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
 
           return Column(
             children: [
-              // Progress indicator
-              LinearProgressIndicator(
-                value:
-                    (appState.currentWordIndex + 1) / appState.records.length,
-              ),
-
               // Word info and audio
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   children: [
                     Text(
-                      AppLocalizations.of(context).tm_wordOfTotal(
-                        appState.currentWordIndex + 1,
-                        appState.records.length,
+                      AppLocalizations.of(context).tm_completedOfTotal(
+                        appState.totalCount - appState.remainingUnsortedCount,
+                        appState.totalCount,
                       ),
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
@@ -172,7 +192,6 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
                         ),
                     ],
                     const SizedBox(height: 16),
-
                     // Play button (graphical icon, no text)
                     IconButton(
                       icon: const Icon(Icons.play_circle_filled),
@@ -296,7 +315,11 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
                 SizedBox(
                   height: imageHeight.clamp(200.0, 420.0),
                   child: group.imagePath != null && group.imagePath!.isNotEmpty
-                      ? Image.file(File(group.imagePath!), fit: BoxFit.cover)
+                      ? Image.file(
+                          File(group.imagePath!),
+                          key: ValueKey(group.imagePath),
+                          fit: BoxFit.cover,
+                        )
                       : Container(
                           color: theme.colorScheme.surfaceContainerHighest,
                           child: const Center(
@@ -336,6 +359,20 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
             style: theme.textTheme.titleMedium,
           ),
           const SizedBox(height: 8),
+          if (!_reassignTipDismissed)
+            Card(
+              elevation: 0,
+              color: theme.colorScheme.surfaceContainerHighest,
+              child: ListTile(
+                leading: const Icon(Icons.swipe),
+                title: Text(AppLocalizations.of(context).tm_swipeHint),
+                trailing: IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => setState(() => _reassignTipDismissed = true),
+                ),
+              ),
+            ),
+          if (!_reassignTipDismissed) const SizedBox(height: 8),
           // Members list with play buttons
           ...group.members.map(
             (word) => Dismissible(
@@ -362,7 +399,7 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
                 final l10n = AppLocalizations.of(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text(l10n.tm_selectGroup),
+                    content: Text(l10n.tm_moved_prompt),
                     duration: const Duration(seconds: 2),
                   ),
                 );
@@ -380,41 +417,19 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
                             .isNotEmpty)
                     ? Text(word.fields[appState.settings!.glossElement!]!)
                     : null,
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.open_in_new),
-                      onPressed: () {
-                        Provider.of<AppState>(
-                          context,
-                          listen: false,
-                        ).moveWordForReassignment(word);
-                        if (!mounted) return;
-                        final l10n = AppLocalizations.of(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(l10n.tm_selectGroup),
-                            duration: const Duration(seconds: 2),
-                          ),
-                        );
-                      },
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.play_arrow),
-                      onPressed: () async {
-                        try {
-                          await appState.playWord(word);
-                        } catch (e) {
-                          if (!mounted) return;
-                          final l10n = AppLocalizations.of(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(l10n.tm_audioError)),
-                          );
-                        }
-                      },
-                    ),
-                  ],
+                trailing: IconButton(
+                  icon: const Icon(Icons.play_arrow),
+                  onPressed: () async {
+                    try {
+                      await appState.playWord(word);
+                    } catch (e) {
+                      if (!mounted) return;
+                      final l10n = AppLocalizations.of(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(l10n.tm_audioError)),
+                      );
+                    }
+                  },
                 ),
               ),
             ),
@@ -489,6 +504,7 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
   Future<void> _createNewToneGroup(AppState appState) async {
     // Desktop (Windows/macOS/Linux): choose an image file via file_selector
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      final previousLen = appState.toneGroups.length;
       final XFile? file = await openFile(
         acceptedTypeGroups: const [
           XTypeGroup(
@@ -499,13 +515,24 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
       );
       if (file != null) {
         appState.createNewToneGroup(file.path);
-        _moveToNextWord(appState);
+        // Jump to the newly created group's page and refresh UI
+        final newIndex = previousLen; // new group appended at end
+        if (mounted) {
+          setState(() => _currentGroupPage = newIndex);
+          await _pageController.animateToPage(
+            newIndex,
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOut,
+          );
+        }
+        // After creating a group, the current word was removed from the queue in AppState;
+        // the next head becomes current automatically.
       }
       return;
     }
 
     // Mobile: let the user choose Camera or Gallery
-    final ImageSource? source = await showModalBottomSheet<ImageSource>(
+    final String? action = await showModalBottomSheet<String>(
       context: context,
       builder: (ctx) => SafeArea(
         child: Wrap(
@@ -513,12 +540,12 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
             ListTile(
               leading: const Icon(Icons.camera_alt),
               title: Text(AppLocalizations.of(ctx).tm_takePhoto),
-              onTap: () => Navigator.of(ctx).pop(ImageSource.camera),
+              onTap: () => Navigator.of(ctx).pop('camera'),
             ),
             ListTile(
               leading: const Icon(Icons.photo_library),
               title: Text(AppLocalizations.of(ctx).tm_chooseFromGallery),
-              onTap: () => Navigator.of(ctx).pop(ImageSource.gallery),
+              onTap: () => Navigator.of(ctx).pop('gallery'),
             ),
             const Divider(height: 1),
             ListTile(
@@ -531,18 +558,32 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
       ),
     );
 
-    if (!mounted || source == null) return;
+    if (!mounted || action == null) return;
 
+    // Camera or gallery
+    final previousLen = appState.toneGroups.length;
+    final source = action == 'camera'
+        ? ImageSource.camera
+        : ImageSource.gallery;
     final XFile? image = await _imagePicker.pickImage(
       source: source,
-      preferredCameraDevice: source == ImageSource.camera
-          ? CameraDevice.rear
-          : CameraDevice.rear,
+      preferredCameraDevice: CameraDevice.rear,
     );
 
     if (image != null) {
       appState.createNewToneGroup(image.path);
-      _moveToNextWord(appState);
+      // Jump to the newly created group's page and refresh UI
+      final newIndex = previousLen; // appended
+      if (mounted) {
+        setState(() => _currentGroupPage = newIndex);
+        await _pageController.animateToPage(
+          newIndex,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      }
+      // After creating a group, the current word was removed from the queue in AppState;
+      // the next head becomes current automatically.
     }
   }
 
@@ -550,7 +591,7 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
     appState.addToToneGroup(group);
     // If the group reached the review threshold, prompt the user to review.
     if (group.requiresReview) {
-      final proceedToReview = await showDialog<bool>(
+      await showDialog<bool>(
         context: context,
         builder: (ctx) {
           final l10n = AppLocalizations.of(ctx);
@@ -575,23 +616,15 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
           );
         },
       );
-
-      if (proceedToReview == true && mounted) {
-        await Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => GroupReviewScreen(groups: [group])),
-        );
-      }
+      // No separate review interface: keep the user in the sorting view.
+      // They can swipe members in the current group's page to reassign.
     }
-    _moveToNextWord(appState);
+    // After adding to a group, AppState removed the current word from the queue;
+    // the next head becomes current automatically.
   }
 
-  void _moveToNextWord(AppState appState) {
-    _spellingController.clear();
-    setState(() {
-      _spellingEntered = false;
-    });
-    appState.nextWord();
-  }
+  // Advance to next word is implicit after assignment: removing the current
+  // from the queue in AppState makes the next head current automatically.
 
   // Removed legacy _exportResults; sharing is the primary flow now.
 
@@ -624,24 +657,139 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
       if (!mounted) return;
 
       if (reviewAll == true) {
-        await Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => GroupReviewScreen(groups: appState.toneGroups),
-          ),
-        );
-        if (!mounted) return;
+        // Cancel share and let the user review in the main sorting UI.
+        // If we're on the completion summary, switch to the groups pager.
+        if (appState.isComplete) {
+          setState(() => _reviewMode = true);
+        }
+        return;
       }
 
-      await appState.shareResults();
-
-      if (!mounted) return;
-      final l10n = AppLocalizations.of(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(l10n.export_creating),
-          duration: const Duration(seconds: 2),
-        ),
+      // Let the user choose to share via apps or save the ZIP into Files/Drive using a native picker.
+      final choice = await showModalBottomSheet<String>(
+        context: context,
+        builder: (ctx) {
+          final l10n = AppLocalizations.of(ctx);
+          return SafeArea(
+            child: Wrap(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.ios_share),
+                  title: Text(l10n.share_option_shareApps),
+                  onTap: () => Navigator.of(ctx).pop('share'),
+                ),
+                if (Platform.isAndroid)
+                  ListTile(
+                    leading: const Icon(Icons.cloud_upload),
+                    title: Text(l10n.share_option_saveDrive),
+                    onTap: () => Navigator.of(ctx).pop('saveDrive'),
+                  ),
+                ListTile(
+                  leading: const Icon(Icons.save_alt),
+                  title: Text(l10n.share_option_saveFiles),
+                  onTap: () => Navigator.of(ctx).pop('save'),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.close),
+                  title: Text(l10n.common_cancel),
+                  onTap: () => Navigator.of(ctx).pop(null),
+                ),
+              ],
+            ),
+          );
+        },
       );
+
+      if (!mounted || choice == null) return;
+
+      if (choice == 'share') {
+        await appState.shareResults();
+      } else if (choice == 'save' || choice == 'saveDrive') {
+        try {
+          final zipPath = await appState.prepareShareZip();
+          if (Platform.isAndroid || Platform.isIOS) {
+            // Use native Create Document / Files save dialog with bytes for reliability.
+            final data = await File(zipPath).readAsBytes();
+            final params = SaveFileDialogParams(
+              data: data,
+              fileName: appState.suggestedExportFileName,
+            );
+            final savedPath = await FlutterFileDialog.saveFile(params: params);
+            if (!mounted) return;
+            final l10n = AppLocalizations.of(context);
+            if (savedPath != null && savedPath.isNotEmpty) {
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(l10n.share_saved_ok)));
+            } else {
+              // User canceled or picker unavailable; show gentle info on Android
+              if (Platform.isAndroid) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(l10n.share_saved_failed),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                await showDialog<void>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: Text(l10n.share_option_saveDrive),
+                    content: Text(l10n.share_android_picker_missing_message),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        child: Text(l10n.common_cancel),
+                      ),
+                    ],
+                  ),
+                );
+              }
+            }
+          } else {
+            // Desktop fallback: choose a folder and copy the file
+            final dirPath = await getDirectoryPath();
+            if (dirPath != null) {
+              final destPath = p.join(
+                dirPath,
+                appState.suggestedExportFileName,
+              );
+              await File(zipPath).copy(destPath);
+              if (!mounted) return;
+              final l10n = AppLocalizations.of(context);
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(l10n.share_saved_ok)));
+            }
+          }
+        } catch (e) {
+          if (!mounted) return;
+          final l10n = AppLocalizations.of(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(l10n.share_saved_failed),
+              backgroundColor: Colors.red,
+            ),
+          );
+          if (Platform.isAndroid) {
+            await showDialog<void>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: Text(AppLocalizations.of(ctx).share_option_saveDrive),
+                content: Text(
+                  AppLocalizations.of(ctx).share_android_save_failed_message,
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: Text(AppLocalizations.of(ctx).common_cancel),
+                  ),
+                ],
+              ),
+            );
+          }
+        }
+      }
     } catch (e) {
       if (!mounted) return;
       final l10n = AppLocalizations.of(context);
@@ -666,6 +814,7 @@ class GroupReviewScreen extends StatefulWidget {
 
 class _GroupReviewScreenState extends State<GroupReviewScreen> {
   int index = 0;
+  bool _tipDismissed = false;
 
   @override
   Widget build(BuildContext context) {
@@ -702,6 +851,22 @@ class _GroupReviewScreenState extends State<GroupReviewScreen> {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
+                  if (!_tipDismissed)
+                    Card(
+                      elevation: 0,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
+                      child: ListTile(
+                        leading: const Icon(Icons.swipe),
+                        title: Text(l10n.tm_swipeHint),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => setState(() => _tipDismissed = true),
+                        ),
+                      ),
+                    ),
+                  if (!_tipDismissed) const SizedBox(height: 8),
                   ...group.members.map(
                     (w) => Dismissible(
                       key: ValueKey('review-${w.reference}'),
@@ -729,22 +894,44 @@ class _GroupReviewScreenState extends State<GroupReviewScreen> {
                         title: Text(
                           '${w.reference} • ${w.getDisplayText(appState.settings!.writtenFormElements)}',
                         ),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.play_arrow),
+                          onPressed: () async {
+                            try {
+                              await appState.playWord(w);
+                            } catch (e) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(l10n.tm_audioError)),
+                              );
+                            }
+                          },
+                        ),
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-            Row(
-              children: [
-                OutlinedButton(
-                  onPressed: () {
-                    if (index > 0) setState(() => index -= 1);
-                  },
-                  child: Text(l10n.review_screen_back),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Row(
+            children: [
+              OutlinedButton(
+                onPressed: () {
+                  if (index > 0) setState(() => index -= 1);
+                },
+                child: Text(l10n.review_screen_back),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton(
                   onPressed: () {
                     appState.markGroupReviewed(group);
                     if (index < widget.groups.length - 1) {
@@ -759,9 +946,9 @@ class _GroupReviewScreenState extends State<GroupReviewScreen> {
                         : l10n.review_screen_markFinish,
                   ),
                 ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );

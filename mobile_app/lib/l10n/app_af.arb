@@ -62,5 +62,22 @@
   "review_screen_markNext": "Merk hersien & Volgende",
   "review_screen_markFinish": "Merk hersien & Klaar"
   ,
-  "tm_moved_prompt": "Verskuif. Kies ’n ander groep of skep ’n nuwe een."
+  "tm_moved_prompt": "Verskuif. Kies ’n ander groep of skep ’n nuwe een.",
+  "tm_drawPicture": "Teken ’n prent",
+  "draw_title": "Teken prent",
+  "draw_save": "Stoor",
+  "draw_clear": "Vee skoon",
+  "draw_undo": "Ontdoen",
+  "share_option_shareApps": "Deel via apps",
+  "share_option_saveFiles": "Stoor na Lêers",
+  "share_option_saveDrive": "Stoor na Drive",
+  "share_saved_ok": "Gestoor",
+  "share_saved_failed": "Stoor het misluk",
+  "tm_completedOfTotal": "Voltooi {completed} van {total}",
+  "@tm_completedOfTotal": {
+    "placeholders": {"completed": {"type": "int"}, "total": {"type": "int"}}
+  }
+  ,
+  "share_android_picker_missing_message": "If no save picker appears, ensure these system apps are enabled: Files (DocumentsUI), Google Drive, Google Play services, and their storage providers. Then try again from Save to Drive.",
+  "share_android_save_failed_message": "Saving failed. Make sure Files (DocumentsUI), Google Drive, and Google Play services are enabled on this device, then try again."
 }

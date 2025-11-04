@@ -28,7 +28,7 @@
   "tm_groupNumber": "Группа {number}",
   "tm_groupMembers": "Участники группы",
   "tm_createGroupTitle": "Создать новую группу",
-  "tm_createGroupSubtitle": "Сделайте фото и начните новую группу тонов",
+  "tm_createGroupSubtitle": "Сделайте фото или выберите из галереи и начните новую группу тонов",
   "tm_enterSpelling": "Введите написание",
   "tm_groupsCreated": "{count, plural, one {Создана {count} группа тонов} few {Создано {count} группы тонов} many {Создано {count} групп тонов} other {Создано {count} групп тонов}}",
   "tm_start": "Начать сопоставление тонов",
@@ -55,5 +55,21 @@
   "review_screen_back": "Назад",
   "review_screen_markNext": "Отметить проверено и Далее",
   "review_screen_markFinish": "Отметить проверено и Завершить",
-  "tm_moved_prompt": "Перемещено. Выберите другую группу или создайте новую."
+  "tm_moved_prompt": "Перемещено. Выберите другую группу или создайте новую.",
+  "tm_drawPicture": "Нарисовать картинку",
+  "draw_title": "Нарисовать картинку",
+  "draw_save": "Сохранить",
+  "draw_clear": "Очистить",
+  "draw_undo": "Отменить"
+  ,
+  "share_option_shareApps": "Поделиться через приложения",
+  "share_option_saveFiles": "Сохранить в Файлы",
+  "share_option_saveDrive": "Сохранить в Диск",
+  "share_saved_ok": "Сохранено",
+  "share_saved_failed": "Не удалось сохранить",
+  "tm_completedOfTotal": "Завершено {completed} из {total}",
+  "@tm_completedOfTotal": {"placeholders": {"completed": {"type": "int"}, "total": {"type": "int"}}}
+  ,
+  "share_android_picker_missing_message": "If no save picker appears, ensure these system apps are enabled: Files (DocumentsUI), Google Drive, Google Play services, and their storage providers. Then try again from Save to Drive.",
+  "share_android_save_failed_message": "Saving failed. Make sure Files (DocumentsUI), Google Drive, and Google Play services are enabled on this device, then try again."
 }
