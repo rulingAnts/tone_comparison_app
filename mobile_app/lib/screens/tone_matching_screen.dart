@@ -311,21 +311,89 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Large image
+                // Large image with edit/remove overlay
                 SizedBox(
                   height: imageHeight.clamp(200.0, 420.0),
-                  child: group.imagePath != null && group.imagePath!.isNotEmpty
-                      ? Image.file(
-                          File(group.imagePath!),
-                          key: ValueKey(group.imagePath),
-                          fit: BoxFit.cover,
-                        )
-                      : Container(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          child: const Center(
-                            child: Icon(Icons.image_not_supported, size: 72),
-                          ),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child:
+                            group.imagePath != null &&
+                                group.imagePath!.isNotEmpty
+                            ? Image.file(
+                                File(group.imagePath!),
+                                key: ValueKey(group.imagePath),
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(
+                                    color: theme
+                                        .colorScheme
+                                        .surfaceContainerHighest,
+                                    child: const Center(
+                                      child: Icon(
+                                        Icons.image_not_supported,
+                                        size: 72,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              )
+                            : Container(
+                                color:
+                                    theme.colorScheme.surfaceContainerHighest,
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.image_not_supported,
+                                    size: 72,
+                                  ),
+                                ),
+                              ),
+                      ),
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: Row(
+                          children: [
+                            // Change image
+                            Material(
+                              color: Colors.black45,
+                              shape: const CircleBorder(),
+                              child: IconButton(
+                                icon: const Icon(
+                                  Icons.edit,
+                                  color: Colors.white,
+                                ),
+                                tooltip: 'Change picture',
+                                onPressed: () =>
+                                    _changeGroupImage(appState, group),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            // Remove image
+                            Material(
+                              color: Colors.black45,
+                              shape: const CircleBorder(),
+                              child: IconButton(
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.white,
+                                ),
+                                tooltip: 'Remove picture',
+                                onPressed:
+                                    group.imagePath == null ||
+                                        group.imagePath!.isEmpty
+                                    ? null
+                                    : () => _confirmRemoveGroupImage(
+                                        appState,
+                                        group,
+                                      ),
+                              ),
+                            ),
+                          ],
                         ),
+                      ),
+                    ],
+                  ),
                 ),
                 Padding(
                   padding: const EdgeInsets.all(16.0),
@@ -799,6 +867,90 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
           backgroundColor: Colors.red,
         ),
       );
+    }
+  }
+
+  Future<void> _changeGroupImage(AppState appState, ToneGroup group) async {
+    // Desktop platforms: file picker
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      final XFile? file = await openFile(
+        acceptedTypeGroups: const [
+          XTypeGroup(
+            label: 'Images',
+            extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp'],
+          ),
+        ],
+      );
+      if (file != null) {
+        appState.updateToneGroupImage(group, file.path);
+      }
+      return;
+    }
+
+    // Mobile: choose camera or gallery
+    final String? action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: Text(AppLocalizations.of(ctx).tm_takePhoto),
+              onTap: () => Navigator.of(ctx).pop('camera'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: Text(AppLocalizations.of(ctx).tm_chooseFromGallery),
+              onTap: () => Navigator.of(ctx).pop('gallery'),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.close),
+              title: Text(AppLocalizations.of(ctx).common_cancel),
+              onTap: () => Navigator.of(ctx).pop(null),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (!mounted || action == null) return;
+
+    final source = action == 'camera'
+        ? ImageSource.camera
+        : ImageSource.gallery;
+    final XFile? image = await _imagePicker.pickImage(
+      source: source,
+      preferredCameraDevice: CameraDevice.rear,
+    );
+    if (image != null) {
+      appState.updateToneGroupImage(group, image.path);
+    }
+  }
+
+  Future<void> _confirmRemoveGroupImage(
+    AppState appState,
+    ToneGroup group,
+  ) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove picture?'),
+        content: const Text('This will clear the picture for this group.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(AppLocalizations.of(ctx).common_cancel),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(AppLocalizations.of(ctx).draw_clear),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      appState.removeToneGroupImage(group);
     }
   }
 }

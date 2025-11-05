@@ -675,8 +675,28 @@ class AppState extends ChangeNotifier {
       };
 
       final filePath = await _stateFilePath();
-      final file = File(filePath);
-      await file.writeAsString(jsonEncode(data), flush: true);
+      final dir = Directory(p.dirname(filePath));
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+
+      // Write atomically: write to a temp file, then rename over the original.
+      // Also keep a backup of the previous good state as state.json.bak.
+      final tmpPath = '$filePath.tmp';
+      final bakPath = '$filePath.bak';
+
+      final tmpFile = File(tmpPath);
+      await tmpFile.writeAsString(jsonEncode(data), flush: true);
+
+      final finalFile = File(filePath);
+      if (await finalFile.exists()) {
+        try {
+          // Copy current to .bak before replacing
+          await finalFile.copy(bakPath);
+        } catch (_) {}
+      }
+      // Rename temp into place (atomic on most filesystems)
+      await tmpFile.rename(filePath);
     } catch (_) {
       // ignore persistence errors
     }
@@ -688,8 +708,19 @@ class AppState extends ChangeNotifier {
       final file = File(filePath);
       if (!await file.exists()) return false;
 
-      final json =
-          jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      Map<String, dynamic> json;
+      try {
+        json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      } catch (_) {
+        // Try backup if primary is corrupted
+        final bakFile = File('$filePath.bak');
+        if (await bakFile.exists()) {
+          json =
+              jsonDecode(await bakFile.readAsString()) as Map<String, dynamic>;
+        } else {
+          rethrow;
+        }
+      }
 
       // Map references to records
       final byRef = <String, WordRecord>{
@@ -821,6 +852,13 @@ class AppState extends ChangeNotifier {
     } catch (_) {
       // ignore copy errors
     }
+  }
+
+  /// Remove the exemplar image for a tone group (keeps any on-disk file).
+  void removeToneGroupImage(ToneGroup group) {
+    group.imagePath = null;
+    _saveState();
+    notifyListeners();
   }
 
   /// Reset sorting decisions for the current bundle without reloading it.
