@@ -165,4 +165,11 @@
     "description": "Progress indicator showing how many words have been completed out of total.",
     "placeholders": {"completed": {"type": "int"}, "total": {"type": "int"}}
   }
+  ,
+  "tm_changePicture": "Change picture",
+  "@tm_changePicture": {"description": "Action to change/replace the image for a tone group"},
+  "tm_addPicture": "Add picture",
+  "@tm_addPicture": {"description": "Action to add an image to a tone group when none exists"},
+  "tm_removePicture": "Remove picture",
+  "@tm_removePicture": {"description": "Action to remove the current image from a tone group"}
 }
