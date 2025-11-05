@@ -314,36 +314,6 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Remove the image associated with a tone group and delete the file if it
-  /// lives inside the bundle's images directory.
-  Future<void> removeToneGroupImage(ToneGroup group) async {
-    if (_bundleData == null) return;
-    try {
-      final previousPath = group.imagePath;
-      group.imagePath = null;
-      await _saveState();
-      notifyListeners();
-
-      if (previousPath != null && previousPath.isNotEmpty) {
-        final imagesDirPath = p.join(
-          _bundleData!.bundlePath,
-          BundleService.imagesFolderName,
-        );
-        // Only delete if the file is inside our managed images folder
-        if (p.isWithin(imagesDirPath, previousPath)) {
-          final f = File(previousPath);
-          if (await f.exists()) {
-            try {
-              await f.delete();
-            } catch (_) {}
-          }
-        }
-      }
-    } catch (_) {
-      // ignore errors
-    }
-  }
-
   /// Mark a group's review as complete, resetting the counter.
   void markGroupReviewed(ToneGroup group) {
     group.markReviewed();
