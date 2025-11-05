@@ -8,10 +8,7 @@ class ToneGroup {
   /// The group number (1-based)
   final int groupNumber;
 
-  /// The exemplar word for this group
-  final WordRecord exemplar;
-
-  /// List of all words in this group (including exemplar)
+  /// List of all words in this group (including exemplar as the first item)
   final List<WordRecord> members;
 
   /// Path to the exemplar image file
@@ -26,16 +23,19 @@ class ToneGroup {
   ToneGroup({
     required this.id,
     required this.groupNumber,
-    required this.exemplar,
+    required WordRecord exemplar,
     List<WordRecord>? members,
     this.imagePath,
     this.additionsSinceReview = 0,
     this.requiresReview = false,
-  }) : members = members ?? [exemplar] {
+  }) : members = _initMembers(exemplar, members) {
     // Ensure exemplar has this group's linkage
     exemplar.toneGroup = groupNumber;
     exemplar.toneGroupId = id;
   }
+
+  /// Derived exemplar: the first member is considered the exemplar.
+  WordRecord get exemplar => members.first;
 
   /// Add a word to this tone group
   void addMember(WordRecord word) {
@@ -81,21 +81,46 @@ class ToneGroup {
   }
 
   factory ToneGroup.fromJson(Map<String, dynamic> json) {
-    final exemplar = WordRecord.fromJson(
-      json['exemplar'] as Map<String, dynamic>,
-    );
-    final members = (json['members'] as List<dynamic>)
-        .map((m) => WordRecord.fromJson(m as Map<String, dynamic>))
-        .toList();
+    // Prefer members list; fall back to exemplar if needed
+    final members =
+        (json['members'] as List<dynamic>?)
+            ?.map((m) => WordRecord.fromJson(m as Map<String, dynamic>))
+            .toList() ??
+        [];
+
+    WordRecord? ex;
+    if (json['exemplar'] != null) {
+      ex = WordRecord.fromJson(json['exemplar'] as Map<String, dynamic>);
+    }
+    final exemplar = (members.isNotEmpty)
+        ? members.first
+        : (ex ?? WordRecord(reference: 'UNKNOWN', soundFile: '', fields: {}));
 
     return ToneGroup(
         id: json['id'] as String,
         groupNumber: json['groupNumber'] as int,
         exemplar: exemplar,
-        members: members,
+        members: members.isNotEmpty ? members : null,
         imagePath: json['imagePath'] as String?,
       )
       ..additionsSinceReview = (json['additionsSinceReview'] as int?) ?? 0
       ..requiresReview = (json['requiresReview'] as bool?) ?? false;
+  }
+
+  static List<WordRecord> _initMembers(
+    WordRecord exemplar,
+    List<WordRecord>? members,
+  ) {
+    if (members == null || members.isEmpty) {
+      return [
+        // Ensure exemplar linkage
+        exemplar,
+      ];
+    }
+    // Ensure exemplar is the first item and not duplicated
+    final list = List<WordRecord>.from(members);
+    list.remove(exemplar);
+    list.insert(0, exemplar);
+    return list;
   }
 }
