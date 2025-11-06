@@ -139,20 +139,26 @@ npm start
 
 ### Basic Workflow
 
-**Step 1: Prepare Data (Researcher)**
+**Workflow A: Desktop Tone Assignment (Researcher or Speaker)**
+1. Export data from Dekereke/phonology database as XML
+2. Gather corresponding WAV audio files
+3. Use Bundler App to create a .tncmp bundle
+4. Use Desktop Matching App to assign words to tone groups
+5. Export results when complete
+6. Review tone group assignments
+
+**Workflow B: Mobile Tone Assignment (Native Speaker)**
 1. Export data from Dekereke/phonology database as XML
 2. Gather corresponding WAV audio files
 3. Use Bundler App to create a bundle
 4. Transfer bundle to mobile device
-
-**Step 2: Analyze Tone (Native Speaker)**
-1. Load bundle in Mobile App
-2. Listen to first word, draw a picture of the tone pattern
-3. For each subsequent word:
+5. Load bundle in Mobile App
+6. Listen to first word, draw a picture of the tone pattern
+7. For each subsequent word:
    - Listen to the word
    - Compare with existing tone groups
    - Add to matching group or create new group
-4. Export results when complete
+8. Export results when complete
 
 **Step 3: Review Results (Researcher)**
 1. Import exported results
