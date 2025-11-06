@@ -286,7 +286,7 @@ ipcMain.handle('create-group', async (event, groupData) => {
   if (!sessionData) return null;
   
   const newGroup = {
-    id: `group_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    id: `group_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
     groupNumber: sessionData.groups.length + 1,
     image: groupData.image || null,
     additionsSinceReview: 0,
