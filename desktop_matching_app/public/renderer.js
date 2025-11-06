@@ -5,6 +5,7 @@ let bundleSettings = null;
 let session = null;
 let currentWord = null;
 let currentGroupId = null;
+let recordCache = new Map(); // Cache for fetched records
 
 const REVIEW_THRESHOLD = 5;
 
@@ -313,8 +314,19 @@ async function removeWordFromGroup(ref, groupId) {
   await loadCurrentWord();
 }
 
-async function playMemberAudio(ref) {
+async function getCachedRecord(ref) {
+  if (recordCache.has(ref)) {
+    return recordCache.get(ref);
+  }
   const record = await ipcRenderer.invoke('get-record-by-ref', ref);
+  if (record) {
+    recordCache.set(ref, record);
+  }
+  return record;
+}
+
+async function playMemberAudio(ref) {
+  const record = await getCachedRecord(ref);
   if (!record || !record.SoundFile) return;
   
   const variantIndex = session.selectedAudioVariantIndex || 0;
@@ -491,7 +503,14 @@ async function renderGroups() {
       const membersList = document.createElement('div');
       membersList.className = 'members-list';
       
-      for (const ref of group.members) {
+      // Batch fetch all records for this group
+      const memberRecords = await Promise.all(
+        group.members.map(ref => getCachedRecord(ref))
+      );
+      
+      for (let i = 0; i < group.members.length; i++) {
+        const ref = group.members[i];
+        const record = memberRecords[i];
         const memberItem = document.createElement('div');
         memberItem.className = 'member-item';
         
@@ -499,7 +518,6 @@ async function renderGroups() {
         memberText.className = 'member-text';
         
         // Get display lines
-        const record = await ipcRenderer.invoke('get-record-by-ref', ref);
         const lines = [];
         
         // Priority: gloss > user spelling > written form

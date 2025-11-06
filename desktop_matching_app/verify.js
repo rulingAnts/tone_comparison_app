@@ -75,8 +75,13 @@ if (fs.existsSync(testBundle)) {
     console.log('  ✗ Bundle missing required files\n');
   }
 } else {
-  console.log('  ⚠ Test bundle not found at', testBundle);
-  console.log('  Run: cd /tmp/test_bundle && zip -r /tmp/test_bundle.tncmp data.xml settings.json audio/\n');
+  console.log('  ⚠ Test bundle not found');
+  console.log('  Expected location:', testBundle);
+  console.log('  To create a test bundle, run:');
+  console.log('    cd /tmp && mkdir -p test_bundle/audio');
+  console.log('    # Create test XML and settings.json in /tmp/test_bundle/');
+  console.log('    # Add audio files to /tmp/test_bundle/audio/');
+  console.log('    cd test_bundle && zip -r ../test_bundle.tncmp .\n');
 }
 
 // Test 4: Session structure
