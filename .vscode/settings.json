@@ -6,5 +6,18 @@
     "**/node_modules/**",
     "**/.template-build/**",
     "**/mobile_app/**"
-  ]
+  ],
+  // Pin local schema mappings for package.json files to VS Code's built-in schema
+  // to avoid transient outages from json.schemastore.org affecting validation.
+  "json.schemas": [
+    {
+      "fileMatch": [
+        "/Users/Seth/GIT/tone_comparison_app/bundler_app/package.json",
+        "/Users/Seth/GIT/tone_comparison_app/comparison_app/package.json"
+      ],
+      "url": "vscode://schemas/package"
+    }
+  ],
+  // Temporarily avoid downloading remote JSON schemas (prevents noisy errors when SchemaStore is unavailable)
+  "json.schemaDownload.enable": false
 }
