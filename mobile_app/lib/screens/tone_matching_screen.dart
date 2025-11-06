@@ -55,7 +55,7 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
                     context,
                     listen: false,
                   ).resetSorting();
-                  if (!mounted) return;
+                  if (!context.mounted) return;
                   setState(() {
                     _spellingController.clear();
                     _spellingEntered = false;
@@ -228,7 +228,7 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
                               try {
                                 await appState.playWord(currentWord);
                               } catch (e) {
-                                if (!mounted) return;
+                                if (!context.mounted) return;
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(content: Text(l10n.tm_audioError)),
                                 );

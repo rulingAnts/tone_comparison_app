@@ -1,9 +1,6 @@
-import 'package:tone_comparison_app/generated/app_localizations.dart';
-
-// Temporary fallbacks for newly added localization keys so the app compiles
-// before codegen regenerates app_localizations.dart. Once l10n is regenerated,
-// the real getters will shadow these extension members automatically.
-extension AppLocalizationsFallbacks on AppLocalizations {
-  String get tm_addWord_disabled_hint =>
-      'Enter the spelling and tap the check to enable Add word.';
-}
+// ignore_for_file: non_constant_identifier_names
+// TEMPORARY: This file provided stopgap getters before gen-l10n ran.
+// Safe to delete once all locales are generated and available at runtime.
+// Deprecated fallback localizations (intentionally left empty).
+// This file remains to avoid tooling limitations with deletions. All
+// localizations are provided by generated code in lib/generated/.
