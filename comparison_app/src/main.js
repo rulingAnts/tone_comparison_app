@@ -36,6 +36,7 @@ function saveSettings() {
     const p = getSettingsPath();
     fs.mkdirSync(path.dirname(p), { recursive: true });
     fs.writeFileSync(p, JSON.stringify(appSettings || {}, null, 2), 'utf8');
+    console.log('[comparison] Settings saved to', p, appSettings);
   } catch (e) {
     // Non-fatal; settings are optional
     console.warn('Failed to save settings:', e.message);
@@ -289,9 +290,12 @@ function analyzeResults(results) {
   const agreedWords = wordAnalysis.filter(w => w.agreement === 'full').length;
   const disagreedWords = wordAnalysis.filter(w => w.disagreement).length;
   
-  // Optional: sort disagreements by numeric reference for stable UI ordering
+  // Sort lists by numeric reference for stable UI ordering
   const disagreementsSorted = sortByNumericRef(
     wordAnalysis.filter(w => w.disagreement).map(w => ({ Reference: w.word, ...w }))
+  ).map(({ Reference, ...rest }) => ({ word: Reference, ...rest }));
+  const wordAnalysisAllSorted = sortByNumericRef(
+    wordAnalysis.map(w => ({ Reference: w.word, ...w }))
   ).map(({ Reference, ...rest }) => ({ word: Reference, ...rest }));
 
   return {
@@ -299,7 +303,10 @@ function analyzeResults(results) {
     agreedWords,
     disagreedWords,
     agreementPercentage: totalWords > 0 ? (agreedWords / totalWords * 100).toFixed(1) : 0,
-    wordAnalysis: disagreementsSorted, // Only return disagreements, sorted numerically
+    // Back-compat: wordAnalysis keeps disagreements list
+    wordAnalysis: disagreementsSorted,
+    wordAnalysisAll: wordAnalysisAllSorted,
+    disagreements: disagreementsSorted,
     mergedGroups,
     speakers: speakerAssignments.map(sa => ({
       speaker: sa.speaker,
