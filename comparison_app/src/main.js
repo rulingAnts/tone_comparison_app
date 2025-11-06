@@ -10,6 +10,37 @@ const {
 const csv = require('fast-csv');
 
 let mainWindow;
+let appSettings = null;
+
+function getSettingsPath() {
+  try {
+    return path.join(app.getPath('userData'), 'comparison-settings.json');
+  } catch {
+    // Fallback to working directory if userData is not available (should be rare)
+    return path.join(process.cwd(), 'comparison-settings.json');
+  }
+}
+
+function loadSettings() {
+  const p = getSettingsPath();
+  try {
+    const raw = fs.readFileSync(p, 'utf8');
+    appSettings = JSON.parse(raw);
+  } catch {
+    appSettings = { audioFolder: null, audioSuffix: '' };
+  }
+}
+
+function saveSettings() {
+  try {
+    const p = getSettingsPath();
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, JSON.stringify(appSettings || {}, null, 2), 'utf8');
+  } catch (e) {
+    // Non-fatal; settings are optional
+    console.warn('Failed to save settings:', e.message);
+  }
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -24,7 +55,10 @@ function createWindow() {
   mainWindow.loadFile('public/index.html');
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  loadSettings();
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -52,6 +86,28 @@ ipcMain.handle('select-result-files', async () => {
   return [];
 });
 
+ipcMain.handle('get-settings', async () => {
+  if (!appSettings) loadSettings();
+  return appSettings;
+});
+
+ipcMain.handle('select-audio-folder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory'],
+  });
+  if (!result.canceled && result.filePaths.length > 0) {
+    return result.filePaths[0];
+  }
+  return null;
+});
+
+ipcMain.handle('set-settings', async (event, patch) => {
+  if (!appSettings) loadSettings();
+  appSettings = { ...(appSettings || {}), ...(patch || {}) };
+  saveSettings();
+  return appSettings;
+});
+
 ipcMain.handle('load-results', async (event, filePaths) => {
   try {
     const results = [];
@@ -71,6 +127,24 @@ ipcMain.handle('load-results', async (event, filePaths) => {
       
       const csvData = csvEntry.getData().toString('utf8');
       const toneGroups = await parseCsv(csvData);
+
+      // Attach exemplar image data (if available in ZIP images/ folder)
+      const imageEntries = zipEntries.filter(e => /(^|\/)images\//i.test(e.entryName));
+      const imageByName = new Map(
+        imageEntries.map(e => [path.basename(e.entryName), e])
+      );
+      toneGroups.forEach(row => {
+        const imageName = row['Image File'] || row['Image'] || row['ImageFile'] || row['Image_Name'];
+        if (imageName && imageByName.has(path.basename(imageName))) {
+          const imgEntry = imageByName.get(path.basename(imageName));
+          const buf = imgEntry.getData();
+          const ext = path.extname(imgEntry.entryName).toLowerCase();
+          const mime = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+          row.imageData = `data:${mime};base64,${buf.toString('base64')}`;
+        } else {
+          row.imageData = null;
+        }
+      });
       
       // Find and parse XML (prefer updated subset)
       const xmlEntry =
@@ -105,11 +179,19 @@ ipcMain.handle('load-results', async (event, filePaths) => {
       const dataForms = Array.isArray(phonData.data_form) 
         ? phonData.data_form 
         : [phonData.data_form];
+      // Build quick lookup by normalized Reference for renderer convenience
+      const recordIndex = new Map();
+      dataForms.forEach(df => {
+        if (df && df.Reference) {
+          recordIndex.set(normalizeRefString(df.Reference), df);
+        }
+      });
       
       results.push({
         speaker: speakerName,
         toneGroups,
         records: dataForms,
+        recordIndexKeys: Array.from(recordIndex.keys()),
         filePath,
       });
     }

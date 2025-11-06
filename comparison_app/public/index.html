@@ -167,6 +167,8 @@
     </p>
 
     <button onclick="loadResults()">Load Result Files</button>
+  <button onclick="openAudioSettings()" style="margin-left: 10px; background:#6c757d;">Audio Settings</button>
+  <span id="audioSettingsSummary" style="margin-left: 12px; color:#888; font-size: 12px;"></span>
 
     <div id="fileList"></div>
 
@@ -179,6 +181,22 @@
       <div id="disagreementsSection"></div>
 
       <div id="mergedGroupsSection"></div>
+
+      <div id="reviewPanel" style="display:none; margin-top:20px; border-top:1px solid #eee; padding-top:20px;">
+        <h2>Review Word</h2>
+        <div id="reviewHeader" style="margin-bottom:10px; color:#555;"></div>
+        <div style="display:flex; gap:20px; flex-wrap: wrap;">
+          <div style="flex: 1 1 300px; min-width:280px;">
+            <h3 style="font-size:16px; margin-bottom:8px;">Audio</h3>
+            <audio id="audioPlayer" controls style="width:100%;"></audio>
+            <div id="audioNote" style="margin-top:6px; color:#888; font-size:12px;"></div>
+          </div>
+          <div style="flex: 2 1 500px; min-width:320px;">
+            <h3 style="font-size:16px; margin-bottom:8px;">Pick Consensus Group</h3>
+            <div id="groupPicker" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(160px,1fr)); gap:12px;"></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="emptyState" class="empty-state">
