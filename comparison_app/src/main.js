@@ -11,6 +11,7 @@ const csv = require('fast-csv');
 
 let mainWindow;
 let appSettings = null;
+let sessionData = null; // { customGroups: Array<{id,label,imagePath?,imageData?}>, consensusAssignments: { [ref]: string } }
 
 function getSettingsPath() {
   try {
@@ -18,6 +19,14 @@ function getSettingsPath() {
   } catch {
     // Fallback to working directory if userData is not available (should be rare)
     return path.join(process.cwd(), 'comparison-settings.json');
+  }
+}
+
+function getSessionPath() {
+  try {
+    return path.join(app.getPath('userData'), 'comparison-session.json');
+  } catch {
+    return path.join(process.cwd(), 'comparison-session.json');
   }
 }
 
@@ -43,6 +52,27 @@ function saveSettings() {
   }
 }
 
+function loadSession() {
+  const p = getSessionPath();
+  try {
+    const raw = fs.readFileSync(p, 'utf8');
+    sessionData = JSON.parse(raw);
+  } catch {
+    sessionData = { customGroups: [], consensusAssignments: {} };
+  }
+}
+
+function saveSession() {
+  try {
+    const p = getSessionPath();
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, JSON.stringify(sessionData || {}, null, 2), 'utf8');
+    console.log('[comparison] Session saved to', p);
+  } catch (e) {
+    console.warn('Failed to save session:', e.message);
+  }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -58,6 +88,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   loadSettings();
+  loadSession();
   createWindow();
 });
 
@@ -107,6 +138,29 @@ ipcMain.handle('set-settings', async (event, patch) => {
   appSettings = { ...(appSettings || {}), ...(patch || {}) };
   saveSettings();
   return appSettings;
+});
+
+ipcMain.handle('get-session', async () => {
+  if (!sessionData) loadSession();
+  return sessionData;
+});
+
+ipcMain.handle('set-session', async (event, patch) => {
+  if (!sessionData) loadSession();
+  sessionData = { ...(sessionData || {}), ...(patch || {}) };
+  saveSession();
+  return sessionData;
+});
+
+ipcMain.handle('select-image-file', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: [{ name: 'Images', extensions: ['jpg','jpeg','png','webp'] }],
+  });
+  if (!result.canceled && result.filePaths.length > 0) {
+    return result.filePaths[0];
+  }
+  return null;
 });
 
 ipcMain.handle('load-results', async (event, filePaths) => {

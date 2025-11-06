@@ -242,7 +242,8 @@
       <div id="reviewFilter" style="margin: 10px 0 20px;">
         <button id="btnShowDisagreements" onclick="setReviewView('disagreements')">Show Disagreements</button>
         <button id="btnShowAll" onclick="setReviewView('all')" style="margin-left: 8px; background:#17a2b8;">Show All Words</button>
-        <button id="btnShowGroups" onclick="setReviewView('groups')" style="margin-left: 8px; background:#20c997;">Group Review</button>
+  <button id="btnShowGroups" onclick="setReviewView('groups')" style="margin-left: 8px; background:#20c997;">Group Review</button>
+  <button id="btnAddGroup" onclick="startAddGroup()" style="margin-left: 8px; background:#28a745;">Add Group</button>
         <span style="margin-left:10px; color:#777; font-size:12px;">Disagreements are highlighted in all views.</span>
       </div>
 
@@ -256,21 +257,7 @@
 
   <div id="groupReviewSection" style="margin-top: 10px;"></div>
 
-      <div id="reviewPanel" style="display:none; margin-top:20px; border-top:1px solid #eee; padding-top:20px;">
-        <h2>Review Word</h2>
-        <div id="reviewHeader" style="margin-bottom:10px; color:#555;"></div>
-        <div style="display:flex; gap:20px; flex-wrap: wrap;">
-          <div style="flex: 1 1 300px; min-width:280px;">
-            <h3 style="font-size:16px; margin-bottom:8px;">Audio</h3>
-            <audio id="audioPlayer" controls style="width:100%;"></audio>
-            <div id="audioNote" style="margin-top:6px; color:#888; font-size:12px;"></div>
-          </div>
-          <div style="flex: 2 1 500px; min-width:320px;">
-            <h3 style="font-size:16px; margin-bottom:8px;">Pick Consensus Group</h3>
-            <div id="groupPicker" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(160px,1fr)); gap:12px;"></div>
-          </div>
-        </div>
-      </div>
+      
     </div>
 
     <div id="emptyState" class="empty-state">
@@ -291,6 +278,19 @@
         <div class="modal-actions">
           <button id="suffixCancelBtn" style="background:#6c757d;">Cancel</button>
           <button id="suffixSaveBtn">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Label input modal -->
+    <div id="labelModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="labelTitle">
+      <div class="modal-content">
+        <h3 id="labelTitle" style="margin-bottom:10px;">New Group Label</h3>
+        <p style="color:#555; margin-bottom:8px;">Enter a label for this group (e.g., exemplar word or short name).</p>
+        <input id="labelInput" class="text-input" placeholder="e.g., parrot" />
+        <div class="modal-actions">
+          <button id="labelCancelBtn" style="background:#6c757d;">Cancel</button>
+          <button id="labelSaveBtn">Save</button>
         </div>
       </div>
     </div>
