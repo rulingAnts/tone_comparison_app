@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Tone Matching Desktop</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: #f5f5f5;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      background: white;
+      padding: 15px 30px;
+      border-bottom: 2px solid #007bff;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .header h1 {
+      color: #333;
+      font-size: 24px;
+      margin-bottom: 5px;
+    }
+
+    .progress-indicator {
+      color: #666;
+      font-size: 14px;
+    }
+
+    .container {
+      flex: 1;
+      display: flex;
+      padding: 20px;
+      gap: 20px;
+      overflow: hidden;
+    }
+
+    .main-panel {
+      flex: 1;
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    .groups-panel {
+      width: 400px;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .welcome-screen {
+      text-align: center;
+      padding: 50px;
+    }
+
+    .welcome-screen h2 {
+      color: #555;
+      margin-bottom: 20px;
+    }
+
+    button {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    button:hover {
+      background: #0056b3;
+    }
+
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+
+    button.secondary {
+      background: #6c757d;
+    }
+
+    button.secondary:hover {
+      background: #545b62;
+    }
+
+    button.danger {
+      background: #dc3545;
+    }
+
+    button.danger:hover {
+      background: #c82333;
+    }
+
+    .word-panel {
+      margin-bottom: 30px;
+    }
+
+    .word-display {
+      background: #f9f9f9;
+      padding: 20px;
+      border-radius: 6px;
+      margin-bottom: 15px;
+    }
+
+    .word-line {
+      font-size: 24px;
+      color: #333;
+      margin-bottom: 10px;
+    }
+
+    .gloss-line {
+      font-size: 18px;
+      color: #666;
+      font-style: italic;
+    }
+
+    .audio-controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .audio-controls select {
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    .spelling-section {
+      margin-bottom: 20px;
+    }
+
+    .spelling-input-group {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .spelling-input-group input {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    .spelling-display {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      background: #e9ecef;
+      border-radius: 4px;
+    }
+
+    .spelling-text {
+      flex: 1;
+      font-size: 16px;
+      color: #333;
+    }
+
+    .edit-icon {
+      cursor: pointer;
+      font-size: 18px;
+      color: #007bff;
+    }
+
+    .helper-hint {
+      font-size: 12px;
+      color: #dc3545;
+      margin-top: 5px;
+    }
+
+    .add-word-section {
+      margin-bottom: 30px;
+    }
+
+    .groups-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+
+    .groups-header h2 {
+      font-size: 18px;
+      color: #333;
+    }
+
+    .groups-list {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .group-card {
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 15px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .group-card.active {
+      border-color: #007bff;
+      background: #f0f8ff;
+    }
+
+    .group-card:hover {
+      border-color: #007bff;
+    }
+
+    .group-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .group-number {
+      font-size: 18px;
+      font-weight: bold;
+      color: #333;
+    }
+
+    .group-image-container {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    .group-image {
+      max-width: 100%;
+      max-height: 150px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .image-placeholder {
+      height: 100px;
+      background: #e9ecef;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #999;
+      cursor: pointer;
+    }
+
+    .members-list {
+      margin-top: 10px;
+    }
+
+    .member-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px;
+      background: #f9f9f9;
+      border-radius: 4px;
+      margin-bottom: 5px;
+    }
+
+    .member-text {
+      flex: 1;
+    }
+
+    .member-title {
+      font-size: 14px;
+      color: #333;
+      font-weight: 500;
+    }
+
+    .member-subtitle {
+      font-size: 12px;
+      color: #666;
+    }
+
+    .member-actions {
+      display: flex;
+      gap: 5px;
+    }
+
+    .icon-button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 4px 8px;
+      color: #007bff;
+    }
+
+    .icon-button:hover {
+      color: #0056b3;
+    }
+
+    .icon-button.danger {
+      color: #dc3545;
+    }
+
+    .icon-button.danger:hover {
+      color: #c82333;
+    }
+
+    .export-section {
+      padding: 20px;
+      background: #f9f9f9;
+      border-top: 1px solid #ddd;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .flex-gap {
+      display: flex;
+      gap: 10px;
+    }
+
+    .no-bundle {
+      text-align: center;
+      padding: 20px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Tone Matching Desktop</h1>
+    <div class="progress-indicator" id="progressIndicator">No bundle loaded</div>
+  </div>
+
+  <div class="container">
+    <!-- Main Panel -->
+    <div class="main-panel">
+      <div id="welcomeScreen" class="welcome-screen">
+        <h2>Welcome to Tone Matching Desktop</h2>
+        <p style="margin-bottom: 20px;">Load a .tncmp bundle to begin tone group assignment</p>
+        <button onclick="loadBundle()">Load Bundle</button>
+      </div>
+
+      <div id="workArea" class="hidden">
+        <!-- Current Word Panel -->
+        <div class="word-panel">
+          <h2 style="margin-bottom: 15px;">Current Word</h2>
+          
+          <div class="word-display" id="wordDisplay">
+            <div class="word-line" id="writtenFormLine"></div>
+            <div class="gloss-line" id="glossLine"></div>
+          </div>
+
+          <!-- Audio Controls -->
+          <div class="audio-controls">
+            <select id="audioVariantSelect"></select>
+            <button onclick="playAudio()">▶ Play</button>
+          </div>
+
+          <!-- Spelling Section -->
+          <div id="spellingSection" class="spelling-section hidden">
+            <div id="spellingInput" class="spelling-input-group">
+              <input type="text" id="spellingTextInput" placeholder="Enter spelling..." />
+              <button onclick="confirmSpelling()">✓ Confirm</button>
+            </div>
+            <div id="spellingDisplay" class="spelling-display hidden">
+              <div class="spelling-text" id="spellingText"></div>
+              <span class="edit-icon" onclick="editSpelling()">✏️</span>
+            </div>
+          </div>
+
+          <!-- Add Word Section -->
+          <div class="add-word-section">
+            <button id="addWordBtn" onclick="addWordToCurrentGroup()" disabled>Add Word to Current Group</button>
+            <div id="addWordHint" class="helper-hint hidden">Please confirm spelling before adding word to group</div>
+          </div>
+        </div>
+
+        <!-- Export Section -->
+        <div class="export-section">
+          <button onclick="exportBundle()">Export Results</button>
+          <button class="secondary" onclick="loadBundle()" style="margin-left: 10px;">Load Different Bundle</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Groups Panel -->
+    <div class="groups-panel">
+      <div class="groups-header">
+        <h2>Tone Groups</h2>
+        <button onclick="createNewGroup()">+ New Group</button>
+      </div>
+      
+      <div class="groups-list" id="groupsList">
+        <div class="no-bundle">No groups yet</div>
+      </div>
+    </div>
+  </div>
+
+  <audio id="audioPlayer"></audio>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
