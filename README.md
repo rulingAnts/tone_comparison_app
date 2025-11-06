@@ -14,7 +14,7 @@ Perfect for field linguists working on tone languages, orthography development, 
 
 ## Project Structure
 
-This repository contains three main components:
+This repository contains four main components:
 
 ### 1. Mobile App (`mobile_app/`)
 **Flutter application for Android and Windows Desktop**
@@ -50,7 +50,27 @@ Researchers use this app to:
 - Customizable field mappings
 - Missing file reporting
 
-### 3. Comparison App (`comparison_app/`)
+### 3. Desktop Matching App (`desktop_matching_app/`)
+**Electron desktop application for tone group assignment**
+
+Users (native speakers or researchers) use this app to:
+- Import .tncmp bundles created by the Bundler App
+- Listen to words and assign them to tone groups
+- Create tone groups with exemplar images
+- Enter user spelling when required
+- Review and manage tone group memberships
+- Export results with tone group assignments
+
+**Key Features:**
+- Bundle import with session persistence
+- Audio playback with multiple variant support
+- Spelling gate for user-entered orthography
+- Tone group pager with visual exemplars
+- Member list with priority display (gloss > spelling > written form)
+- Review prompting for group additions
+- Export to ZIP with updated XML and metadata
+
+### 4. Comparison App (`comparison_app/`)
 **Electron desktop application for researchers**
 
 Researchers use this app to:
@@ -103,7 +123,14 @@ npm install
 npm start
 ```
 
-**4. Set up Comparison App:**
+**4. Set up Desktop Matching App:**
+```bash
+cd desktop_matching_app
+npm install
+npm start
+```
+
+**5. Set up Comparison App:**
 ```bash
 cd comparison_app
 npm install
