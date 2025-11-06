@@ -80,4 +80,6 @@
   ,
   "share_android_picker_missing_message": "Se non compare la finestra di salvataggio, verifica che queste app di sistema siano abilitate: File (DocumentsUI), Google Drive, Google Play Services e i relativi provider di archiviazione. Poi riprova con Salva su Drive.",
   "share_android_save_failed_message": "Salvataggio non riuscito. Assicurati che File (DocumentsUI), Google Drive e Google Play Services siano abilitati su questo dispositivo, quindi riprova."
+  ,
+  "tm_addWord_disabled_hint": "Inserisci l’ortografia e tocca il segno di spunta per abilitare Aggiungi parola."
 }

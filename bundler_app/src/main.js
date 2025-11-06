@@ -10,6 +10,59 @@ const {
 } = require('./utils/refUtils');
 
 let mainWindow;
+let bundlerSettings = null; // persist UI selections and settings
+
+function getSettingsPath() {
+  try {
+    return path.join(app.getPath('userData'), 'bundler-settings.json');
+  } catch {
+    return path.join(process.cwd(), 'bundler-settings.json');
+  }
+}
+
+function defaultBundlerSettings() {
+  return {
+    xmlPath: null,
+    audioFolder: null,
+    outputPath: null,
+    settings: {
+      writtenFormElements: ['Phonetic'],
+      showWrittenForm: true,
+      audioFileSuffix: null, // backward-compat: equals first variant suffix
+      audioFileVariants: [
+        { description: 'Default', suffix: '' },
+      ],
+      referenceNumbers: [],
+      requireUserSpelling: false,
+      userSpellingElement: 'Orthographic',
+      toneGroupElement: 'SurfaceMelodyGroup',
+      toneGroupIdElement: 'SurfaceMelodyGroupId',
+      showGloss: false,
+      glossElement: null,
+    },
+  };
+}
+
+function loadSettings() {
+  const p = getSettingsPath();
+  try {
+    const raw = fs.readFileSync(p, 'utf8');
+    bundlerSettings = JSON.parse(raw);
+  } catch {
+    bundlerSettings = defaultBundlerSettings();
+  }
+}
+
+function saveSettings() {
+  try {
+    const p = getSettingsPath();
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, JSON.stringify(bundlerSettings || defaultBundlerSettings(), null, 2), 'utf8');
+    console.log('[bundler] Settings saved to', p);
+  } catch (e) {
+    console.warn('[bundler] Failed to save settings:', e.message);
+  }
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -25,6 +78,7 @@ function createWindow() {
 }
 
 app.whenReady().then(createWindow);
+app.whenReady().then(loadSettings);
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -40,6 +94,29 @@ app.on('activate', () => {
 
 // IPC Handlers
 
+ipcMain.handle('get-settings', async () => {
+  if (!bundlerSettings) loadSettings();
+  return bundlerSettings;
+});
+
+ipcMain.handle('set-settings', async (event, patch) => {
+  if (!bundlerSettings) loadSettings();
+  const next = { ...(bundlerSettings || defaultBundlerSettings()) };
+  if (patch && typeof patch === 'object') {
+    // shallow merge top-level
+    for (const k of Object.keys(patch)) {
+      if (k === 'settings' && typeof patch.settings === 'object') {
+        next.settings = { ...(next.settings || {}), ...patch.settings };
+      } else {
+        next[k] = patch[k];
+      }
+    }
+  }
+  bundlerSettings = next;
+  saveSettings();
+  return bundlerSettings;
+});
+
 ipcMain.handle('select-xml-file', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
@@ -50,6 +127,70 @@ ipcMain.handle('select-xml-file', async () => {
     return result.filePaths[0];
   }
   return null;
+});
+// Profiles helpers
+function profilesDir() {
+  try {
+    return path.join(app.getPath('userData'), 'profiles');
+  } catch {
+    return path.join(process.cwd(), 'profiles');
+  }
+}
+
+function ensureProfilesDir() {
+  const dir = profilesDir();
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function generateUuid() {
+  try {
+    return require('crypto').randomUUID();
+  } catch {
+    // fallback simple uuid
+    const s4 = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
+    return `${s4()}${s4()}-${s4()}-${s4()}-${s4()}-${s4()}${s4()}${s4()}`;
+  }
+}
+
+ipcMain.handle('save-profile', async (event, profile) => {
+  try {
+    const dir = ensureProfilesDir();
+    const name = (profile && profile.name ? String(profile.name) : `profile_${Date.now()}`)
+      .replace(/[^a-z0-9-_\. ]/gi, '_');
+    const filePath = path.join(dir, `${name}.json`);
+    const data = profile.data || {};
+    // Ensure bundleId exists and stays stable in the profile
+    if (!data.settings) data.settings = {};
+    if (!data.settings.bundleId) data.settings.bundleId = generateUuid();
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+    return { success: true, filePath, data };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('open-profile', async () => {
+  const dir = ensureProfilesDir();
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: [{ name: 'JSON Profiles', extensions: ['json'] }],
+    defaultPath: dir,
+  });
+  if (!result.canceled && result.filePaths.length > 0) {
+    try {
+      const filePath = result.filePaths[0];
+      const raw = fs.readFileSync(filePath, 'utf8');
+      const data = JSON.parse(raw);
+      // Backfill bundleId if missing
+      if (!data.settings) data.settings = {};
+      if (!data.settings.bundleId) data.settings.bundleId = generateUuid();
+      return { success: true, filePath, data };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
+  return { success: false, error: 'No file selected' };
 });
 
 ipcMain.handle('select-audio-folder', async () => {
@@ -115,6 +256,20 @@ ipcMain.handle('create-bundle', async (event, config) => {
       outputPath,
       settings,
     } = config;
+    // Inject defaults for new metadata
+    const settingsWithMeta = { ...(settings || {}) };
+    if (!settingsWithMeta.bundleId) settingsWithMeta.bundleId = generateUuid();
+    if (settingsWithMeta.bundleDescription == null) settingsWithMeta.bundleDescription = '';
+    // Ensure audio variants exist; backfill from single suffix if needed
+    if (!Array.isArray(settingsWithMeta.audioFileVariants) || settingsWithMeta.audioFileVariants.length === 0) {
+      const suf = (settingsWithMeta.audioFileSuffix || '');
+      settingsWithMeta.audioFileVariants = [
+        { description: 'Default', suffix: suf },
+      ];
+    }
+    // Keep legacy audioFileSuffix equal to first variant for older apps
+    const firstSuf = (settingsWithMeta.audioFileVariants[0]?.suffix || '');
+    settingsWithMeta.audioFileSuffix = firstSuf === '' ? null : firstSuf;
     
     // Parse XML to get record information
     const xmlData = fs.readFileSync(xmlPath, 'utf16le');
@@ -133,7 +288,7 @@ ipcMain.handle('create-bundle', async (event, config) => {
       : [phonData.data_form];
     
     // Filter records by reference numbers
-    const referenceNumbers = (settings.referenceNumbers || []).map((r) => normalizeRefString(r));
+  const referenceNumbers = (settingsWithMeta.referenceNumbers || []).map((r) => normalizeRefString(r));
     const refSet = new Set(referenceNumbers);
     let filteredRecords = referenceNumbers.length > 0
       ? dataForms.filter(df => {
@@ -145,38 +300,36 @@ ipcMain.handle('create-bundle', async (event, config) => {
     // Optional: keep a stable numeric order without changing stored strings
     filteredRecords = sortByNumericRef(filteredRecords);
     
-    // Collect sound files
+    // Collect sound files for ALL variants
     const soundFiles = new Set();
     const missingSoundFiles = [];
     
     for (const record of filteredRecords) {
       if (record.SoundFile) {
-        let soundFile = record.SoundFile;
-        
-        // Add suffix if specified
-        if (settings.audioFileSuffix) {
-          const lastDot = soundFile.lastIndexOf('.');
-          if (lastDot !== -1) {
-            soundFile = soundFile.substring(0, lastDot) + 
-                       settings.audioFileSuffix + 
-                       soundFile.substring(lastDot);
-          } else {
-            soundFile += settings.audioFileSuffix;
+        for (const variant of settingsWithMeta.audioFileVariants) {
+          let soundFile = record.SoundFile;
+          const suffix = (variant && typeof variant.suffix === 'string') ? variant.suffix : '';
+          if (suffix && suffix.length > 0) {
+            const lastDot = soundFile.lastIndexOf('.');
+            if (lastDot !== -1) {
+              soundFile = soundFile.substring(0, lastDot) + suffix + soundFile.substring(lastDot);
+            } else {
+              soundFile = soundFile + suffix;
+            }
           }
-        }
-        
-        const audioPath = path.join(audioFolder, soundFile);
-        if (fs.existsSync(audioPath)) {
-          soundFiles.add(soundFile);
-        } else {
-          missingSoundFiles.push(soundFile);
+          const audioPath = path.join(audioFolder, soundFile);
+          if (fs.existsSync(audioPath)) {
+            soundFiles.add(soundFile);
+          } else {
+            missingSoundFiles.push(soundFile);
+          }
         }
       }
     }
     
     // Create minimized XML with only filtered records and no prior tone grouping
-    const tgKey = settings.toneGroupElement || 'SurfaceMelodyGroup';
-    const tgIdKey = settings.toneGroupIdElement || 'SurfaceMelodyGroupId';
+  const tgKey = settingsWithMeta.toneGroupElement || 'SurfaceMelodyGroup';
+  const tgIdKey = settingsWithMeta.toneGroupIdElement || 'SurfaceMelodyGroupId';
     const escapeXml = (s) => String(s)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -213,8 +366,8 @@ ipcMain.handle('create-bundle', async (event, config) => {
   // Add minimized XML file
   archive.append(subsetXml, { name: 'data.xml' });
     
-    // Add settings file
-    archive.append(JSON.stringify(settings, null, 2), { name: 'settings.json' });
+  // Add settings file (now includes audioFileVariants and legacy audioFileSuffix)
+  archive.append(JSON.stringify(settingsWithMeta, null, 2), { name: 'settings.json' });
     
     // Add audio files
     for (const soundFile of soundFiles) {

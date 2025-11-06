@@ -78,4 +78,6 @@
   "share_android_save_failed_message": "Saving failed. Make sure Files (DocumentsUI), Google Drive, and Google Play services are enabled on this device, then try again.",
   "tm_completedOfTotal": "已完成 {completed} 个，共 {total} 个",
   "@tm_completedOfTotal": {"placeholders": {"completed": {"type": "int"}, "total": {"type": "int"}}}
+  ,
+  "tm_addWord_disabled_hint": "Enter the spelling and tap the check to enable Add word."
 }

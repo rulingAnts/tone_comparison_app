@@ -205,6 +205,10 @@
     <div class="section">
       <h2>2. Display Settings</h2>
       <div class="form-group">
+        <label>Bundle Description</label>
+        <input type="text" id="bundleDescription" placeholder="Describe this bundle (e.g., CVCV Nouns)">
+      </div>
+      <div class="form-group">
         <label>Written Form Elements (select one or more)</label>
         <div id="writtenFormElements" class="multi-select">
           <p class="info">Load XML file first to see available fields</p>
@@ -241,9 +245,12 @@
         </div>
       </div>
       <div class="form-group">
-        <label>Audio File Suffix (optional)</label>
-        <input type="text" id="audioSuffix" placeholder="e.g., -phon">
-        <div class="info">Will be inserted before file extension (e.g., sound.wav → sound-phon.wav)</div>
+        <label>Audio Variants</label>
+        <div class="info">Add one or more variants. Each variant can optionally add a suffix before the file extension (e.g., sound.wav → sound-phon.wav). The first variant is used by older app versions.</div>
+        <div id="audioVariants"></div>
+        <div style="margin-top:10px;">
+          <button class="btn-secondary" id="addAudioVariantBtn">Add Variant</button>
+        </div>
       </div>
     </div>
 
@@ -283,6 +290,11 @@
           <button onclick="selectOutputFile()">Browse</button>
         </div>
       </div>
+      <div class="form-group" style="margin-top:12px; display:flex; gap:10px; align-items:center;">
+        <button class="btn-secondary" onclick="saveProfile()">Save Profile</button>
+        <button class="btn-secondary" onclick="loadProfile()">Load Profile</button>
+        <span class="info">Profiles store all settings including a persistent Bundle ID.</span>
+      </div>
     </div>
 
     <button class="btn-success create-bundle-btn" onclick="createBundle()" id="createBtn" disabled>
@@ -290,6 +302,23 @@
     </button>
 
     <div class="status" id="status"></div>
+  </div>
+
+  <!-- Save Profile Modal -->
+  <div id="saveProfileOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.35); align-items:center; justify-content:center; z-index: 1000;">
+    <div role="dialog" aria-modal="true" aria-labelledby="saveProfileTitle" style="background:#fff; width:min(520px, 92vw); border-radius:8px; box-shadow:0 12px 32px rgba(0,0,0,0.2);">
+      <div style="padding:16px 20px; border-bottom:1px solid #eee;">
+        <h2 id="saveProfileTitle" style="font-size:18px; color:#333;">Save Profile</h2>
+      </div>
+      <form id="saveProfileForm" style="padding:18px 20px;">
+        <label for="profileNameInput" style="display:block; color:#555; margin-bottom:8px;">Profile name (used as filename)</label>
+        <input id="profileNameInput" type="text" placeholder="e.g., CVCV_Nouns_Study_A" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; font-size:14px;" required>
+        <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:16px;">
+          <button type="button" class="btn-secondary" id="cancelSaveProfileBtn">Cancel</button>
+          <button type="submit" class="btn-success" id="confirmSaveProfileBtn">Save</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <script src="renderer.js"></script>

@@ -1,1 +1,9 @@
-{}
+{
+  "fr": [
+    "tm_addWord_disabled_hint"
+  ],
+
+  "shu": [
+    "tm_addWord_disabled_hint"
+  ]
+}

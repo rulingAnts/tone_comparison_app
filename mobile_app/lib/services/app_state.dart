@@ -33,6 +33,9 @@ class AppState extends ChangeNotifier {
   final List<String> _unsortedQueue = [];
   bool _isLoading = false;
   String? _error;
+  // Currently selected audio variant index (global selection for playback)
+  int _selectedAudioVariantIndex = 0;
+
 
   // Undo stack to support reverting the last few actions (capacity: 3)
   final List<_UndoEntry> _undoStack = [];
@@ -50,6 +53,20 @@ class AppState extends ChangeNotifier {
   List<WordRecord> get records => _bundleData?.records ?? [];
   int get remainingUnsortedCount => _unsortedQueue.length;
   int get totalCount => records.length;
+
+  int get selectedAudioVariantIndex => _selectedAudioVariantIndex;
+  void setSelectedAudioVariantIndex(int index) {
+    if (index < 0) index = 0;
+    final variants = settings?.audioFileVariants ?? const [];
+    if (variants.isNotEmpty && index >= variants.length) {
+      index = variants.length - 1;
+    }
+    if (_selectedAudioVariantIndex != index) {
+      _selectedAudioVariantIndex = index;
+      _saveState();
+      notifyListeners();
+    }
+  }
 
   WordRecord? get currentWord {
     if (_bundleData == null) return null;
@@ -105,6 +122,7 @@ class AppState extends ChangeNotifier {
         _bundleFileBaseName = null;
       }
       _audioService.setBundlePath(_bundleData!.bundlePath);
+  _selectedAudioVariantIndex = 0;
       _currentWordIndex = 0;
       _toneGroups.clear();
       _unsortedQueue.clear();
@@ -167,6 +185,7 @@ class AppState extends ChangeNotifier {
       _bundleData = existing;
       // No known original filename in this path; keep null to fall back later
       _audioService.setBundlePath(_bundleData!.bundlePath);
+  // Keep previous selection if state loads later
       _currentWordIndex = 0;
       _toneGroups.clear();
       final loaded = await _loadSavedState();
@@ -536,7 +555,15 @@ class AppState extends ChangeNotifier {
 
   /// Play audio for a word
   Future<void> playWord(WordRecord word) async {
-    await _audioService.playWord(word, settings?.audioFileSuffix);
+    final s = settings;
+    String? suffix = s?.audioFileSuffix;
+    final variants = s?.audioFileVariants ?? const [];
+    if (variants.isNotEmpty) {
+      final idx = _selectedAudioVariantIndex.clamp(0, variants.length - 1);
+      final v = variants[idx];
+      suffix = v.suffix.isEmpty ? null : v.suffix;
+    }
+    await _audioService.playWord(word, suffix);
   }
 
   /// Remove a word from its current tone group (if any) and make it the
@@ -650,6 +677,7 @@ class AppState extends ChangeNotifier {
       final data = <String, dynamic>{
         'currentWordIndex': _currentWordIndex,
         'unsortedQueue': List<String>.from(_unsortedQueue),
+        'selectedAudioVariantIndex': _selectedAudioVariantIndex,
         'groups': _toneGroups.map((g) {
           final imageName = (g.imagePath != null && g.imagePath!.isNotEmpty)
               ? p.basename(g.imagePath!)
@@ -789,7 +817,7 @@ class AppState extends ChangeNotifier {
       // Sort groups by group number for consistent UI
       _toneGroups.sort((a, b) => a.groupNumber.compareTo(b.groupNumber));
 
-      // Restore queue if present, else compute from records (those without a group)
+  // Restore queue if present, else compute from records (those without a group)
       final q = (json['unsortedQueue'] as List<dynamic>?);
       if (q != null) {
         for (final e in q) {
@@ -808,6 +836,15 @@ class AppState extends ChangeNotifier {
         0,
         records.isEmpty ? 0 : records.length - 1,
       );
+
+      // Restore selected audio variant index (optional)
+      _selectedAudioVariantIndex = (json['selectedAudioVariantIndex'] as int?) ?? 0;
+      final variants = settings?.audioFileVariants ?? const [];
+      if (variants.isEmpty) {
+        _selectedAudioVariantIndex = 0;
+      } else if (_selectedAudioVariantIndex >= variants.length) {
+        _selectedAudioVariantIndex = 0;
+      }
       return true;
     } catch (_) {
       return false;

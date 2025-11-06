@@ -147,4 +147,6 @@
   ,
   "share_android_picker_missing_message": "If no save picker appears, ensure these system apps are enabled: Files (DocumentsUI), Google Drive, Google Play services, and their storage providers. Then try again from Save to Drive.",
   "share_android_save_failed_message": "Saving failed. Make sure Files (DocumentsUI), Google Drive, and Google Play services are enabled on this device, then try again."
+  ,
+  "tm_addWord_disabled_hint": "Enter the spelling and tap the check to enable Add word."
 }

@@ -85,4 +85,6 @@
     ,
   "share_android_picker_missing_message": "Se não aparecer o seletor de salvamento, verifique se estes apps do sistema estão ativados: Arquivos (DocumentsUI), Google Drive, Google Play Services e seus provedores de armazenamento. Depois, tente novamente em Salvar no Drive.",
   "share_android_save_failed_message": "Falha ao salvar. Verifique se Arquivos (DocumentsUI), Google Drive e Google Play Services estão ativados neste dispositivo e tente novamente."
+  ,
+  "tm_addWord_disabled_hint": "Digite a ortografia e toque no visto para ativar Adicionar palavra."
 }

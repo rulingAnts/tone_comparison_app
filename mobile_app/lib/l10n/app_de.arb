@@ -78,4 +78,6 @@
     ,
     "share_android_picker_missing_message": "Wenn kein Speicherdialog erscheint, stellen Sie sicher, dass diese System‑Apps aktiviert sind: Dateien (DocumentsUI), Google Drive, Google Play-Dienste und deren Speicheranbieter. Versuchen Sie es dann erneut mit „In Drive speichern“.",
     "share_android_save_failed_message": "Speichern fehlgeschlagen. Stellen Sie sicher, dass Dateien (DocumentsUI), Google Drive und Google Play‑Dienste auf diesem Gerät aktiviert sind, und versuchen Sie es erneut."
+    ,
+    "tm_addWord_disabled_hint": "Gib die Schreibung ein und tippe auf das Häkchen, um \"Wort hinzufügen\" zu aktivieren."
   }

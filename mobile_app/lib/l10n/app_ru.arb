@@ -72,4 +72,6 @@
   ,
   "share_android_picker_missing_message": "Если окно сохранения не появляется, убедитесь, что включены следующие системные приложения: Файлы (DocumentsUI), Google Drive, Службы Google Play и их провайдеры хранилища. Затем попробуйте снова, выбрав «Сохранить на Диск».",
   "share_android_save_failed_message": "Не удалось сохранить. Убедитесь, что приложения «Файлы (DocumentsUI)», Google Drive и «Службы Google Play» включены на этом устройстве, затем повторите попытку."
+  ,
+  "tm_addWord_disabled_hint": "Enter the spelling and tap the check to enable Add word."
 }

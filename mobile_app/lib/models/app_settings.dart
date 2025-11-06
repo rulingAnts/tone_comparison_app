@@ -1,4 +1,6 @@
-/// Settings configuration for the tone matching app
+// Settings configuration for the tone matching app
+import 'audio_variant.dart';
+
 class AppSettings {
   /// Which daughter elements of `data_form` to show as written forms
   final List<String> writtenFormElements;
@@ -6,8 +8,11 @@ class AppSettings {
   /// Whether to show written forms
   final bool showWrittenForm;
 
-  /// Optional suffix to add to sound file names
+  /// Optional single suffix to add to sound file names (legacy)
   final String? audioFileSuffix;
+
+  /// Audio variants with descriptions and suffixes (first variant is default)
+  final List<AudioVariant> audioFileVariants;
 
   /// Reference numbers to filter (comma/space/newline separated)
   final List<String> referenceNumbers;
@@ -30,10 +35,17 @@ class AppSettings {
   /// Element name to read gloss from (e.g., 'Gloss')
   final String? glossElement;
 
+  /// Persistent ID for the bundle configuration (assigned by bundler profiles)
+  final String? bundleId;
+
+  /// Human description for this bundle configuration
+  final String? bundleDescription;
+
   AppSettings({
     this.writtenFormElements = const ['Phonetic'],
     this.showWrittenForm = true,
     this.audioFileSuffix,
+    this.audioFileVariants = const [AudioVariant(description: 'Default', suffix: '')],
     this.referenceNumbers = const [],
     this.requireUserSpelling = false,
     this.userSpellingElement = 'Orthographic',
@@ -41,6 +53,8 @@ class AppSettings {
     this.toneGroupIdElement = 'SurfaceMelodyGroupId',
     this.showGloss = false,
     this.glossElement,
+    this.bundleId,
+    this.bundleDescription,
   });
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
@@ -52,6 +66,16 @@ class AppSettings {
           const ['Phonetic'],
       showWrittenForm: json['showWrittenForm'] as bool? ?? true,
       audioFileSuffix: json['audioFileSuffix'] as String?,
+      audioFileVariants: (json['audioFileVariants'] is List)
+          ? (json['audioFileVariants'] as List)
+              .map((e) => AudioVariant.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : [
+              AudioVariant(
+                description: 'Default',
+                suffix: (json['audioFileSuffix'] as String?)?.trim() ?? '',
+              ),
+            ],
       referenceNumbers:
           (json['referenceNumbers'] as List<dynamic>?)
               ?.map((e) => e.toString())
@@ -66,6 +90,8 @@ class AppSettings {
           json['toneGroupIdElement'] as String? ?? 'SurfaceMelodyGroupId',
       showGloss: json['showGloss'] as bool? ?? false,
       glossElement: json['glossElement'] as String?,
+      bundleId: json['bundleId'] as String?,
+      bundleDescription: json['bundleDescription'] as String?,
     );
   }
 
@@ -73,7 +99,13 @@ class AppSettings {
     return {
       'writtenFormElements': writtenFormElements,
       'showWrittenForm': showWrittenForm,
-      'audioFileSuffix': audioFileSuffix,
+      // Maintain backward compatibility: keep audioFileSuffix equal to first variant's suffix
+      'audioFileSuffix': (audioFileVariants.isNotEmpty
+              ? (audioFileVariants.first.suffix.isEmpty
+                  ? null
+                  : audioFileVariants.first.suffix)
+              : audioFileSuffix),
+      'audioFileVariants': audioFileVariants.map((v) => v.toJson()).toList(),
       'referenceNumbers': referenceNumbers,
       'requireUserSpelling': requireUserSpelling,
       'userSpellingElement': userSpellingElement,
@@ -81,6 +113,8 @@ class AppSettings {
       'toneGroupIdElement': toneGroupIdElement,
       'showGloss': showGloss,
       'glossElement': glossElement,
+      if (bundleId != null) 'bundleId': bundleId,
+      if (bundleDescription != null) 'bundleDescription': bundleDescription,
     };
   }
 }

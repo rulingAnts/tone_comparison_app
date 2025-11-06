@@ -80,4 +80,6 @@
   ,
   "share_android_picker_missing_message": "Als er geen opslaanvenster verschijnt, controleer dan of deze systeemapps zijn ingeschakeld: Bestanden (DocumentsUI), Google Drive, Google Play-services en hun opslagproviders. Probeer het daarna opnieuw met Opslaan in Drive.",
   "share_android_save_failed_message": "Opslaan mislukt. Controleer of Bestanden (DocumentsUI), Google Drive en Google Play-services op dit apparaat zijn ingeschakeld en probeer het opnieuw."
+  ,
+  "tm_addWord_disabled_hint": "Enter the spelling and tap the check to enable Add word."
 }

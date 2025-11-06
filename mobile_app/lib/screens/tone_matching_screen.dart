@@ -8,10 +8,8 @@ import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 import '../services/app_state.dart';
 import '../models/tone_group.dart';
 import 'package:tone_comparison_app/generated/app_localizations.dart';
-// drawing feature removed; camera and gallery only
-// import '../widgets/tone_group_card.dart'; // no longer used with pager UI
 
-/// Main tone matching workflow screen
+/// Main tone matching screen
 class ToneMatchingScreen extends StatefulWidget {
   const ToneMatchingScreen({super.key});
 
@@ -20,100 +18,65 @@ class ToneMatchingScreen extends StatefulWidget {
 }
 
 class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
-  final TextEditingController _spellingController = TextEditingController();
+  final _spellingController = TextEditingController();
+  final _spellingFocusNode = FocusNode();
   final ImagePicker _imagePicker = ImagePicker();
+
+  final PageController _pageController = PageController();
+  int _currentGroupPage = 0;
+
+  String? _lastWordRef;
   bool _spellingEntered = false;
-  bool _reassignTipDismissed = false;
-  // When true and all words are matched, show the groups pager so users can review
-  // and reassign within the main sorting UI (no separate review interface).
+  bool _editingSpelling = false;
   bool _reviewMode = false;
+  bool _reassignTipDismissed = false;
 
   @override
   void dispose() {
     _spellingController.dispose();
+    _spellingFocusNode.dispose();
+    _pageController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(AppLocalizations.of(context).tm_title),
+        title: Text(l10n.tm_title),
         actions: [
+          // Reset sorting menu
           Consumer<AppState>(
-            builder: (context, appState, _) => IconButton(
-              icon: const Icon(Icons.undo),
-              tooltip: AppLocalizations.of(context).tm_undo,
-              onPressed: appState.canUndo
-                  ? () {
-                      final undone = appState.undoLastAction();
-                      if (undone) {
-                        setState(() {
-                          _spellingEntered =
-                              (appState.currentWord?.userSpelling?.isNotEmpty ??
-                              false);
-                        });
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(AppLocalizations.of(context).tm_undo),
-                          ),
-                        );
-                      }
-                    }
-                  : null,
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.ios_share),
-            tooltip: AppLocalizations.of(context).tm_share,
-            onPressed: _shareResults,
-          ),
-          PopupMenuButton<String>(
-            onSelected: (value) async {
-              if (value == 'reset') {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) {
-                    final l10n = AppLocalizations.of(ctx);
-                    return AlertDialog(
-                      title: Text(l10n.tm_resetDialog_title),
-                      content: Text(l10n.tm_resetDialog_message),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(ctx).pop(false),
-                          child: Text(l10n.common_cancel),
-                        ),
-                        ElevatedButton(
-                          onPressed: () => Navigator.of(ctx).pop(true),
-                          child: Text(l10n.tm_resetDialog_confirm),
-                        ),
-                      ],
-                    );
-                  },
-                );
-                if (!context.mounted) return;
-                if (confirm == true) {
-                  final appState = Provider.of<AppState>(
+            builder: (context, appState, _) => PopupMenuButton<String>(
+              onSelected: (value) async {
+                if (value == 'reset') {
+                  await Provider.of<AppState>(
                     context,
                     listen: false,
-                  );
-                  await appState.resetSorting();
-                  if (!context.mounted) return;
-                  final l10n = AppLocalizations.of(context);
+                  ).resetSorting();
+                  if (!mounted) return;
+                  setState(() {
+                    _spellingController.clear();
+                    _spellingEntered = false;
+                    _editingSpelling = false;
+                    _lastWordRef = null;
+                    _reassignTipDismissed = false;
+                    _reviewMode = false;
+                    _currentGroupPage = 0;
+                  });
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(l10n.tm_reset_snackbar)),
                   );
                 }
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem<String>(
-                value: 'reset',
-                child: Text(
-                  AppLocalizations.of(context).tm_menu_resetSortingLabel,
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem<String>(
+                  value: 'reset',
+                  child: Text(l10n.tm_menu_resetSortingLabel),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
         bottom: PreferredSize(
@@ -131,51 +94,65 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
           ),
         ),
       ),
-      body: Consumer<AppState>(
-        builder: (context, appState, child) {
-          if (appState.isComplete) {
-            // If the user opted to review before sharing, surface the pager UI
-            // instead of the completion summary.
-            if (_reviewMode) {
-              return _buildToneGroupsPager(appState);
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: Consumer<AppState>(
+          builder: (context, appState, child) {
+            if (appState.isComplete) {
+              if (_reviewMode) {
+                return _buildToneGroupsPager(appState);
+              }
+              return _buildCompleteView(appState);
             }
-            return _buildCompleteView(appState);
-          }
 
-          final currentWord = appState.currentWord;
-          if (currentWord == null) {
-            return Center(child: Text(AppLocalizations.of(context).tm_noWords));
-          }
+            final currentWord = appState.currentWord;
+            if (currentWord == null) {
+              return Center(child: Text(l10n.tm_noWords));
+            }
 
-          final requireSpelling =
-              appState.settings?.requireUserSpelling ?? false;
-          final hasExistingGroup = currentWord.toneGroup != null;
+            // Reset spelling field when the current word changes
+            if (_lastWordRef != currentWord.reference) {
+              _lastWordRef = currentWord.reference;
+              final existing = currentWord.userSpelling ?? '';
+              _spellingController.text = existing;
+              _spellingEntered = existing.isNotEmpty;
+              _editingSpelling =
+                  false; // reset edit state when the word changes
+            }
 
-          return Column(
-            children: [
-              // Word info and audio
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    Text(
-                      AppLocalizations.of(context).tm_completedOfTotal(
-                        appState.totalCount - appState.remainingUnsortedCount,
-                        appState.totalCount,
-                      ),
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    if (appState.settings?.showWrittenForm ?? false) ...[
+            final requireSpelling =
+                appState.settings?.requireUserSpelling ?? false;
+            final hasExistingGroup = currentWord.toneGroup != null;
+
+            return Column(
+              children: [
+                // Word info and audio
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
                       Text(
-                        currentWord.getDisplayText(
-                          appState.settings!.writtenFormElements,
+                        l10n.tm_completedOfTotal(
+                          appState.totalCount - appState.remainingUnsortedCount,
+                          appState.totalCount,
                         ),
-                        style: Theme.of(context).textTheme.headlineMedium,
+                        style: Theme.of(context).textTheme.titleMedium,
                       ),
-                      const SizedBox(height: 6),
-                      if (appState.settings!.showGloss &&
-                          (appState.settings!.glossElement != null))
+                      const SizedBox(height: 8),
+                      // Show written form (phonetic, etc.) if enabled
+                      if (appState.settings?.showWrittenForm ?? false) ...[
+                        Text(
+                          currentWord.getDisplayText(
+                            appState.settings!.writtenFormElements,
+                          ),
+                          style: Theme.of(context).textTheme.headlineMedium,
+                        ),
+                        const SizedBox(height: 6),
+                      ],
+                      // Show gloss independently of written form visibility
+                      if ((appState.settings?.showGloss ?? false) &&
+                          (appState.settings?.glossElement != null))
                         Builder(
                           builder: (context) {
                             final glossKey = appState.settings!.glossElement!;
@@ -190,79 +167,176 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
                             );
                           },
                         ),
-                    ],
-                    const SizedBox(height: 16),
-                    // Play button (graphical icon, no text)
-                    IconButton(
-                      icon: const Icon(Icons.play_circle_filled),
-                      iconSize: 64,
-                      color: Theme.of(context).primaryColor,
-                      onPressed: () async {
-                        try {
-                          await appState.playWord(currentWord);
-                        } catch (e) {
-                          if (!context.mounted) return;
-                          final l10n = AppLocalizations.of(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(l10n.tm_audioError)),
-                          );
-                        }
-                      },
-                    ),
-
-                    // User spelling input if required
-                    if (requireSpelling && !hasExistingGroup) ...[
                       const SizedBox(height: 16),
-                      TextField(
-                        controller: _spellingController,
-                        decoration: InputDecoration(
-                          labelText: AppLocalizations.of(
-                            context,
-                          ).tm_enterSpelling,
-                          border: const OutlineInputBorder(),
-                          suffixIcon: IconButton(
-                            icon: const Icon(Icons.check),
-                            onPressed: () {
-                              if (_spellingController.text.isNotEmpty) {
-                                appState.updateUserSpelling(
-                                  _spellingController.text,
+                      // Variant selector + Play button row
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // Dropdown to select audio variant
+                          Builder(
+                            builder: (context) {
+                              final variants =
+                                  appState.settings?.audioFileVariants ??
+                                  const [];
+                              if (variants.isEmpty) {
+                                return const SizedBox.shrink();
+                              }
+                              final selected =
+                                  appState.selectedAudioVariantIndex;
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: Colors.grey.shade300,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                  color: Theme.of(context).colorScheme.surface,
+                                ),
+                                child: DropdownButton<int>(
+                                  value: selected.clamp(0, variants.length - 1),
+                                  underline: const SizedBox.shrink(),
+                                  items: [
+                                    for (int i = 0; i < variants.length; i++)
+                                      DropdownMenuItem<int>(
+                                        value: i,
+                                        child: Text(
+                                          (variants[i].description.isNotEmpty)
+                                              ? variants[i].description
+                                              : 'Default',
+                                        ),
+                                      ),
+                                  ],
+                                  onChanged: (val) {
+                                    if (val != null) {
+                                      appState.setSelectedAudioVariantIndex(
+                                        val,
+                                      );
+                                    }
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(width: 16),
+                          IconButton(
+                            icon: const Icon(Icons.play_circle_filled),
+                            iconSize: 64,
+                            color: Theme.of(context).primaryColor,
+                            onPressed: () async {
+                              try {
+                                await appState.playWord(currentWord);
+                              } catch (e) {
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(l10n.tm_audioError)),
                                 );
-                                setState(() {
-                                  _spellingEntered = true;
-                                });
                               }
                             },
                           ),
-                        ),
-                        onSubmitted: (value) {
-                          if (value.isNotEmpty) {
-                            appState.updateUserSpelling(value);
-                            setState(() {
-                              _spellingEntered = true;
-                            });
-                          }
-                        },
+                        ],
                       ),
-                    ],
-                  ],
-                ),
-              ),
 
-              // Tone groups list
-              if (!requireSpelling || _spellingEntered || hasExistingGroup)
+                      // User spelling input if required
+                      if (requireSpelling && !hasExistingGroup) ...[
+                        const SizedBox(height: 16),
+                        if (!_spellingEntered || _editingSpelling)
+                          TextField(
+                            focusNode: _spellingFocusNode,
+                            controller: _spellingController,
+                            decoration: InputDecoration(
+                              labelText: l10n.tm_enterSpelling,
+                              border: const OutlineInputBorder(),
+                              suffixIcon: IconButton(
+                                icon: const Icon(Icons.check),
+                                onPressed: () {
+                                  final value = _spellingController.text.trim();
+                                  if (value.isNotEmpty) {
+                                    appState.updateUserSpelling(value);
+                                    FocusScope.of(context).unfocus();
+                                    setState(() {
+                                      _spellingEntered = true;
+                                      _editingSpelling = false;
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                            onSubmitted: (value) {
+                              final v = value.trim();
+                              if (v.isNotEmpty) {
+                                appState.updateUserSpelling(v);
+                                FocusScope.of(context).unfocus();
+                                setState(() {
+                                  _spellingEntered = true;
+                                  _editingSpelling = false;
+                                });
+                              }
+                            },
+                          )
+                        else
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey.shade300),
+                              borderRadius: BorderRadius.circular(8),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.surfaceContainerLowest,
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    currentWord.userSpelling ?? '',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Edit spelling',
+                                  icon: const Icon(Icons.edit),
+                                  onPressed: () {
+                                    setState(() {
+                                      _editingSpelling = true;
+                                    });
+                                    // slight delay to ensure rebuild then focus
+                                    Future.delayed(
+                                      const Duration(milliseconds: 50),
+                                      () {
+                                        if (!mounted) return;
+                                        _spellingFocusNode.requestFocus();
+                                      },
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ],
+                  ),
+                ),
+
+                // Tone groups list is always visible so users can reassign anytime
                 Expanded(child: _buildToneGroupsPager(appState)),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }
 
-  final PageController _pageController = PageController();
-  int _currentGroupPage = 0;
-
   Widget _buildToneGroupsPager(AppState appState) {
     final groups = appState.toneGroups;
+    final l10n = AppLocalizations.of(context);
     return Column(
       children: [
         Padding(
@@ -271,7 +345,7 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                AppLocalizations.of(context).tm_selectGroup,
+                l10n.tm_selectGroup,
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               Text('${_currentGroupPage + 1}/${groups.length + 1}'),
@@ -300,7 +374,13 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
   Widget _buildGroupPage(AppState appState, ToneGroup group) {
     final theme = Theme.of(context);
     final imageHeight = MediaQuery.of(context).size.height * 0.3; // big image
+    // Determine if the user can add the current word now
+    final requireSpelling = appState.settings?.requireUserSpelling ?? false;
+    final currentWord = appState.currentWord;
+    final hasExistingGroup = currentWord?.toneGroup != null;
+    final canAddNow = !requireSpelling || _spellingEntered || hasExistingGroup;
     return SingleChildScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -408,13 +488,25 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
                       ),
                       const SizedBox(height: 8),
                       ElevatedButton.icon(
-                        onPressed: () => _selectToneGroup(appState, group),
+                        onPressed: canAddNow
+                            ? () => _selectToneGroup(appState, group)
+                            : null,
                         icon: const Icon(Icons.add_circle_outline),
                         label: Text(AppLocalizations.of(context).tm_addWord),
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),
+                      if (!canAddNow &&
+                          requireSpelling &&
+                          !hasExistingGroup) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          AppLocalizations.of(context).tm_addWord_disabled_hint,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: Colors.grey[600]),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -441,7 +533,7 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
               ),
             ),
           if (!_reassignTipDismissed) const SizedBox(height: 8),
-          // Members list with play buttons
+          // Members list with play buttons, two-line priority: gloss > spelling > written
           ...group.members.map(
             (word) => Dismissible(
               key: ValueKey('member-${word.reference}'),
@@ -474,17 +566,52 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
               },
               child: ListTile(
                 dense: true,
-                title: Text(
-                  '${word.reference}  •  '
-                  '${word.getDisplayText(appState.settings!.writtenFormElements)}',
-                ),
-                subtitle:
-                    (appState.settings!.showGloss &&
-                        appState.settings!.glossElement != null &&
-                        (word.fields[appState.settings!.glossElement!] ?? '')
-                            .isNotEmpty)
-                    ? Text(word.fields[appState.settings!.glossElement!]!)
-                    : null,
+                title: () {
+                  final s = appState.settings!;
+                  final parts = <String>[];
+                  if (s.showGloss && s.glossElement != null) {
+                    final g = word.fields[s.glossElement!] ?? '';
+                    if (g.isNotEmpty) parts.add(g);
+                  }
+                  if (s.requireUserSpelling) {
+                    final u = word.userSpelling ?? '';
+                    if (u.isNotEmpty) parts.add(u);
+                  }
+                  if (s.showWrittenForm) {
+                    final wf = word.getDisplayText(s.writtenFormElements);
+                    if (wf.isNotEmpty) parts.add(wf);
+                  }
+                  final titleText = parts.isNotEmpty ? parts[0] : '';
+                  return Text(
+                    titleText,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  );
+                }(),
+                subtitle: () {
+                  final s = appState.settings!;
+                  final parts = <String>[];
+                  if (s.showGloss && s.glossElement != null) {
+                    final g = word.fields[s.glossElement!] ?? '';
+                    if (g.isNotEmpty) parts.add(g);
+                  }
+                  if (s.requireUserSpelling) {
+                    final u = word.userSpelling ?? '';
+                    if (u.isNotEmpty) parts.add(u);
+                  }
+                  if (s.showWrittenForm) {
+                    final wf = word.getDisplayText(s.writtenFormElements);
+                    if (wf.isNotEmpty) parts.add(wf);
+                  }
+                  if (parts.length >= 2) {
+                    return Text(
+                      parts[1],
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    );
+                  }
+                  return null;
+                }(),
                 trailing: IconButton(
                   icon: const Icon(Icons.play_arrow),
                   onPressed: () async {
@@ -510,6 +637,7 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
 
   Widget _buildCreateGroupPage(AppState appState) {
     final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context);
     return Center(
       child: Card(
         margin: const EdgeInsets.all(24),
@@ -527,11 +655,11 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  AppLocalizations.of(context).tm_createGroupTitle,
+                  l10n.tm_createGroupTitle,
                   style: theme.textTheme.titleLarge,
                 ),
                 const SizedBox(height: 8),
-                Text(AppLocalizations.of(context).tm_createGroupSubtitle),
+                Text(l10n.tm_createGroupSubtitle),
               ],
             ),
           ),
@@ -541,6 +669,7 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
   }
 
   Widget _buildCompleteView(AppState appState) {
+    final l10n = AppLocalizations.of(context);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -548,21 +677,19 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
           const Icon(Icons.check_circle, size: 128, color: Colors.green),
           const SizedBox(height: 32),
           Text(
-            AppLocalizations.of(context).tm_allMatched,
+            l10n.tm_allMatched,
             style: Theme.of(context).textTheme.headlineMedium,
           ),
           const SizedBox(height: 16),
           Text(
-            AppLocalizations.of(
-              context,
-            ).tm_groupsCreated(appState.toneGroups.length),
+            l10n.tm_groupsCreated(appState.toneGroups.length),
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 32),
           ElevatedButton.icon(
             onPressed: _shareResults,
             icon: const Icon(Icons.ios_share),
-            label: Text(AppLocalizations.of(context).tm_share),
+            label: Text(l10n.tm_share),
           ),
         ],
       ),
@@ -583,6 +710,13 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
       );
       if (file != null) {
         appState.createNewToneGroup(file.path);
+        // Clear spelling for the next word to avoid carryover
+        if (mounted) {
+          setState(() {
+            _spellingController.clear();
+            _spellingEntered = false;
+          });
+        }
         // Jump to the newly created group's page and refresh UI
         final newIndex = previousLen; // new group appended at end
         if (mounted) {
@@ -640,6 +774,13 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
 
     if (image != null) {
       appState.createNewToneGroup(image.path);
+      // Clear spelling for the next word to avoid carryover
+      if (mounted) {
+        setState(() {
+          _spellingController.clear();
+          _spellingEntered = false;
+        });
+      }
       // Jump to the newly created group's page and refresh UI
       final newIndex = previousLen; // appended
       if (mounted) {
@@ -657,6 +798,13 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
 
   void _selectToneGroup(AppState appState, ToneGroup group) async {
     appState.addToToneGroup(group);
+    // Clear spelling for the next word to avoid carryover
+    if (mounted) {
+      setState(() {
+        _spellingController.clear();
+        _spellingEntered = false;
+      });
+    }
     // If the group reached the review threshold, prompt the user to review.
     if (group.requiresReview) {
       await showDialog<bool>(
@@ -685,22 +833,14 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
         },
       );
       // No separate review interface: keep the user in the sorting view.
-      // They can swipe members in the current group's page to reassign.
     }
-    // After adding to a group, AppState removed the current word from the queue;
-    // the next head becomes current automatically.
   }
-
-  // Advance to next word is implicit after assignment: removing the current
-  // from the queue in AppState makes the next head current automatically.
-
-  // Removed legacy _exportResults; sharing is the primary flow now.
 
   Future<void> _shareResults() async {
     final appState = Provider.of<AppState>(context, listen: false);
 
     try {
-      // Strongly suggest reviewing all groups before sharing
+      // Suggest reviewing all groups before sharing
       final reviewAll = await showDialog<bool>(
         context: context,
         builder: (ctx) {
@@ -725,15 +865,14 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
       if (!mounted) return;
 
       if (reviewAll == true) {
-        // Cancel share and let the user review in the main sorting UI.
-        // If we're on the completion summary, switch to the groups pager.
+        // Switch to pager UI for review
         if (appState.isComplete) {
           setState(() => _reviewMode = true);
         }
         return;
       }
 
-      // Let the user choose to share via apps or save the ZIP into Files/Drive using a native picker.
+      // Choose share option
       final choice = await showModalBottomSheet<String>(
         context: context,
         builder: (ctx) {
@@ -777,7 +916,7 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
         try {
           final zipPath = await appState.prepareShareZip();
           if (Platform.isAndroid || Platform.isIOS) {
-            // Use native Create Document / Files save dialog with bytes for reliability.
+            // Use native Create Document / Files save dialog with bytes for reliability
             final data = await File(zipPath).readAsBytes();
             final params = SaveFileDialogParams(
               data: data,
@@ -791,7 +930,7 @@ class _ToneMatchingScreenState extends State<ToneMatchingScreen> {
                 context,
               ).showSnackBar(SnackBar(content: Text(l10n.share_saved_ok)));
             } else {
-              // User canceled or picker unavailable; show gentle info on Android
+              // User canceled or picker unavailable; gentle info on Android
               if (Platform.isAndroid) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -990,6 +1129,8 @@ class _GroupReviewScreenState extends State<GroupReviewScreen> {
             const SizedBox(height: 12),
             Expanded(
               child: ListView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
                 children: [
                   if (group.imagePath != null && group.imagePath!.isNotEmpty)
                     Image.file(
@@ -1043,9 +1184,53 @@ class _GroupReviewScreenState extends State<GroupReviewScreen> {
                       },
                       child: ListTile(
                         dense: true,
-                        title: Text(
-                          '${w.reference} • ${w.getDisplayText(appState.settings!.writtenFormElements)}',
-                        ),
+                        title: () {
+                          final s = appState.settings!;
+                          // two-line priority: gloss > spelling > written
+                          final parts = <String>[];
+                          if (s.showGloss && s.glossElement != null) {
+                            final g = w.fields[s.glossElement!] ?? '';
+                            if (g.isNotEmpty) parts.add(g);
+                          }
+                          if (s.requireUserSpelling) {
+                            final u = w.userSpelling ?? '';
+                            if (u.isNotEmpty) parts.add(u);
+                          }
+                          if (s.showWrittenForm) {
+                            final wf = w.getDisplayText(s.writtenFormElements);
+                            if (wf.isNotEmpty) parts.add(wf);
+                          }
+                          final titleText = parts.isNotEmpty ? parts[0] : '';
+                          return Text(
+                            titleText,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          );
+                        }(),
+                        subtitle: () {
+                          final s = appState.settings!;
+                          final parts = <String>[];
+                          if (s.showGloss && s.glossElement != null) {
+                            final g = w.fields[s.glossElement!] ?? '';
+                            if (g.isNotEmpty) parts.add(g);
+                          }
+                          if (s.requireUserSpelling) {
+                            final u = w.userSpelling ?? '';
+                            if (u.isNotEmpty) parts.add(u);
+                          }
+                          if (s.showWrittenForm) {
+                            final wf = w.getDisplayText(s.writtenFormElements);
+                            if (wf.isNotEmpty) parts.add(wf);
+                          }
+                          if (parts.length >= 2) {
+                            return Text(
+                              parts[1],
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            );
+                          }
+                          return null;
+                        }(),
                         trailing: IconButton(
                           icon: const Icon(Icons.play_arrow),
                           onPressed: () async {

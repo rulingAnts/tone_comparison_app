@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 
 import '../models/app_settings.dart';
 import '../models/tone_group.dart';
@@ -218,6 +219,19 @@ class BundleService {
     }
 
     // 5) Zip files: original XML, updated XML, CSV, and images/
+    // 4.5) Write metadata (bundle and device info) for comparison app
+    final meta = <String, dynamic>{
+      'generatedAt': DateTime.now().toIso8601String(),
+      'bundleId': bundleData.settings.bundleId,
+      'bundleDescription': bundleData.settings.bundleDescription,
+      'deviceId': await _getAndroidDeviceId(),
+    };
+    final metaPath = path.join(sessionDir.path, 'meta.json');
+    await File(metaPath).writeAsString(
+      const JsonEncoder.withIndent('  ').convert(meta),
+      flush: true,
+    );
+
     final archive = Archive();
     final originalStat = await File(originalCopyPath).stat();
     final originalBytes = await File(originalCopyPath).readAsBytes();
@@ -239,6 +253,11 @@ class BundleService {
     // Add images directory (if any)
     await _addDirectoryToArchive(imagesDir, archive, sessionDir.path);
 
+    // Add meta.json
+    final metaStat = await File(metaPath).stat();
+    final metaBytes = await File(metaPath).readAsBytes();
+    archive.addFile(ArchiveFile('meta.json', metaStat.size, metaBytes));
+
     final zipData = ZipEncoder().encode(archive);
     final outZipPath = path.join(
       tempDir.path,
@@ -249,6 +268,17 @@ class BundleService {
     }
 
     return outZipPath;
+  }
+
+  static Future<String?> _getAndroidDeviceId() async {
+    try {
+      if (!Platform.isAndroid) return null;
+      final plugin = DeviceInfoPlugin();
+      final info = await plugin.androidInfo;
+      return info.id; // ANDROID_ID
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Generate CSV content for tone groups

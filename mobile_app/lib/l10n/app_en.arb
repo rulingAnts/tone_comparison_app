@@ -164,5 +164,7 @@
   "@tm_completedOfTotal": {
     "description": "Progress indicator showing how many words have been completed out of total.",
     "placeholders": {"completed": {"type": "int"}, "total": {"type": "int"}}
-  }
+  },
+  "tm_addWord_disabled_hint": "Enter the spelling and tap the check to enable Add word.",
+  "@tm_addWord_disabled_hint": {"description": "Helper text shown under disabled Add Word button when spelling is required."}
 }
