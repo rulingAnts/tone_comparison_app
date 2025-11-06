@@ -72,13 +72,26 @@ ipcMain.handle('load-results', async (event, filePaths) => {
       const csvData = csvEntry.getData().toString('utf8');
       const toneGroups = await parseCsv(csvData);
       
-      // Find and parse XML
-      const xmlEntry = zipEntries.find(e => e.entryName.endsWith('.xml'));
+      // Find and parse XML (prefer updated subset)
+      const xmlEntry =
+        zipEntries.find(e => e.entryName.endsWith('data_updated.xml')) ||
+        zipEntries.find(e => e.entryName.endsWith('data.xml')) ||
+        zipEntries.find(e => e.entryName.endsWith('.xml'));
       if (!xmlEntry) {
         throw new Error(`No XML file found in ${speakerName}`);
       }
-      
-      const xmlData = xmlEntry.getData().toString('utf16le');
+
+      // Decode XML with encoding detection (mobile exports UTF-8; some XMLs may be UTF-16)
+      const xmlBuffer = xmlEntry.getData();
+      const probe = xmlBuffer.slice(0, 200).toString('utf8');
+      const declMatch = probe.match(/encoding\s*=\s*"([^"]+)"/i);
+      const declared = declMatch ? declMatch[1].toLowerCase() : null;
+      let xmlData;
+      if ((declared && declared.includes('utf-16')) || probe.includes('\u0000')) {
+        xmlData = xmlBuffer.toString('utf16le');
+      } else {
+        xmlData = xmlBuffer.toString('utf8');
+      }
       const parser = new XMLParser({
         ignoreAttributes: false,
         attributeNamePrefix: '@_',
@@ -250,10 +263,10 @@ function findMergedGroups(speakerAssignments) {
             merged.push({
               speaker1: speaker1.speaker,
               group1: s1Group,
-              exemplar1: speaker1.toneGroups.find(g => parseInt(g['Tone Group']) === s1Group),
+              exemplar1: speaker1.toneGroups.find(g => parseInt(g['Tone Group (Num)']) === s1Group),
               speaker2: speaker2.speaker,
               group2: s2Group,
-              exemplar2: speaker2.toneGroups.find(g => parseInt(g['Tone Group']) === s2Group),
+              exemplar2: speaker2.toneGroups.find(g => parseInt(g['Tone Group (Num)']) === s2Group),
               overlapPercent: overlapPercent.toFixed(1),
               sharedWords: count,
             });
