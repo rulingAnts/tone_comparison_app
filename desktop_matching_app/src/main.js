@@ -175,6 +175,7 @@ ipcMain.handle('load-bundle', async (event, filePath) => {
         selectedAudioVariantIndex: 0,
         groups: [],
         records: {}, // { [ref]: { userSpelling: string } }
+        locale: sessionData?.locale || 'en',
       };
       saveSession();
     }
@@ -226,6 +227,9 @@ ipcMain.handle('update-session', async (event, updates) => {
   }
   if (updates.records) {
     sessionData.records = { ...sessionData.records, ...updates.records };
+  }
+  if (updates.locale) {
+    sessionData.locale = updates.locale;
   }
   
   saveSession();
