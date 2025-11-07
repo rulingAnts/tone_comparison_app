@@ -233,6 +233,24 @@ The desktop app now supports runtime localization. Strings are defined in JSON l
 
 If you need deeper RTL styling (e.g., icon direction changes or reorder of progress elements), extend the `[dir='rtl']` rules in `index.html` or move them to a dedicated stylesheet.
 
+### Terminology consistency ("bundle")
+
+We localize the term “bundle” to the natural term in each language for clarity:
+
+- de: Paket
+- fr: paquet
+- es: paquete
+- pt: pacote
+- it: pacchetto
+- nl: bundel
+- af: pakket
+- id: paket
+- ar: حزمة
+- zh: 包
+- tpi: bundle (loanword retained)
+
+Error and action strings using this term were updated across locales for consistency (e.g., “Load Bundle”, “Error loading bundle”). Keep placeholders (e.g., `{error}`) intact when editing.
+
 ### Translation Tips
 
 - Avoid adding trailing spaces; spacing/punctuation should be part of the localized string.
