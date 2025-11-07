@@ -11,8 +11,41 @@ const REVIEW_THRESHOLD = 5;
 
 // Initialize
 window.addEventListener('DOMContentLoaded', async () => {
+  // Load previous locale if session exists
+  try {
+    const existingSession = await ipcRenderer.invoke('get-session');
+    const initialLocale = existingSession?.locale || 'en';
+    const localeSelect = document.getElementById('localeSelect');
+    if (localeSelect) {
+      localeSelect.value = initialLocale;
+    }
+    await window.i18n.loadLocale(initialLocale);
+  } catch {
+    await window.i18n.loadLocale('en');
+  }
+
   // Set up keyboard shortcuts
   document.addEventListener('keydown', handleKeyDown);
+
+  // Locale change listener
+  const localeSelect = document.getElementById('localeSelect');
+  if (localeSelect) {
+    localeSelect.addEventListener('change', async () => {
+      const newLocale = localeSelect.value;
+      await window.i18n.loadLocale(newLocale);
+      // Persist
+      await ipcRenderer.invoke('update-session', { locale: newLocale });
+      // Re-render dynamic text that isn't auto-bound
+      updateProgressIndicator();
+      if (!currentWord) {
+        // If welcome screen, ensure hints translated
+        const addWordHint = document.getElementById('addWordHint');
+        if (addWordHint && addWordHint.classList.contains('hidden') === false) {
+          // text will be replaced automatically if key didn't change
+        }
+      }
+    });
+  }
 });
 
 function handleKeyDown(e) {
@@ -42,7 +75,7 @@ async function loadBundle() {
     
     const result = await ipcRenderer.invoke('load-bundle', filePath);
     if (!result.success) {
-      alert(`Failed to load bundle: ${result.error}`);
+      alert(window.i18n.t('tm_failed_load_bundle', { error: result.error }));
       return;
     }
     
@@ -62,7 +95,7 @@ async function loadBundle() {
     renderGroups();
     
   } catch (error) {
-    alert(`Error loading bundle: ${error.message}`);
+    alert(window.i18n.t('tm_error_loading_bundle', { error: error.message }));
   }
 }
 
@@ -70,11 +103,11 @@ function initializeAudioVariants() {
   const select = document.getElementById('audioVariantSelect');
   select.innerHTML = '';
   
-  const variants = bundleSettings.audioFileVariants || [{ description: 'Default', suffix: '' }];
+  const variants = bundleSettings.audioFileVariants || [{ description: window.i18n.t('tm_defaultVariant'), suffix: '' }];
   variants.forEach((variant, index) => {
     const option = document.createElement('option');
     option.value = index;
-    option.textContent = variant.description || `Variant ${index + 1}`;
+    option.textContent = variant.description || window.i18n.t('tm_variant_number', { number: index + 1 });
     select.appendChild(option);
   });
   
@@ -88,7 +121,7 @@ function initializeAudioVariants() {
 function updateProgressIndicator() {
   const total = session.queue.length + getTotalAssignedWords();
   const completed = getTotalAssignedWords();
-  document.getElementById('progressIndicator').textContent = `Progress: ${completed} / ${total} words assigned`;
+  document.getElementById('progressIndicator').textContent = window.i18n.t('tm_progressFormat', { completed, total });
 }
 
 function getTotalAssignedWords() {
@@ -100,7 +133,7 @@ async function loadCurrentWord() {
   
   if (!currentWord) {
     // No more words
-    document.querySelector('.word-panel').innerHTML = '<h2>All words assigned!</h2><p>You can export your results or review your groups.</p>';
+    document.querySelector('.word-panel').innerHTML = `<h2>${window.i18n.t('tm_allWordsAssigned_title')}</h2><p>${window.i18n.t('tm_allWordsAssigned_message')}</p>`;
     return;
   }
   
@@ -110,7 +143,7 @@ async function loadCurrentWord() {
     const writtenParts = bundleSettings.writtenFormElements
       .map(elem => currentWord[elem])
       .filter(val => val != null && val !== '');
-    writtenFormLine.textContent = writtenParts.join(' ') || '(no written form)';
+  writtenFormLine.textContent = writtenParts.join(' ') || window.i18n.t('tm_no_written_form');
     writtenFormLine.style.display = 'block';
   } else {
     writtenFormLine.style.display = 'none';
@@ -183,7 +216,7 @@ async function confirmSpelling() {
   const userSpelling = input.value.trim();
   
   if (!userSpelling) {
-    alert('Please enter a spelling');
+    alert(window.i18n.t('tm_enter_spelling_alert'));
     return;
   }
   
@@ -216,10 +249,10 @@ function updateAddWordButton() {
   addWordBtn.disabled = !canAdd;
   
   if (!hasCurrentGroup) {
-    addWordHint.textContent = 'Please select or create a tone group first';
+    addWordHint.textContent = window.i18n.t('tm_addWord_hint_needGroup');
     addWordHint.classList.remove('hidden');
   } else if (needsSpelling && !hasSpelling) {
-    addWordHint.textContent = 'Please confirm spelling before adding word to group';
+    addWordHint.textContent = window.i18n.t('tm_addWord_hint_needSpelling');
     addWordHint.classList.remove('hidden');
   } else {
     addWordHint.classList.add('hidden');
@@ -284,7 +317,7 @@ async function addWordToCurrentGroup() {
   // Check if review is needed
   if (group && group.additionsSinceReview >= REVIEW_THRESHOLD && !group.requiresReview) {
     group.requiresReview = true;
-    alert(`Group ${group.groupNumber} has ${group.additionsSinceReview} new additions. Consider reviewing this group.`);
+    alert(window.i18n.t('tm_group_review_alert', { groupNumber: group.groupNumber, additions: group.additionsSinceReview }));
     await ipcRenderer.invoke('update-group', currentGroupId, { requiresReview: true });
   }
   
@@ -417,7 +450,7 @@ async function renderGroups() {
   const groupsList = document.getElementById('groupsList');
   
   if (session.groups.length === 0) {
-    groupsList.innerHTML = '<div class="no-bundle">No groups yet. Create a group to begin.</div>';
+    groupsList.innerHTML = `<div class="no-bundle">${window.i18n.t('tm_noGroups')}.</div>`;
     return;
   }
   
@@ -442,12 +475,12 @@ async function renderGroups() {
     
     const groupNumber = document.createElement('div');
     groupNumber.className = 'group-number';
-    groupNumber.textContent = `Group ${group.groupNumber}`;
+  groupNumber.textContent = window.i18n.t('tm_groupNumber', { number: group.groupNumber });
     header.appendChild(groupNumber);
     
     if (group.requiresReview) {
       const reviewBadge = document.createElement('button');
-      reviewBadge.textContent = '✓ Mark Reviewed';
+  reviewBadge.textContent = `✓ ${window.i18n.t('tm_markReviewed')}`;
       reviewBadge.className = 'secondary';
       reviewBadge.style.fontSize = '12px';
       reviewBadge.style.padding = '4px 8px';
@@ -475,7 +508,7 @@ async function renderGroups() {
       imageContainer.appendChild(img);
       
       const removeImgBtn = document.createElement('button');
-      removeImgBtn.textContent = 'Remove Image';
+  removeImgBtn.textContent = window.i18n.t('tm_removeImage');
       removeImgBtn.className = 'danger';
       removeImgBtn.style.fontSize = '12px';
       removeImgBtn.style.padding = '4px 8px';
@@ -488,7 +521,7 @@ async function renderGroups() {
     } else {
       const placeholder = document.createElement('div');
       placeholder.className = 'image-placeholder';
-      placeholder.textContent = 'Click to add image';
+  placeholder.textContent = window.i18n.t('tm_clickAddImage');
       placeholder.onclick = (e) => {
         e.stopPropagation();
         changeGroupImage(group.id);
@@ -585,7 +618,7 @@ async function renderGroups() {
       emptyMsg.style.color = '#999';
       emptyMsg.style.fontSize = '14px';
       emptyMsg.style.padding = '10px';
-      emptyMsg.textContent = 'No members yet';
+      emptyMsg.textContent = window.i18n.t('tm_noMembersYet');
       card.appendChild(emptyMsg);
     }
     
@@ -596,8 +629,8 @@ async function renderGroups() {
 async function exportBundle() {
   const result = await ipcRenderer.invoke('export-bundle');
   if (result.success) {
-    alert(`Export successful!\nSaved to: ${result.outputPath}`);
+    alert(window.i18n.t('tm_export_success', { outputPath: result.outputPath }));
   } else {
-    alert(`Export failed: ${result.error}`);
+    alert(window.i18n.t('tm_export_failed', { error: result.error }));
   }
 }

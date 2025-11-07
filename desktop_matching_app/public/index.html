@@ -345,27 +345,60 @@
       padding: 20px;
       color: #666;
     }
+
+    /* RTL adjustments */
+    [dir="rtl"] body { direction: rtl; }
+    [dir="rtl"] .header h1 { text-align: right; }
+    [dir="rtl"] .welcome-screen { text-align: right; }
+    [dir="rtl"] .groups-header { flex-direction: row-reverse; }
+    [dir="rtl"] .groups-header h2 { text-align: right; }
+    [dir="rtl"] .group-header { flex-direction: row-reverse; }
+    [dir="rtl"] .group-number { text-align: right; }
+    [dir="rtl"] .member-item { flex-direction: row-reverse; }
+    [dir="rtl"] .member-actions { flex-direction: row-reverse; }
+    [dir="rtl"] .spelling-display { flex-direction: row-reverse; }
+    [dir="rtl"] .spelling-input-group { flex-direction: row-reverse; }
+    [dir="rtl"] .audio-controls { flex-direction: row-reverse; }
   </style>
 </head>
 <body>
   <div class="header">
-    <h1>Tone Matching Desktop</h1>
-    <div class="progress-indicator" id="progressIndicator">No bundle loaded</div>
+    <h1 data-i18n="tm_appTitle">Tone Matching Desktop</h1>
+    <div style="display:flex; gap:20px; align-items:center; margin-top:8px;">
+      <div class="progress-indicator" id="progressIndicator" data-i18n="tm_noBundleLoaded">No bundle loaded</div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <label for="localeSelect" data-i18n="tm_languageLabel">Language</label>
+        <select id="localeSelect">
+          <option value="en">English</option>
+          <option value="id">Bahasa Indonesia</option>
+          <option value="tpi">Tok Pisin</option>
+          <option value="de">Deutsch</option>
+          <option value="fr">Français</option>
+          <option value="es">Español</option>
+          <option value="pt">Português</option>
+          <option value="it">Italiano</option>
+          <option value="nl">Nederlands</option>
+          <option value="af">Afrikaans</option>
+          <option value="ar">العربية</option>
+          <option value="zh">中文</option>
+        </select>
+      </div>
+    </div>
   </div>
 
   <div class="container">
     <!-- Main Panel -->
     <div class="main-panel">
       <div id="welcomeScreen" class="welcome-screen">
-        <h2>Welcome to Tone Matching Desktop</h2>
-        <p style="margin-bottom: 20px;">Load a .tncmp bundle to begin tone group assignment</p>
-        <button onclick="loadBundle()">Load Bundle</button>
+        <h2 data-i18n="tm_welcomeTitle">Welcome to Tone Matching Desktop</h2>
+        <p style="margin-bottom: 20px;" data-i18n="tm_welcomeMessage">Load a .tncmp bundle to begin tone group assignment</p>
+        <button onclick="loadBundle()" data-i18n="tm_loadBundle">Load Bundle</button>
       </div>
 
       <div id="workArea" class="hidden">
         <!-- Current Word Panel -->
         <div class="word-panel">
-          <h2 style="margin-bottom: 15px;">Current Word</h2>
+          <h2 style="margin-bottom: 15px;" data-i18n="tm_currentWord">Current Word</h2>
           
           <div class="word-display" id="wordDisplay">
             <div class="word-line" id="writtenFormLine"></div>
@@ -375,14 +408,14 @@
           <!-- Audio Controls -->
           <div class="audio-controls">
             <select id="audioVariantSelect"></select>
-            <button onclick="playAudio()">▶ Play</button>
+            <button onclick="playAudio()" data-i18n="tm_play">Play</button>
           </div>
 
           <!-- Spelling Section -->
           <div id="spellingSection" class="spelling-section hidden">
             <div id="spellingInput" class="spelling-input-group">
-              <input type="text" id="spellingTextInput" placeholder="Enter spelling..." />
-              <button onclick="confirmSpelling()">✓ Confirm</button>
+              <input type="text" id="spellingTextInput" data-i18n-placeholder="tm_enterSpelling_placeholder" placeholder="Enter spelling..." />
+              <button onclick="confirmSpelling()" data-i18n="tm_confirmSpelling">Confirm</button>
             </div>
             <div id="spellingDisplay" class="spelling-display hidden">
               <div class="spelling-text" id="spellingText"></div>
@@ -392,15 +425,15 @@
 
           <!-- Add Word Section -->
           <div class="add-word-section">
-            <button id="addWordBtn" onclick="addWordToCurrentGroup()" disabled>Add Word to Current Group</button>
-            <div id="addWordHint" class="helper-hint hidden">Please confirm spelling before adding word to group</div>
+            <button id="addWordBtn" onclick="addWordToCurrentGroup()" disabled data-i18n="tm_addWordToCurrentGroup">Add Word to Current Group</button>
+            <div id="addWordHint" class="helper-hint hidden" data-i18n="tm_addWord_hint_needSpelling">Please confirm spelling before adding word to group</div>
           </div>
         </div>
 
         <!-- Export Section -->
         <div class="export-section">
-          <button onclick="exportBundle()">Export Results</button>
-          <button class="secondary" onclick="loadBundle()" style="margin-left: 10px;">Load Different Bundle</button>
+          <button onclick="exportBundle()" data-i18n="tm_exportResults">Export Results</button>
+          <button class="secondary" onclick="loadBundle()" style="margin-left: 10px;" data-i18n="tm_loadDifferentBundle">Load Different Bundle</button>
         </div>
       </div>
     </div>
@@ -408,18 +441,19 @@
     <!-- Groups Panel -->
     <div class="groups-panel">
       <div class="groups-header">
-        <h2>Tone Groups</h2>
-        <button onclick="createNewGroup()">+ New Group</button>
+        <h2 data-i18n="tm_toneGroups">Tone Groups</h2>
+        <button onclick="createNewGroup()" data-i18n="tm_newGroup">+ New Group</button>
       </div>
       
       <div class="groups-list" id="groupsList">
-        <div class="no-bundle">No groups yet</div>
+        <div class="no-bundle" data-i18n="tm_noGroups">No groups yet</div>
       </div>
     </div>
   </div>
 
   <audio id="audioPlayer"></audio>
 
+  <script src="localization.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

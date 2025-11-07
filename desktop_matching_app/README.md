@@ -201,6 +201,50 @@ desktop_matching_app/
 - `update-group`: Update group properties
 - `export-bundle`: Export results as ZIP
 
+## Localization
+
+The desktop app now supports runtime localization. Strings are defined in JSON locale files under `public/locales/`.
+
+### How It Works
+
+- `public/localization.js` loads `locales/<locale>.json` and applies translations to any element with a `data-i18n` attribute.
+- Placeholder text is translated via `data-i18n-placeholder`.
+- Dynamic strings (alerts, progress, etc.) use the helper `window.i18n.t(key, vars)`.
+- The selected locale is persisted in the session (`session.locale`).
+- Missing keys fall back to English. If a key is missing in both the current locale and English, the key name itself is displayed.
+
+### Adding a New Locale
+
+1. Copy `public/locales/en.json` to `public/locales/<lang>.json` (e.g., `fr.json`).
+2. Replace the English values with translations. Keep interpolation tokens like `{number}`, `{completed}`, `{total}`, `{error}`, `{groupNumber}`, `{additions}`, `{outputPath}` intact.
+3. Add an `<option>` for the locale code to the language selector `<select id="localeSelect">` in `index.html` if not present.
+4. Run the app. Selecting the locale will reload translations immediately.
+
+### RTL (Right-to-Left) Support
+
+- The app automatically switches to RTL layout when the locale code is `ar`.
+- Logic: `localization.js` sets `<html dir="rtl">` if the locale is in the RTL set.
+- Minimal CSS overrides under `[dir="rtl"]` mirror flex row order for headers, member lists, spelling input, and audio controls.
+- To add another RTL language (e.g., Hebrew `he`, Persian `fa`):
+  1. Create `public/locales/he.json` (or `fa.json`).
+  2. Add the locale code to the `rtlLocales` set in `localization.js`.
+  3. Add an `<option value="he">Hebrew</option>` to the language selector.
+  4. Provide translations; layout will auto-mirror.
+
+If you need deeper RTL styling (e.g., icon direction changes or reorder of progress elements), extend the `[dir='rtl']` rules in `index.html` or move them to a dedicated stylesheet.
+
+### Translation Tips
+
+- Avoid adding trailing spaces; spacing/punctuation should be part of the localized string.
+- Preserve placeholders exactly (case-sensitive inside braces).
+- If a string shouldn't appear (e.g., feature not used), you may still leave the key with an empty value—English will be used as fallback.
+
+### Keys Overview
+
+See `en.json` for all current keys. Prefix `tm_` groups tone-matching flow strings and keeps parity with mobile app naming conventions.
+
+## License
+
 ## License
 
 Copyright (c) 2025. All rights reserved.
