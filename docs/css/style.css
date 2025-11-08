@@ -302,6 +302,24 @@ nav .container {
     color: var(--text-light);
 }
 
+/* Screenshot Images */
+.screenshot {
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+    text-align: center;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.screenshot img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+}
+
 /* Download Grid */
 .download-grid {
     display: grid;
