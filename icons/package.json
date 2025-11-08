@@ -1,0 +1,14 @@
+{
+  "name": "tone-matching-icons",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Icon generation for Tone Matching desktop Electron apps",
+  "scripts": {
+    "generate": "node generate.js"
+  },
+  "devDependencies": {
+    "icon-gen": "^2.0.0",
+    "sharp": "^0.33.4",
+    "png2icons": "^2.0.1"
+  }
+}

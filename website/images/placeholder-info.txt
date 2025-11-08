@@ -1,0 +1,39 @@
+Screenshot Placeholders Needed
+================================
+
+Please replace these text files with actual application screenshots:
+
+1. bundler-app-main.png (1280x800)
+   - Shows the Bundler App main interface
+   - Should include: XML file selection, audio folder selection, settings panel
+   
+2. desktop-matching-tone-classification.png (1280x800)
+   - Shows the Desktop Matching App during tone classification
+   - Should include: current word display, tone group cards, audio controls
+   
+3. mobile-app-tone-matching.png (480x800)
+   - Shows the Mobile App on Android during tone matching
+   - Should include: word display, tone groups with pictures, navigation buttons
+   
+4. mobile-app-tone-groups.png (480x800)
+   - Shows the tone group selection screen on mobile
+   - Should include: multiple tone group cards with drawings and member lists
+   
+5. comparison-app-results.png (1280x800)
+   - Shows the Comparison App results view
+   - Should include: statistics panel, disagreements table, merged groups section
+
+Recommended image format: PNG or JPG
+Recommended resolution: As noted above (or higher for retina displays)
+
+To add screenshots:
+1. Take screenshots of each application
+2. Save them with the filenames above
+3. Place them in the website/images/ directory
+4. The website will automatically display them (placeholders are styled to show these when present)
+
+For best results:
+- Use actual data (or realistic test data) in screenshots
+- Ensure UI elements are clearly visible
+- Capture representative use cases
+- Consider adding annotations or highlights to draw attention to key features

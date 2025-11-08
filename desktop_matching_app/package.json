@@ -7,8 +7,8 @@
     "start": "electron .",
     "debug": "ELECTRON_ENABLE_LOGGING=1 electron --remote-debugging-port=9224 .",
     "build": "electron-builder",
-  "build:mac": "electron-builder --mac dmg --universal",
-    "build:win": "electron-builder --win nsis",
+    "build:mac": "electron-builder --mac dmg --universal --publish never",
+    "build:win": "electron-builder --win nsis --publish never",
     "build:linux": "electron-builder --linux AppImage",
     "build:all": "electron-builder -m -w"
   },
@@ -40,6 +40,7 @@
       "public/**/*"
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -48,6 +49,7 @@
       ]
     },
     "mac": {
+      "icon": "build/icon.icns",
       "target": [
         {
           "target": "dmg",
@@ -56,7 +58,8 @@
       ]
     },
     "linux": {
-      "target": "AppImage"
+      "target": "AppImage",
+      "icon": "build/icon.png"
     }
   }
 }
