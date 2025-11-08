@@ -52,6 +52,17 @@ async function loadPersistedSettings() {
   document.getElementById('userSpellingElement').value = s.userSpellingElement || 'Orthographic';
   document.getElementById('toneGroupElement').value = s.toneGroupElement || 'SurfaceMelodyGroup';
   document.getElementById('bundleDescription').value = s.bundleDescription || '';
+  // Audio processing defaults
+  const ap = s.audioProcessing || {};
+  const apAutoTrim = !!ap.autoTrim;
+  const apAutoNorm = !!ap.autoNormalize;
+  const apFlac = !!ap.convertToFlac;
+  const autoTrimEl = document.getElementById('autoTrim');
+  const autoNormEl = document.getElementById('autoNormalize');
+  const flacEl = document.getElementById('convertToFlac');
+  if (autoTrimEl) autoTrimEl.checked = apAutoTrim;
+  if (autoNormEl) autoNormEl.checked = apAutoNorm;
+  if (flacEl) flacEl.checked = apFlac;
   const refs = Array.isArray(s.referenceNumbers) ? s.referenceNumbers : [];
   document.getElementById('referenceNumbers').value = refs.join('\n');
   if (s.glossElement) {
@@ -77,6 +88,7 @@ function attachChangePersistence() {
   [
     'showWrittenForm', 'showGloss', 'requireUserSpelling',
     'userSpellingElement', 'toneGroupElement', 'referenceNumbers', 'glossElement', 'bundleDescription',
+    'autoTrim', 'autoNormalize', 'convertToFlac',
   ].forEach((id) => {
     const el = byId(id);
     if (!el) return;
@@ -117,6 +129,11 @@ function collectCurrentSettings() {
         ? (document.getElementById('glossElement').value || null)
         : null),
       bundleDescription: document.getElementById('bundleDescription').value.trim(),
+      audioProcessing: {
+        autoTrim: !!document.getElementById('autoTrim')?.checked,
+        autoNormalize: !!document.getElementById('autoNormalize')?.checked,
+        convertToFlac: !!document.getElementById('convertToFlac')?.checked,
+      },
     },
   };
 }
@@ -249,6 +266,9 @@ function getSelectedWrittenFormElements() {
 async function createBundle() {
   const statusEl = document.getElementById('status');
   statusEl.style.display = 'none';
+  const procContainer = document.getElementById('procProgress');
+  const procBar = document.getElementById('procBar');
+  const procMeta = document.getElementById('procMeta');
   
   // Collect settings
   const showWrittenForm = document.getElementById('showWrittenForm').checked;
@@ -275,6 +295,11 @@ async function createBundle() {
       ? (document.getElementById('glossElement').value || null)
       : null),
     bundleDescription: document.getElementById('bundleDescription').value.trim(),
+    audioProcessing: {
+      autoTrim: !!document.getElementById('autoTrim')?.checked,
+      autoNormalize: !!document.getElementById('autoNormalize')?.checked,
+      convertToFlac: !!document.getElementById('convertToFlac')?.checked,
+    },
   };
 
   if (settings.showGloss && !settings.glossElement) {
@@ -292,6 +317,32 @@ async function createBundle() {
   // Disable button during creation
   document.getElementById('createBtn').disabled = true;
   document.getElementById('createBtn').textContent = 'Creating Bundle...';
+
+  // Listen for progress events
+  ipcRenderer.removeAllListeners('audio-processing-progress');
+  ipcRenderer.on('audio-processing-progress', (event, info) => {
+    if (!procContainer) return;
+    if (info.type === 'start') {
+      procContainer.style.display = 'block';
+      procBar.style.width = '0%';
+      procMeta.textContent = 'Starting…';
+    } else if (info.type === 'file-done' || info.type === 'file-error') {
+      const pct = Math.round((info.completed / info.total) * 100);
+      procBar.style.width = pct + '%';
+      const elapsedMs = Date.now() - info.startTime;
+      const perFile = elapsedMs / Math.max(1, info.completed);
+      const remainingMs = (info.total - info.completed) * perFile;
+      procMeta.textContent = `${pct}% — ${info.completed}/${info.total} — elapsed ${formatDuration(elapsedMs)} — remaining ${formatDuration(remainingMs)}`;
+    } else if (info.type === 'done') {
+      const pct = 100;
+      procBar.style.width = '100%';
+      const elapsedMs = info.elapsedMs;
+      procMeta.textContent = `100% — ${info.completed}/${info.total} — elapsed ${formatDuration(elapsedMs)} — remaining 0:00`;
+      setTimeout(() => { procContainer.style.display = 'none'; }, 1500);
+    } else if (info.type === 'skipped') {
+      procContainer.style.display = 'none';
+    }
+  });
   
   const result = await ipcRenderer.invoke('create-bundle', config);
   
@@ -315,6 +366,13 @@ async function createBundle() {
   } else {
     showStatus('error', `Failed to create bundle: ${result.error}`);
   }
+}
+
+function formatDuration(ms) {
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 function renderAudioVariants() {

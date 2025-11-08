@@ -78,7 +78,19 @@ The app will parse the file and display:
 
 **Element to store tone group assignment**: XML element name where tone group numbers will be saved (default: `SurfaceMelodyGroup`)
 
-### 6. Create Bundle
+### 6. Audio Processing (optional)
+
+Use the "Audio Processing" panel to enable bulk cleanup and format conversion:
+
+- Auto-trim silence: Removes leading/trailing near-silence (~ -50 dB, ≥200 ms) with light padding
+- Loudness normalize: Targets -16 LUFS with a safety limiter for more even playback loudness
+- Convert to FLAC: Outputs processed audio as lossless FLAC (smaller than WAV). If off, processed audio stays 16‑bit WAV
+
+If any option is enabled, the bundler uses ffmpeg via `modules/lite-normalizer.js` to batch process files. If processing encounters an error, the bundler falls back to original audio files so bundle creation can still complete.
+
+The resulting bundles play in both the Desktop Matching App and the Android Mobile App; both support FLAC playback.
+
+### 7. Create Bundle
 
 1. Click "Browse" next to "Output Bundle File" to choose where to save the zip file
 2. Click "Create Bundle"
@@ -98,8 +110,8 @@ bundle.zip
 ├── data.xml                # Dekereke XML file
 ├── settings.json           # Configuration settings
 └── audio/                  # Audio files folder
-    ├── 001_word.wav
-    ├── 002_word.wav
+  ├── 001_word.wav (or .flac if converted)
+  ├── 002_word.wav (or .flac if converted)
     └── ...
 ```
 

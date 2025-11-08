@@ -344,32 +344,38 @@ ipcMain.handle('get-audio-path', async (event, soundFile, suffix) => {
       fileName = soundFile + suffix;
     }
   }
-  
-  // Try exact match
-  let audioPath = path.join(audioDir, fileName);
-  if (fs.existsSync(audioPath)) {
-    return audioPath;
+
+  const candidates = new Set();
+  const addCandidate = (name) => candidates.add(name);
+  const replaceExt = (name, newExt) => {
+    const i = name.lastIndexOf('.');
+    return i === -1 ? `${name}${newExt}` : `${name.substring(0, i)}${newExt}`;
+  };
+
+  // Primary candidates
+  addCandidate(fileName);
+  addCandidate(soundFile);
+
+  // Extension fallbacks (support FLAC-processed bundles)
+  const maybeFlac1 = replaceExt(fileName, '.flac');
+  const maybeFlac2 = replaceExt(soundFile, '.flac');
+  addCandidate(maybeFlac1);
+  addCandidate(maybeFlac2);
+
+  // Try exact matches first
+  for (const name of candidates) {
+    const p = path.join(audioDir, name);
+    if (fs.existsSync(p)) return p;
   }
-  
-  // Try without suffix
-  if (suffix && suffix !== '') {
-    audioPath = path.join(audioDir, soundFile);
-    if (fs.existsSync(audioPath)) {
-      return audioPath;
-    }
-  }
-  
-  // Try case-insensitive lookup
+
+  // Case-insensitive lookup across all candidates
   try {
     const files = fs.readdirSync(audioDir);
-    const match = files.find(f => f.toLowerCase() === fileName.toLowerCase());
-    if (match) {
-      return path.join(audioDir, match);
-    }
-  } catch {
-    // ignore
-  }
-  
+    const lowerSet = new Set(Array.from(candidates).map((n) => n.toLowerCase()));
+    const match = files.find((f) => lowerSet.has(f.toLowerCase()));
+    if (match) return path.join(audioDir, match);
+  } catch {}
+
   return null;
 });
 

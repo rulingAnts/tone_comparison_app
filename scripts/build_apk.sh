@@ -11,7 +11,7 @@
 #   scripts/build_apk.sh --package com.example.starter_app
 #   scripts/build_apk.sh --no-launch
 #   scripts/build_apk.sh --uninstall-first
-#   scripts/build_apk.sh --release --no-install --out-dir dist --out-name StarterApp-0.1.0+1.apk
+#   scripts/build_apk.sh --release --no-install --out-dir dist --out-name ToneComparison-0.1.0+1.apk
 
 set -euo pipefail
 
@@ -47,7 +47,7 @@ Options:
   --no-analyze           Skip 'flutter analyze'
   --package <name>       Override Android package name (otherwise auto-detected)
   --out-dir <path>       Copy/rename built APK to this directory (created if missing)
-  --out-name <name>      Output filename (defaults to a descriptive name if only --out-dir is provided)
+  --out-name <name>      Output filename (defaults to ToneComparison-<version>.apk for release if only --out-dir is provided)
   -h, --help             Show this help
 EOF
 }
@@ -116,7 +116,7 @@ if [[ "$MODE" == "release" ]]; then
     fi
     [[ -z "$PKG" ]] && PKG="com.example.starter_app"
   fi
-  DEFAULT_NAME="StarterApp-${APP_VERSION_NAME}+${APP_VERSION_CODE}.apk"
+  DEFAULT_NAME="ToneComparison-${APP_VERSION_NAME}+${APP_VERSION_CODE}.apk"
   FINAL_NAME=${OUT_NAME:-"$DEFAULT_NAME"}
   DEST="$DEST_DIR/$FINAL_NAME"
   log "Copying APK to: $DEST"

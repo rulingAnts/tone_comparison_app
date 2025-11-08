@@ -8,6 +8,22 @@ const {
   toNumericRef,
   sortByNumericRef,
 } = require('./utils/refUtils');
+const { validateBundleAudio } = require('./validator');
+const pathResolve = (...p) => path.resolve(...p);
+
+// Prefer embedded normalizer to avoid brittle path resolution
+const liteNormalizer = (() => {
+  try {
+    const mod = require('./utils/lite-normalizer.js');
+    if (mod && (mod.normalizeBatch || mod.normalizeFile)) {
+      console.log('[bundler] lite-normalizer loaded (embedded)');
+      return mod;
+    }
+  } catch (e) {
+    console.warn('[bundler] lite-normalizer not available:', e.message);
+  }
+  return null;
+})();
 
 let mainWindow;
 let bundlerSettings = null; // persist UI selections and settings
@@ -39,6 +55,11 @@ function defaultBundlerSettings() {
       toneGroupIdElement: 'SurfaceMelodyGroupId',
       showGloss: false,
       glossElement: null,
+      audioProcessing: {
+        autoTrim: false,
+        autoNormalize: false,
+        convertToFlac: false,
+      },
     },
   };
 }
@@ -300,9 +321,9 @@ ipcMain.handle('create-bundle', async (event, config) => {
     // Optional: keep a stable numeric order without changing stored strings
     filteredRecords = sortByNumericRef(filteredRecords);
     
-    // Collect sound files for ALL variants
-    const soundFiles = new Set();
-    const missingSoundFiles = [];
+  // Collect sound files for ALL variants
+  const soundFiles = new Set();
+  const missingSoundFiles = [];
     
     for (const record of filteredRecords) {
       if (record.SoundFile) {
@@ -327,6 +348,108 @@ ipcMain.handle('create-bundle', async (event, config) => {
       }
     }
     
+    console.log('[bundler] Filtered records:', filteredRecords.length);
+    console.log('[bundler] Variants:', (settingsWithMeta.audioFileVariants || []).map(v => v.suffix));
+    console.log('[bundler] Collecting candidate audio files...');
+    console.log('[bundler] Found audio files:', soundFiles.size, 'Missing:', missingSoundFiles.length);
+
+    // Optionally process audio (trim/normalize/convert)
+    const ap = settingsWithMeta.audioProcessing || {};
+    const wantsProcessing = !!ap.autoTrim || !!ap.autoNormalize || !!ap.convertToFlac;
+    const outputFormat = ap.convertToFlac ? 'flac' : 'wav16';
+    let processedDir = null;
+    const processedNameMap = new Map(); // original filename -> processed filename (may change extension)
+
+    if (wantsProcessing && liteNormalizer) {
+      try {
+        // Build list of absolute inputs we intend to include (any extension)
+        const inputAbsList = Array.from(soundFiles)
+          .map((name) => path.join(audioFolder, name))
+          .filter((abs) => fs.existsSync(abs));
+
+        console.log('[bundler] Processing enabled. autoTrim:', !!ap.autoTrim, 'autoNormalize:', !!ap.autoNormalize, 'convertToFlac:', !!ap.convertToFlac);
+        console.log('[bundler] Files to process:', inputAbsList.length, 'Output format:', outputFormat);
+
+        if (inputAbsList.length > 0) {
+          processedDir = path.join(app.getPath('userData'), 'bundler-processed-audio', String(Date.now()));
+          fs.mkdirSync(processedDir, { recursive: true });
+
+          const tStart = Date.now();
+          mainWindow?.webContents?.send('audio-processing-progress', { type: 'start', total: inputAbsList.length, startTime: tStart });
+          let completedCount = 0;
+
+          const procResult = await liteNormalizer.normalizeBatch({
+            input: audioFolder,
+            output: processedDir,
+            files: inputAbsList,
+            autoNormalize: !!ap.autoNormalize,
+            autoTrim: !!ap.autoTrim,
+            outputFormat,
+            onProgress: (info) => {
+              if (info.type === 'file-done' || info.type === 'file-error') {
+                completedCount = info.completed ?? (completedCount + 1);
+                if (info.type === 'file-error') {
+                  console.warn('[bundler] ffmpeg error for', info.inFile, '->', info.error);
+                }
+                mainWindow?.webContents?.send('audio-processing-progress', {
+                  type: info.type,
+                  completed: info.completed ?? completedCount,
+                  total: info.total ?? inputAbsList.length,
+                  index: info.index,
+                  inFile: info.inFile,
+                  outFile: info.outFile,
+                  error: info.error,
+                  startTime: tStart,
+                });
+              }
+            }
+          });
+
+          // Build map of expected processed names for fast lookup when packaging
+          for (const abs of inputAbsList) {
+            const rel = path.relative(audioFolder, abs);
+            const outExt = outputFormat === 'wav16' ? '.wav' : `.${outputFormat}`;
+            const outName = /\.[^\/\.]+$/.test(rel)
+              ? rel.replace(/\.[^\/\.]+$/, outExt)
+              : (rel + outExt);
+            processedNameMap.set(rel.replace(/\\/g, '/'), outName.replace(/\\/g, '/'));
+          }
+
+          mainWindow?.webContents?.send('audio-processing-progress', {
+            type: 'done',
+            total: inputAbsList.length,
+            completed: inputAbsList.length,
+            elapsedMs: Date.now() - tStart,
+          });
+          console.log('[bundler] Processing complete. Output dir:', processedDir);
+          // Attach a simple processing report into archive later
+          var processingReport = {
+            outputFormat,
+            options: { autoTrim: !!ap.autoTrim, autoNormalize: !!ap.autoNormalize },
+            total: procResult.total,
+            completed: procResult.completed,
+            errors: procResult.errors,
+            results: (procResult.results || []).map((r) => ({
+              input: r.inputFile || r.input,
+              output: r.outputFile || r.output,
+              error: r.error ? String(r.error.message || r.error) : null,
+              stats: r.loudnormStats || null,
+            }))
+          };
+        }
+      } catch (procErr) {
+        console.warn('[bundler] Audio processing failed, falling back to originals:', procErr.message);
+        mainWindow?.webContents?.send('audio-processing-progress', { type: 'skipped' });
+        processedDir = null;
+      }
+    } else {
+      if (!liteNormalizer) {
+        console.warn('[bundler] Processing disabled because normalizer unavailable. enabled=', wantsProcessing);
+      } else {
+        console.log('[bundler] Processing disabled by user options.');
+      }
+    }
+
     // Create minimized XML with only filtered records and no prior tone grouping
   const tgKey = settingsWithMeta.toneGroupElement || 'SurfaceMelodyGroup';
   const tgIdKey = settingsWithMeta.toneGroupIdElement || 'SurfaceMelodyGroupId';
@@ -368,20 +491,52 @@ ipcMain.handle('create-bundle', async (event, config) => {
     
   // Add settings file (now includes audioFileVariants and legacy audioFileSuffix)
   archive.append(JSON.stringify(settingsWithMeta, null, 2), { name: 'settings.json' });
+  // Add processing report if available
+  if (typeof processingReport !== 'undefined') {
+    archive.append(JSON.stringify(processingReport, null, 2), { name: 'processing_report.json' });
+  }
     
-    // Add audio files
+    // Add audio files (prefer processed if available)
     for (const soundFile of soundFiles) {
-      const audioPath = path.join(audioFolder, soundFile);
-      archive.file(audioPath, { name: `audio/${soundFile}` });
+      const srcPath = path.join(audioFolder, soundFile);
+      let addPath = srcPath;
+      let addName = `audio/${soundFile}`; // default
+
+      if (processedDir && processedNameMap.has(soundFile)) {
+        const processedName = processedNameMap.get(soundFile);
+        const cand = path.join(processedDir, processedName);
+        if (fs.existsSync(cand)) {
+          addPath = cand;
+          addName = `audio/${processedName}`;
+        }
+      }
+
+      archive.file(addPath, { name: addName });
     }
     
     await archive.finalize();
     
+    // Post-build validation with extension fallbacks & variants
+    let finalMissing = missingSoundFiles;
+    try {
+      const variantsForCheck = settingsWithMeta.audioFileVariants || [{ suffix: '' }];
+      const validation = await validateBundleAudio({
+        records: filteredRecords,
+        audioFolder,
+        processedDir,
+        processedNameMap,
+        variants: variantsForCheck,
+      });
+      finalMissing = validation.missing || [];
+    } catch (vErr) {
+      console.warn('[bundler] validation failed:', vErr.message);
+    }
+
     return {
       success: true,
       recordCount: filteredRecords.length,
       audioFileCount: soundFiles.size,
-      missingSoundFiles: missingSoundFiles.length > 0 ? missingSoundFiles : null,
+      missingSoundFiles: finalMissing.length > 0 ? finalMissing : null,
     };
   } catch (error) {
     return {

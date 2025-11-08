@@ -78,24 +78,34 @@ class AudioService {
     final withSuffix = word.getSoundFilePath(audioSuffix);
     final withoutSuffix = word.getSoundFilePath(null);
 
-    // 1) exact with suffix
-    var p = path.join(audioDir, withSuffix);
-    if (await File(p).exists()) return p;
+    String replaceExt(String name, String newExt) {
+      final i = name.lastIndexOf('.');
+      return i == -1 ? '$name$newExt' : name.substring(0, i) + newExt;
+    }
 
-    // 2) exact without suffix
-    p = path.join(audioDir, withoutSuffix);
-    if (await File(p).exists()) return p;
+    final candidates = <String>{
+      withSuffix,
+      withoutSuffix,
+      replaceExt(withSuffix, '.flac'),
+      replaceExt(withoutSuffix, '.flac'),
+    };
 
-    // 3) case-insensitive search over directory
+    // 1) exact path exists
+    for (final name in candidates) {
+      final p = path.join(audioDir, name);
+      if (await File(p).exists()) return p;
+    }
+
+    // 2) case-insensitive search over directory
     try {
       final dir = Directory(audioDir);
       if (!await dir.exists()) return null;
       final entries = await dir.list(followLinks: false).toList();
-      final targets = {withSuffix.toLowerCase(), withoutSuffix.toLowerCase()};
+      final lowerTargets = candidates.map((e) => e.toLowerCase()).toSet();
       for (final e in entries) {
         if (e is File) {
           final name = path.basename(e.path).toLowerCase();
-          if (targets.contains(name)) {
+          if (lowerTargets.contains(name)) {
             return e.path;
           }
         }
