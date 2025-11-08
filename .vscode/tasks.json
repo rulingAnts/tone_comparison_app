@@ -59,6 +59,24 @@
       "problemMatcher": []
     },
 
+    // Electron: Desktop Matching app builds
+    {
+      "label": "Desktop Matching: Build mac (dmg)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build:mac"],
+      "options": { "cwd": "${workspaceFolder}/desktop_matching_app" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Desktop Matching: Build win (nsis)",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build:win"],
+      "options": { "cwd": "${workspaceFolder}/desktop_matching_app" },
+      "problemMatcher": []
+    },
+
     // Optional: start Electron with remote debugging for renderer attach
     {
       "label": "Bundler: Start (debug)",
