@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Deterministic Flutter APK build + optional install/launch helper (Starter Template)
+# Deterministic Flutter APK build + optional install/launch helper
 #
-# This script mirrors a working setup proven in the Scripture Media app.
-# It avoids Gradle configuration cache and keeps builds stable across environments.
+# Produces consistent release artifact naming aligned with desktop apps.
 #
 # Usage examples:
 #   scripts/build_apk.sh                    # Debug build, install to first device, and launch
@@ -29,13 +28,13 @@ PACKAGE_OVERRIDE=""
 OUT_DIR=""
 OUT_NAME=""
 
-log() { echo -e "\033[1;36m[starter_apk]\033[0m $*"; }
-warn() { echo -e "\033[1;33m[starter_apk][warn]\033[0m $*"; }
-err() { echo -e "\033[1;31m[starter_apk][error]\033[0m $*" 1>&2; }
+log() { echo -e "\033[1;36m[apk]\033[0m $*"; }
+warn() { echo -e "\033[1;33m[apk][warn]\033[0m $*"; }
+err() { echo -e "\033[1;31m[apk][error]\033[0m $*" 1>&2; }
 
 usage() {
   cat <<EOF
-Deterministic Flutter APK build + optional install/launch helper (Starter Template)
+Deterministic Flutter APK build + optional install/launch helper
 
 Options:
   --debug                Build debug APK (default)
@@ -47,7 +46,7 @@ Options:
   --no-analyze           Skip 'flutter analyze'
   --package <name>       Override Android package name (otherwise auto-detected)
   --out-dir <path>       Copy/rename built APK to this directory (created if missing)
-  --out-name <name>      Output filename (defaults to ToneComparison-<version>.apk for release if only --out-dir is provided)
+  --out-name <name>      Output filename (defaults to ToneMatching-${APP_VERSION_NAME}+${APP_VERSION_CODE}.apk for release)
   -h, --help             Show this help
 EOF
 }
@@ -116,7 +115,7 @@ if [[ "$MODE" == "release" ]]; then
     fi
     [[ -z "$PKG" ]] && PKG="com.example.starter_app"
   fi
-  DEFAULT_NAME="ToneComparison-${APP_VERSION_NAME}+${APP_VERSION_CODE}.apk"
+  DEFAULT_NAME="ToneMatching-${APP_VERSION_NAME}+${APP_VERSION_CODE}.apk"
   FINAL_NAME=${OUT_NAME:-"$DEFAULT_NAME"}
   DEST="$DEST_DIR/$FINAL_NAME"
   log "Copying APK to: $DEST"
