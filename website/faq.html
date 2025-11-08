@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Frequently Asked Questions about Tone Matching Suite">
+    <title>FAQ - Tone Matching Suite</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="container">
+                <div class="logo">
+                    <h1><a href="index.html" style="color: inherit; text-decoration: none;">Tone Matching Suite</a></h1>
+                </div>
+                <ul class="nav-links">
+                    <li><a href="index.html#overview">Overview</a></li>
+                    <li><a href="index.html#features">Features</a></li>
+                    <li><a href="index.html#workflow">Workflow</a></li>
+                    <li><a href="downloads.html">Downloads</a></li>
+                    <li><a href="getting-started.html">Getting Started</a></li>
+                </ul>
+            </div>
+        </nav>
+    </header>
+
+    <div class="page-header">
+        <div class="container">
+            <h1>Frequently Asked Questions</h1>
+            <p>Common questions about Tone Matching Suite</p>
+        </div>
+    </div>
+
+    <section class="section">
+        <div class="container content-section">
+            <h2>General Questions</h2>
+
+            <h3>What is Tone Matching Suite?</h3>
+            <p>Tone Matching Suite is a set of applications designed to help field linguists conduct participatory phonology analysis with native speakers. It allows speakers to classify words by their tone melodies without needing technical linguistic training.</p>
+
+            <h3>Who should use this software?</h3>
+            <p>This software is designed for:</p>
+            <ul>
+                <li><strong>Field linguists</strong> working on tone language documentation</li>
+                <li><strong>Language development teams</strong> (especially SIL) working on orthography development</li>
+                <li><strong>Native speakers</strong> serving as language consultants</li>
+                <li><strong>Phonology students</strong> conducting participatory research</li>
+            </ul>
+
+            <h3>Do I need to be a linguist to use this?</h3>
+            <p>No! The mobile and desktop matching apps are specifically designed for native speakers without linguistic training. They use pictures and sounds instead of technical terminology. However, the researcher tools (Bundler and Comparison apps) do assume some familiarity with phonology databases and linguistic fieldwork.</p>
+
+            <h3>Is it free?</h3>
+            <p>Yes, Tone Matching Suite is free and open source. You can use it, modify it, and share it freely.</p>
+
+            <h3>Does it work offline?</h3>
+            <p>Yes! All apps work completely offline. This is important for field work in areas with limited internet connectivity.</p>
+
+            <h2>About Dekereke Integration</h2>
+
+            <h3>What is Dekereke?</h3>
+            <p>Dekereke is a database application for managing phonological data in language documentation projects. It's widely used by field linguists, especially in the SIL community. Learn more at <a href="https://casali.canil.ca/" target="_blank" rel="noopener">https://casali.canil.ca/</a>.</p>
+
+            <h3>Do I need Dekereke to use Tone Matching Suite?</h3>
+            <p>While Tone Matching Suite is designed to work with Dekereke XML exports, the core requirement is having your phonological data in the right XML format. If you're not using Dekereke, you'll need to format your data to match the expected XML structure (see technical documentation).</p>
+
+            <h3>How do I export data from Dekereke?</h3>
+            <p>In Dekereke, export your phonology database as XML. Make sure to include the fields you want to display and that your audio file references are correct. Consult the Dekereke documentation for detailed export instructions.</p>
+
+            <h3>Can I import results back into Dekereke?</h3>
+            <p>The current version (1.0.0) exports results that can be manually reviewed and imported back into Dekereke. Automatic merge functionality is planned for a future release.</p>
+
+            <h2>Technical Questions</h2>
+
+            <h3>What platforms are supported?</h3>
+            <ul>
+                <li><strong>Desktop Apps:</strong> Windows 10+ (64-bit) and macOS 10.13+ (Intel and Apple Silicon)</li>
+                <li><strong>Mobile App:</strong> Android 5.0+ (Lollipop or later)</li>
+                <li><strong>Not supported:</strong> iOS, Linux (though it may work with some modifications)</li>
+            </ul>
+
+            <h3>What audio formats are supported?</h3>
+            <p>The apps support WAV audio files (16-bit or 24-bit). The Bundler app can optionally convert to FLAC for smaller file sizes.</p>
+
+            <h3>How much disk space do I need?</h3>
+            <ul>
+                <li><strong>Desktop Apps:</strong> ~150 MB per app</li>
+                <li><strong>Mobile App:</strong> ~50 MB</li>
+                <li><strong>Bundles:</strong> Size depends on number of words and audio quality (typically 10-100 MB)</li>
+            </ul>
+
+            <h3>Why isn't the mobile app on Google Play Store?</h3>
+            <p>This is a specialized research tool with a small user base. Publishing to app stores involves ongoing fees and compliance requirements. You can safely install the APK directly (called "sideloading"), which is common for research and field work tools.</p>
+
+            <h3>Is it safe to install from an APK?</h3>
+            <p>Yes, as long as you download from the official source (this website or the GitHub releases page). We provide SHA256 checksums so you can verify the file hasn't been tampered with.</p>
+
+            <h2>Workflow Questions</h2>
+
+            <h3>How many words should be in a bundle?</h3>
+            <p>Start with 20-50 words for your first bundle. Once speakers are comfortable with the process, you can work with larger sets (100-200 words). Very large sets (500+) should be split into multiple bundles by grammatical category or syllable pattern.</p>
+
+            <h3>How long does tone matching take?</h3>
+            <p>It depends on the number of words and the speaker's familiarity with the process:</p>
+            <ul>
+                <li><strong>First session:</strong> ~2-3 minutes per word (includes learning the interface)</li>
+                <li><strong>After practice:</strong> ~30-60 seconds per word</li>
+                <li><strong>50 word bundle:</strong> Typically 30-60 minutes</li>
+            </ul>
+
+            <h3>Should I use the mobile app or desktop app?</h3>
+            <p><strong>Mobile app is better for:</strong></p>
+            <ul>
+                <li>Native speakers working independently</li>
+                <li>Speakers who aren't comfortable with computers</li>
+                <li>Field work away from offices</li>
+                <li>Situations where you want speakers to use their own device</li>
+            </ul>
+            <p><strong>Desktop app is better for:</strong></p>
+            <ul>
+                <li>Researchers doing the classification themselves</li>
+                <li>Speakers who are comfortable with computers</li>
+                <li>Office-based work with reliable power</li>
+                <li>Larger screens for easier viewing</li>
+            </ul>
+
+            <h3>How many speakers should analyze the same data?</h3>
+            <p>We recommend 2-3 speakers for validation. If all agree, you have strong confidence. If they disagree significantly, it may indicate:</p>
+            <ul>
+                <li>Need for clearer instructions</li>
+                <li>Dialectal variation</li>
+                <li>Complex tone system requiring more analysis</li>
+                <li>Phonological conditioning not yet understood</li>
+            </ul>
+
+            <h3>What if speakers disagree on tone groups?</h3>
+            <p>Disagreements are valuable data! They might indicate:</p>
+            <ul>
+                <li>Free variation in the language</li>
+                <li>Dialectal differences</li>
+                <li>Phonetic similarity that's hard to distinguish</li>
+                <li>Phonological processes that need further investigation</li>
+            </ul>
+            <p>Use the Comparison app to identify disagreements, then discuss with speakers or conduct further acoustic analysis.</p>
+
+            <h3>Can I reorganize tone groups after creating them?</h3>
+            <p>The current version (1.0.0) doesn't have built-in reorganization features. If you need to reorganize:</p>
+            <ul>
+                <li>Use the Comparison app to identify merge candidates</li>
+                <li>Create a new bundle with refined instructions</li>
+                <li>Have speakers re-classify problematic words</li>
+            </ul>
+            <p>A reorganization interface is planned for a future release.</p>
+
+            <h2>Troubleshooting</h2>
+
+            <h3>The Bundler app says "No data_form elements found"</h3>
+            <p>Your XML file structure doesn't match what's expected. Check that:</p>
+            <ul>
+                <li>You exported from Dekereke correctly</li>
+                <li>The XML has a <code>&lt;phon_data&gt;</code> root element</li>
+                <li>Inside are multiple <code>&lt;data_form&gt;</code> elements</li>
+            </ul>
+
+            <h3>Many audio files are reported as missing</h3>
+            <p>Check that:</p>
+            <ul>
+                <li>Audio file names match exactly what's in the XML <code>&lt;SoundFile&gt;</code> elements</li>
+                <li>Files are in the folder you selected</li>
+                <li>File extensions are correct (.wav, not .WAV or .mp3)</li>
+                <li>You've set the correct audio suffix if your files have variations</li>
+            </ul>
+
+            <h3>The mobile app won't install</h3>
+            <p>Make sure:</p>
+            <ul>
+                <li>You've enabled "Install from Unknown Sources" in Android Settings → Security</li>
+                <li>You have enough storage space (~50 MB)</li>
+                <li>Your Android version is 5.0 or later</li>
+                <li>The APK file downloaded completely (check file size)</li>
+            </ul>
+
+            <h3>Audio won't play in the matching app</h3>
+            <p>Try these steps:</p>
+            <ul>
+                <li>Check that your device volume is turned up</li>
+                <li>Verify the bundle was created successfully</li>
+                <li>Try recreating the bundle</li>
+                <li>Check that the audio files play in another app (e.g., Windows Media Player)</li>
+            </ul>
+
+            <h3>The app crashed or froze</h3>
+            <p>First steps:</p>
+            <ul>
+                <li>Close and restart the app</li>
+                <li>Check that you have enough disk space</li>
+                <li>Try with a smaller bundle (fewer words)</li>
+            </ul>
+            <p>If problems persist, please report the issue on GitHub with details about what you were doing when it crashed.</p>
+
+            <h3>Bundle file is very large</h3>
+            <p>Bundle size depends on:</p>
+            <ul>
+                <li>Number of words</li>
+                <li>Audio file quality (16-bit vs 24-bit)</li>
+                <li>Audio file length</li>
+            </ul>
+            <p>The Bundler app can enable audio processing to trim silence and convert to FLAC, which typically reduces file size by 50-70%.</p>
+
+            <h2>Getting Help</h2>
+
+            <h3>Where can I get more help?</h3>
+            <ul>
+                <li>Read the <a href="getting-started.html">Getting Started Guide</a></li>
+                <li>Review the <a href="workflow-guide.html">Detailed Workflow Guide</a></li>
+                <li>Check the GitHub repository <a href="https://github.com/rulingAnts/tone_comparison_app" target="_blank" rel="noopener">documentation</a></li>
+                <li>Report bugs or issues on <a href="https://github.com/rulingAnts/tone_comparison_app/issues" target="_blank" rel="noopener">GitHub Issues</a></li>
+            </ul>
+
+            <h3>Can I contribute to the project?</h3>
+            <p>Yes! The project is open source. You can:</p>
+            <ul>
+                <li>Report bugs and suggest features</li>
+                <li>Contribute code improvements</li>
+                <li>Help with documentation</li>
+                <li>Share your experience using the tool</li>
+            </ul>
+            <p>See the CONTRIBUTING.md file in the GitHub repository for details.</p>
+
+            <h3>Who developed this software?</h3>
+            <p>Tone Matching Suite was developed for field linguists and native speakers working on tone language documentation. Special thanks to the SIL community and Dekereke developers for the standards this tool builds upon.</p>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2025 Tone Matching Suite. Built for field linguists and native speakers working on tone language documentation.</p>
+            <p><a href="https://github.com/rulingAnts/tone_comparison_app" target="_blank" rel="noopener">View on GitHub</a></p>
+        </div>
+    </footer>
+</body>
+</html>
