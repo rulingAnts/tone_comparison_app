@@ -23,6 +23,24 @@ npm install
 npm start
 ```
 
+## Icon Assets
+
+Desktop application icons are generated centrally with the script `icons/generate.js`.
+
+Variants derived from the Android launcher artwork:
+- `desktop_matching_app`: Base icon (three tone contour strokes + check mark).
+- `bundler_app`: Base icon + open box overlay (represents packaging bundles).
+- `comparison_app`: Base icon + balance scale overlay (represents weighing/comparing speakers).
+
+Regenerate all desktop icons:
+```bash
+cd icons
+npm install   # only needed after dependency changes
+npm run generate
+```
+
+Outputs are written to each app's `build/` directory as `icon.png`, `icon.icns`, and `icon.ico` consumed by `electron-builder` during packaging.
+
 ## Workflow
 
 ### 1. Create Bundle (Bundler App)
