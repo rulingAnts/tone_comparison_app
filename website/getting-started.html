@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Getting Started with Tone Matching Suite - A simple guide for field linguists">
+    <title>Getting Started - Tone Matching Suite</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="container">
+                <div class="logo">
+                    <h1><a href="index.html" style="color: inherit; text-decoration: none;">Tone Matching Suite</a></h1>
+                </div>
+                <ul class="nav-links">
+                    <li><a href="index.html#overview">Overview</a></li>
+                    <li><a href="index.html#features">Features</a></li>
+                    <li><a href="index.html#workflow">Workflow</a></li>
+                    <li><a href="downloads.html">Downloads</a></li>
+                    <li><a href="getting-started.html">Getting Started</a></li>
+                </ul>
+            </div>
+        </nav>
+    </header>
+
+    <div class="page-header">
+        <div class="container">
+            <h1>Getting Started</h1>
+            <p>A simple guide to using Tone Matching Suite</p>
+        </div>
+    </div>
+
+    <section class="section">
+        <div class="container content-section">
+            <h2>Before You Begin</h2>
+            <p>This guide assumes you have:</p>
+            <ul>
+                <li>A Dekereke phonology database with your language data</li>
+                <li>Audio recordings (WAV files) for the words in your database</li>
+                <li>A computer (Windows or Mac) for the researcher tasks</li>
+                <li>Optionally: An Android phone or tablet for native speakers</li>
+            </ul>
+
+            <div class="info-box">
+                <h3>Don't Have Dekereke?</h3>
+                <p>While Tone Matching Suite is designed to work with Dekereke databases, you can learn more about Dekereke at <a href="https://casali.canil.ca/" target="_blank" rel="noopener">https://casali.canil.ca/</a>. Dekereke is a specialized phonology database tool used by many field linguists for language documentation.</p>
+            </div>
+
+            <h2>Quick Start: Three Steps</h2>
+
+            <!-- Step 1 -->
+            <div style="margin-top: 3rem;">
+                <div class="step-number">1</div>
+                <h3>Prepare Your Data Bundle (Researcher)</h3>
+                
+                <p><strong>Time needed:</strong> 5-15 minutes</p>
+                <p><strong>Tool:</strong> Tone Matching Bundler (Windows or Mac)</p>
+
+                <h4>What You'll Do:</h4>
+                <ol>
+                    <li><strong>Download and install</strong> the Bundler app from the <a href="downloads.html#bundler">Downloads page</a></li>
+                    <li><strong>Launch the app</strong> - it will open in a new window</li>
+                    <li><strong>Select your XML file</strong>
+                        <ul>
+                            <li>Click "Browse" next to "XML File"</li>
+                            <li>Navigate to your Dekereke export file</li>
+                            <li>The app will read your file and show how many records it found</li>
+                        </ul>
+                    </li>
+                    <li><strong>Select your audio folder</strong>
+                        <ul>
+                            <li>Click "Browse" next to "Audio Folder"</li>
+                            <li>Navigate to the folder with your WAV files</li>
+                            <li>Make sure your audio file names match what's in your XML</li>
+                        </ul>
+                    </li>
+                    <li><strong>Configure settings</strong>
+                        <ul>
+                            <li>Choose which fields to display (e.g., phonetic form, gloss)</li>
+                            <li>Decide if you want speakers to type their own spelling</li>
+                        </ul>
+                    </li>
+                    <li><strong>Create the bundle</strong>
+                        <ul>
+                            <li>Click "Browse" next to output file</li>
+                            <li>Choose where to save (e.g., "nouns_bundle.tncmp")</li>
+                            <li>Click "Create Bundle"</li>
+                            <li>Wait for processing to complete</li>
+                        </ul>
+                    </li>
+                </ol>
+
+                <div class="screenshot-placeholder">
+                    <p>📸 Screenshot: Bundler App Main Interface</p>
+                    <p class="placeholder-note">(Screenshot placeholder - showing XML selection, audio folder, and settings)</p>
+                </div>
+
+                <div class="info-box">
+                    <h3>Tips for Bundler App</h3>
+                    <ul>
+                        <li><strong>Start small:</strong> For your first bundle, try 20-50 words from one grammatical category</li>
+                        <li><strong>Check file names:</strong> If you get "missing audio" warnings, check that your audio files match the names in your XML</li>
+                        <li><strong>Organize by pattern:</strong> Create separate bundles for different syllable patterns (CVC, CVCV, etc.)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Step 2 -->
+            <div style="margin-top: 4rem;">
+                <div class="step-number">2</div>
+                <h3>Classify the Tones (Native Speaker)</h3>
+                
+                <p><strong>Time needed:</strong> 30-90 minutes (depending on number of words)</p>
+                <p><strong>Tool:</strong> Tone Matching Mobile (Android) OR Desktop (Windows/Mac)</p>
+
+                <h4>Choose Your Platform:</h4>
+                
+                <div style="margin-left: 2rem; margin-top: 1rem;">
+                    <h4>Option A: Mobile App (Recommended for Native Speakers)</h4>
+                    <p><strong>Best for:</strong> Native speakers working independently, field work, languages where speakers may not be comfortable with computers</p>
+                    
+                    <ol>
+                        <li><strong>Install the app</strong>
+                            <ul>
+                                <li>Download the APK from <a href="downloads.html#mobile">Downloads page</a></li>
+                                <li>Transfer to Android device via USB or file sharing</li>
+                                <li>Install (you may need to enable "Unknown Sources")</li>
+                            </ul>
+                        </li>
+                        <li><strong>Transfer the bundle</strong>
+                            <ul>
+                                <li>Copy the .tncmp file to your device</li>
+                                <li>Remember where you saved it</li>
+                            </ul>
+                        </li>
+                        <li><strong>Load and start</strong>
+                            <ul>
+                                <li>Open the app</li>
+                                <li>Tap "Load Bundle"</li>
+                                <li>Select your .tncmp file</li>
+                                <li>Wait for it to load</li>
+                                <li>Tap "Start Tone Matching"</li>
+                            </ul>
+                        </li>
+                    </ol>
+                </div>
+
+                <div style="margin-left: 2rem; margin-top: 2rem;">
+                    <h4>Option B: Desktop App</h4>
+                    <p><strong>Best for:</strong> Researchers doing the classification themselves, speakers comfortable with computers</p>
+                    
+                    <ol>
+                        <li><strong>Install and launch</strong> Desktop Matching from <a href="downloads.html#desktop">Downloads page</a></li>
+                        <li><strong>Load the bundle</strong> by clicking "Open Bundle" and selecting your .tncmp file</li>
+                        <li><strong>Start matching</strong> when prompted</li>
+                    </ol>
+                </div>
+
+                <h4>The Matching Process:</h4>
+                <ol>
+                    <li><strong>First word:</strong>
+                        <ul>
+                            <li>Listen to the audio</li>
+                            <li>Draw a simple picture representing the tone melody</li>
+                            <li>Take a photo (or upload an image on desktop)</li>
+                            <li>This creates your first tone group</li>
+                        </ul>
+                    </li>
+                    <li><strong>Each following word:</strong>
+                        <ul>
+                            <li>Listen to the audio</li>
+                            <li>Look at your existing tone groups</li>
+                            <li>Listen to example words in each group</li>
+                            <li>Does it sound like one of these groups?
+                                <ul>
+                                    <li><strong>Yes:</strong> Tap that group to add the word</li>
+                                    <li><strong>No:</strong> Create a new group with a new drawing</li>
+                                </ul>
+                            </li>
+                        </ul>
+                    </li>
+                    <li><strong>Continue until all words are classified</strong></li>
+                    <li><strong>Export your results</strong> when finished</li>
+                </ol>
+
+                <div class="screenshot-placeholder">
+                    <p>📸 Screenshot: Mobile App Tone Matching Screen</p>
+                    <p class="placeholder-note">(Screenshot placeholder - showing current word, tone group options, and controls)</p>
+                </div>
+
+                <div class="info-box">
+                    <h3>Tips for Tone Matching</h3>
+                    <ul>
+                        <li><strong>Trust your ears:</strong> Don't overthink it - does it sound the same?</li>
+                        <li><strong>Listen multiple times:</strong> Replay audio as often as needed</li>
+                        <li><strong>Compare carefully:</strong> Play words in existing groups before creating new ones</li>
+                        <li><strong>Take breaks:</strong> Your ears get tired - take a break every 30-60 minutes</li>
+                        <li><strong>Make drawings distinctive:</strong> They don't need to be artistic, just different from each other</li>
+                    </ul>
+                </div>
+
+                <div class="info-box">
+                    <h3>Drawing Ideas for Tone Patterns</h3>
+                    <ul>
+                        <li>Rising tone: ↗️ arrow pointing up</li>
+                        <li>Falling tone: ↘️ arrow pointing down</li>
+                        <li>High level: __‾‾__ straight line at top</li>
+                        <li>Low level: __ __ straight line at bottom</li>
+                        <li>Complex contours: ∿∿ wavy lines</li>
+                        <li>Or use simple symbols: ⭐ 🌙 ☀️ 🌊 ⛰️</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Step 3 -->
+            <div style="margin-top: 4rem;">
+                <div class="step-number">3</div>
+                <h3>Review the Results (Researcher)</h3>
+                
+                <p><strong>Time needed:</strong> 15-30 minutes</p>
+                <p><strong>Tool:</strong> Tone Matching Comparison (Windows or Mac)</p>
+
+                <h4>If You Have One Speaker:</h4>
+                <ol>
+                    <li>Review the exported results file</li>
+                    <li>Check that the tone groupings make sense</li>
+                    <li>Update your Dekereke database with the tone group assignments</li>
+                </ol>
+
+                <h4>If You Have Multiple Speakers:</h4>
+                <ol>
+                    <li><strong>Install and launch</strong> the Comparison app from <a href="downloads.html#comparison">Downloads page</a></li>
+                    <li><strong>Load all result files</strong> from different speakers</li>
+                    <li><strong>Review statistics:</strong>
+                        <ul>
+                            <li>How many words have full agreement?</li>
+                            <li>How many have disagreements?</li>
+                            <li>What's the overall agreement percentage?</li>
+                        </ul>
+                    </li>
+                    <li><strong>Examine disagreements:</strong>
+                        <ul>
+                            <li>Which words did speakers classify differently?</li>
+                            <li>Do you need to discuss these with speakers?</li>
+                            <li>Should some tone groups be subdivided?</li>
+                        </ul>
+                    </li>
+                    <li><strong>Look for merged groups:</strong>
+                        <ul>
+                            <li>Groups with >80% word overlap</li>
+                            <li>Different exemplars for same tone melody</li>
+                            <li>Choose which exemplar to use going forward</li>
+                        </ul>
+                    </li>
+                </ol>
+
+                <div class="screenshot-placeholder">
+                    <p>📸 Screenshot: Comparison App Results View</p>
+                    <p class="placeholder-note">(Screenshot placeholder - showing agreement statistics and disagreement table)</p>
+                </div>
+
+                <div class="info-box">
+                    <h3>Interpreting Results</h3>
+                    <ul>
+                        <li><strong>High agreement (>90%):</strong> Strong confirmation of tone groups</li>
+                        <li><strong>Moderate agreement (70-90%):</strong> Generally good, investigate disagreements</li>
+                        <li><strong>Low agreement (&lt;70%):</strong> May need clearer instructions, more speakers, or indicates complex tone system</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Next Steps -->
+            <div style="margin-top: 4rem;">
+                <h2>What's Next?</h2>
+                
+                <h3>Expand Your Analysis</h3>
+                <ul>
+                    <li>Create bundles for different grammatical categories</li>
+                    <li>Analyze different syllable patterns separately</li>
+                    <li>Compare across dialects or language varieties</li>
+                    <li>Work with multiple native speakers for validation</li>
+                </ul>
+
+                <h3>Use Your Results</h3>
+                <p>The tone group information can be used for:</p>
+                <ul>
+                    <li><strong>Phonological analysis:</strong> Identify surface tone melodies and patterns</li>
+                    <li><strong>Orthography development:</strong> Determine which tones need to be marked in writing</li>
+                    <li><strong>Dictionary work:</strong> Classify lexical entries by tonal patterns</li>
+                    <li><strong>Teaching materials:</strong> Create materials organized by tone complexity</li>
+                    <li><strong>Language documentation:</strong> Record native speaker classifications for posterity</li>
+                </ul>
+
+                <h3>Learn More</h3>
+                <ul>
+                    <li><a href="workflow-guide.html">Detailed Workflow Guide</a> - Step-by-step instructions for each app</li>
+                    <li><a href="faq.html">FAQ</a> - Common questions and troubleshooting</li>
+                    <li><a href="https://github.com/rulingAnts/tone_comparison_app" target="_blank" rel="noopener">GitHub Repository</a> - Source code and technical documentation</li>
+                </ul>
+            </div>
+
+            <!-- Best Practices -->
+            <div style="margin-top: 4rem;">
+                <h2>Best Practices</h2>
+
+                <h3>For Researchers</h3>
+                <ul>
+                    <li><strong>Start small:</strong> Begin with a homogeneous set (one grammatical category, one syllable pattern)</li>
+                    <li><strong>Test first:</strong> Try the bundle yourself before giving it to speakers</li>
+                    <li><strong>Prepare visually:</strong> Create picture-based instructions for speakers who may not read well</li>
+                    <li><strong>Use multiple speakers:</strong> 2-3 speakers analyzing the same set validates results</li>
+                    <li><strong>Document everything:</strong> Keep notes about which speakers did which bundles</li>
+                </ul>
+
+                <h3>For Native Speakers</h3>
+                <ul>
+                    <li><strong>Take your time:</strong> There's no rush - accuracy is more important than speed</li>
+                    <li><strong>Listen carefully:</strong> Play the audio multiple times before deciding</li>
+                    <li><strong>Compare thoroughly:</strong> Check existing groups before creating new ones</li>
+                    <li><strong>Rest when tired:</strong> Ear fatigue is real - stop when you're tired</li>
+                    <li><strong>Ask questions:</strong> If you're unsure about the process, ask the researcher</li>
+                </ul>
+            </div>
+
+            <!-- Troubleshooting -->
+            <div style="margin-top: 4rem;">
+                <h2>Common Issues</h2>
+
+                <h3>Bundler App Problems</h3>
+                
+                <h4>"No data_form elements found"</h4>
+                <p>Your XML file may not be formatted correctly. It needs to have a <code>&lt;phon_data&gt;</code> root element with <code>&lt;data_form&gt;</code> child elements. Check that you exported from Dekereke correctly.</p>
+
+                <h4>"Missing audio files"</h4>
+                <p>The audio file names in your XML don't match the files in your audio folder. Check:</p>
+                <ul>
+                    <li>Are the audio files in the folder you selected?</li>
+                    <li>Do the file names exactly match what's in the XML <code>&lt;SoundFile&gt;</code> elements?</li>
+                    <li>Do you need to use the "Audio Suffix" setting?</li>
+                </ul>
+
+                <h3>Mobile/Desktop App Problems</h3>
+                
+                <h4>"Failed to load bundle"</h4>
+                <p>The bundle file may be corrupted or incomplete. Try creating it again with the Bundler app.</p>
+
+                <h4>"Audio file not found"</h4>
+                <p>The bundle is missing some audio files. Recreate the bundle, making sure all audio files are present.</p>
+
+                <h3>Still Having Trouble?</h3>
+                <ul>
+                    <li>Check the <a href="faq.html">FAQ page</a> for more solutions</li>
+                    <li>Review the detailed <a href="workflow-guide.html">Workflow Guide</a></li>
+                    <li>Report issues on <a href="https://github.com/rulingAnts/tone_comparison_app/issues" target="_blank" rel="noopener">GitHub</a></li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2025 Tone Matching Suite. Built for field linguists and native speakers working on tone language documentation.</p>
+            <p><a href="https://github.com/rulingAnts/tone_comparison_app" target="_blank" rel="noopener">View on GitHub</a></p>
+        </div>
+    </footer>
+</body>
+</html>
