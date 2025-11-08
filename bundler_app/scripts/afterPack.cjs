@@ -46,10 +46,14 @@ module.exports = async function afterPack(context) {
     fs.mkdirSync(winTargetDir, { recursive: true });
     const exePath = path.join(winTargetDir, 'ffmpeg.exe');
     if (!fs.existsSync(exePath)) {
-      // Extract from repo-local zip
-      const zipPath = path.join(process.cwd(), '..', 'win32-resources', 'ffmpeg-static.zip');
-      if (!fs.existsSync(zipPath)) {
-        console.warn('[afterPack] ffmpeg-static.zip not found at', zipPath);
+      // Look for a zip colocated with bundler_app first, fallback to repo root
+      const zipCandidates = [
+        path.join(process.cwd(), 'win32-resources', 'ffmpeg-static.zip'),
+        path.join(process.cwd(), '..', 'win32-resources', 'ffmpeg-static.zip'),
+      ];
+      const zipPath = zipCandidates.find(p => fs.existsSync(p));
+      if (!zipPath) {
+        console.warn('[afterPack] ffmpeg-static.zip not found in candidates:', zipCandidates.join(', '));
       } else {
         try {
           const zip = new AdmZip(zipPath);
@@ -67,12 +71,19 @@ module.exports = async function afterPack(context) {
       }
     }
 
-    // Optionally prune non-win ffprobe binaries to save space
+    // Prune non-win platforms to save space
+    pruneOtherPlatforms(ffmpegStaticDir, ['win32']);
     pruneOtherPlatforms(ffprobeStaticDir, ['win32']);
+    // Keep only x64 under win32 for both ffmpeg and ffprobe
+    pruneOtherArchitectures(path.join(ffmpegStaticDir, 'win32'), ['x64']);
+    pruneOtherArchitectures(path.join(ffprobeStaticDir, 'win32'), ['x64']);
   } else if (platform === 'darwin') {
     // Keep darwin binaries; prune others for size
     pruneOtherPlatforms(ffmpegStaticDir, ['darwin']);
     pruneOtherPlatforms(ffprobeStaticDir, ['darwin']);
+    // On mac, keep both architectures to support universal builds
+    pruneOtherArchitectures(path.join(ffmpegStaticDir, 'darwin'), ['x64', 'arm64', 'universal']);
+    pruneOtherArchitectures(path.join(ffprobeStaticDir, 'darwin'), ['x64', 'arm64', 'universal']);
   } else {
     // Linux: keep linux only
     pruneOtherPlatforms(ffmpegStaticDir, ['linux']);
@@ -99,5 +110,27 @@ function pruneOtherPlatforms(rootDir, keep) {
     }
   } catch (e) {
     console.warn('[afterPack] prune error:', e.message);
+  }
+}
+
+function pruneOtherArchitectures(platformDir, keepArchs) {
+  try {
+    if (!platformDir || !fs.existsSync(platformDir)) return;
+    const entries = fs.readdirSync(platformDir);
+    for (const e of entries) {
+      const full = path.join(platformDir, e);
+      if (fs.statSync(full).isDirectory()) {
+        if (!keepArchs.includes(e)) {
+          try {
+            fs.rmSync(full, { recursive: true, force: true });
+            console.log('[afterPack] Pruned arch', full);
+          } catch (err) {
+            console.warn('[afterPack] Failed to prune arch', full, err.message);
+          }
+        }
+      }
+    }
+  } catch (e) {
+    // It's okay if the layout doesn't have arch subfolders (some packages use universal paths)
   }
 }

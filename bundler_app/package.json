@@ -41,6 +41,13 @@
       "public/**/*",
       "src/utils/lite-normalizer.js"
     ],
+    "extraResources": [
+      {
+        "from": "win32-resources/ffmpeg-static.zip",
+        "to": "win32-resources/ffmpeg-static.zip",
+        "filter": ["ffmpeg-static.zip"]
+      }
+    ],
     "afterPack": "scripts/afterPack.cjs",
     "asarUnpack": [
       "**/node_modules/ffmpeg-static/**",
