@@ -154,6 +154,24 @@
       display: none;
     }
 
+    /* Processing progress */
+    .proc-container { margin-top: 16px; display: none; }
+    .proc-label { font-size: 13px; color: #555; margin-bottom: 6px; }
+    .progress {
+      width: 100%;
+      height: 10px;
+      background: #eee;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: #007bff;
+      transition: width 0.2s ease;
+    }
+    .proc-meta { font-size: 12px; color: #666; margin-top: 6px; }
+
     .status.success {
       background: #d4edda;
       color: #155724;
@@ -282,7 +300,32 @@
     </div>
 
     <div class="section">
-      <h2>6. Output</h2>
+      <h2>6. Audio Processing</h2>
+      <div class="form-group">
+        <div class="checkbox-group">
+          <input type="checkbox" id="autoTrim">
+          <label for="autoTrim">Auto-trim silence (with padding)</label>
+        </div>
+        <div class="info">Removes leading and trailing near-silence. Safe defaults (-50 dB, ~200ms).</div>
+      </div>
+      <div class="form-group">
+        <div class="checkbox-group">
+          <input type="checkbox" id="autoNormalize">
+          <label for="autoNormalize">Loudness normalize (-16 LUFS, limiter)</label>
+        </div>
+        <div class="info">Balances levels across files using two-pass LUFS normalization (-16 LUFS) with a safety limiter.</div>
+      </div>
+      <div class="form-group">
+        <div class="checkbox-group">
+          <input type="checkbox" id="convertToFlac">
+          <label for="convertToFlac">Convert to FLAC</label>
+        </div>
+        <div class="info">Lossless, smaller than WAV, Android-friendly. If off, processed output stays WAV.</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>7. Output</h2>
       <div class="form-group">
         <label>Output Bundle File</label>
         <div class="file-selector">
@@ -295,6 +338,15 @@
         <button class="btn-secondary" onclick="loadProfile()">Load Profile</button>
         <span class="info">Profiles store all settings including a persistent Bundle ID.</span>
       </div>
+    </div>
+
+    <div id="procProgress" class="proc-container" aria-live="polite">
+      <div class="proc-label">Processing audio…</div>
+      <div class="progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div id="procBar" class="progress-bar"></div>
+      </div>
+      <div id="procMeta" class="proc-meta">0% — 0/0 — elapsed 0:00 — remaining 0:00</div>
+      <div id="procCancelHint" class="proc-meta" aria-live="off" style="color:#888;">To cancel processing, quit the application.</div>
     </div>
 
     <button class="btn-success create-bundle-btn" onclick="createBundle()" id="createBtn" disabled>

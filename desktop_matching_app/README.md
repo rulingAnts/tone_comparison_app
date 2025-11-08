@@ -10,6 +10,7 @@ The Desktop Matching App enables tone group assignment and review on desktop com
 
 - **Import .tncmp bundles** created by the Bundler App
 - **Audio playback** with multiple variant support
+- **Audio playback** with multiple variant support (WAV and FLAC)
 - **Spelling gate** for user-entered orthography (when required)
 - **Tone group creation** with exemplar images
 - **Word assignment** to tone groups
@@ -159,6 +160,7 @@ If you get a "Windows protected your PC" warning:
 - Ensure audio files exist in the bundle's `audio/` folder
 - Check that file names match the `SoundFile` values in the XML
 - Try different audio variants from the dropdown
+- If the bundle was processed to FLAC, the app supports `.flac` files out of the box
 
 ### Bundle Won't Load
 
