@@ -7,7 +7,7 @@
     "start": "electron .",
     "debug": "ELECTRON_ENABLE_LOGGING=1 electron --remote-debugging-port=9225 .",
     "build": "electron-builder",
-    "build:mac": "electron-builder --mac dmg",
+  "build:mac": "electron-builder --mac dmg --universal",
     "build:win": "electron-builder --win nsis",
     "build:linux": "electron-builder --linux AppImage",
     "build:all": "electron-builder -m -w"
@@ -40,7 +40,12 @@
       "public/**/*"
     ],
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
     },
     "mac": {
       "target": [
