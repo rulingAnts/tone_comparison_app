@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Detailed workflow guide for Tone Matching Suite">
+    <title>Workflow Guide - Tone Matching Suite</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="container">
+                <div class="logo">
+                    <h1><a href="index.html" style="color: inherit; text-decoration: none;">Tone Matching Suite</a></h1>
+                </div>
+                <ul class="nav-links">
+                    <li><a href="index.html#overview">Overview</a></li>
+                    <li><a href="index.html#features">Features</a></li>
+                    <li><a href="index.html#workflow">Workflow</a></li>
+                    <li><a href="downloads.html">Downloads</a></li>
+                    <li><a href="getting-started.html">Getting Started</a></li>
+                </ul>
+            </div>
+        </nav>
+    </header>
+
+    <div class="page-header">
+        <div class="container">
+            <h1>Detailed Workflow Guide</h1>
+            <p>Complete instructions for each application</p>
+        </div>
+    </div>
+
+    <section class="section">
+        <div class="container content-section">
+            <h2>Overview</h2>
+            <p>This guide provides detailed step-by-step instructions for using each application in the Tone Matching Suite. For a quick introduction, see the <a href="getting-started.html">Getting Started Guide</a>.</p>
+
+            <div class="info-box">
+                <h3>Workflow Summary</h3>
+                <ol>
+                    <li><strong>Prepare Data:</strong> Use Bundler App to create a .tncmp bundle</li>
+                    <li><strong>Classify Tones:</strong> Use Mobile or Desktop Matching App to group words</li>
+                    <li><strong>Compare Results:</strong> Use Comparison App to analyze multiple speakers</li>
+                </ol>
+            </div>
+
+            <h2>1. Tone Matching Bundler</h2>
+            <p><strong>Purpose:</strong> Prepare data bundles from your Dekereke database</p>
+            <p><strong>User:</strong> Researcher</p>
+            <p><strong>Input:</strong> Dekereke XML file + WAV audio files</p>
+            <p><strong>Output:</strong> .tncmp bundle file</p>
+
+            <h3>Step-by-Step Instructions</h3>
+
+            <h4>Step 1: Launch the Application</h4>
+            <ol>
+                <li>Download and install from the <a href="downloads.html#bundler">Downloads page</a></li>
+                <li>Open "Tone Matching Bundler" from your Applications folder or Start Menu</li>
+                <li>The main window will appear with several sections</li>
+            </ol>
+
+            <h4>Step 2: Select Your XML File</h4>
+            <ol>
+                <li>Click the <strong>"Browse"</strong> button next to "XML File"</li>
+                <li>Navigate to your Dekereke export file (should end in .xml)</li>
+                <li>Select the file and click "Open"</li>
+                <li>The app will parse the file and show:
+                    <ul>
+                        <li>Number of records found</li>
+                        <li>Available fields (columns) in your data</li>
+                    </ul>
+                </li>
+            </ol>
+
+            <div class="info-box">
+                <h3>Expected XML Structure</h3>
+                <p>Your XML should have:</p>
+                <ul>
+                    <li>Root element: <code>&lt;phon_data&gt;</code></li>
+                    <li>Child elements: <code>&lt;data_form&gt;</code> (one per word)</li>
+                    <li>Inside each data_form: fields like <code>&lt;Phonetic&gt;</code>, <code>&lt;Gloss&gt;</code>, <code>&lt;SoundFile&gt;</code>, etc.</li>
+                </ul>
+            </div>
+
+            <h4>Step 3: Configure Display Settings</h4>
+            <ol>
+                <li>In the "Display Settings" section, choose which fields to show to speakers:
+                    <ul>
+                        <li>Check boxes next to fields you want displayed (e.g., "Phonetic", "Orthographic")</li>
+                        <li>These will appear as the "written form" when speakers are matching</li>
+                    </ul>
+                </li>
+                <li>Decide if you want to show written forms at all:
+                    <ul>
+                        <li>Check "Show written forms" for speakers who can read</li>
+                        <li>Uncheck for audio-only mode (speakers only hear words)</li>
+                    </ul>
+                </li>
+            </ol>
+
+            <h4>Step 4: Configure Audio Settings</h4>
+            <ol>
+                <li>Click <strong>"Browse"</strong> next to "Audio Folder"</li>
+                <li>Select the folder containing your WAV audio files</li>
+                <li><strong>Audio Suffix (Optional):</strong>
+                    <ul>
+                        <li>If your audio files have additional text in the name, enter it here</li>
+                        <li>Example: XML says "word.wav", but files are "word-phon.wav" → enter "-phon"</li>
+                        <li>Leave blank if file names match exactly</li>
+                    </ul>
+                </li>
+                <li><strong>Audio Processing (Optional):</strong>
+                    <ul>
+                        <li>Check "Enable audio processing" to trim silence and convert to FLAC</li>
+                        <li>This reduces bundle size by 50-70%</li>
+                        <li>Adds processing time but recommended for mobile distribution</li>
+                    </ul>
+                </li>
+            </ol>
+
+            <h4>Step 5: Filter Records (Optional)</h4>
+            <ol>
+                <li>In the "Reference Numbers" text box, enter specific record IDs (one per line)</li>
+                <li>Only these records will be included in the bundle</li>
+                <li>Leave blank to include all records</li>
+                <li><strong>Use this to:</strong>
+                    <ul>
+                        <li>Work with specific grammatical categories</li>
+                        <li>Limit to certain syllable patterns</li>
+                        <li>Create focused bundles for training</li>
+                    </ul>
+                </li>
+            </ol>
+
+            <h4>Step 6: Configure User Input Settings</h4>
+            <ol>
+                <li><strong>"Require user to type spelling":</strong>
+                    <ul>
+                        <li>Check this if you want speakers to enter their own orthography</li>
+                        <li>Uncheck if spelling is not needed</li>
+                    </ul>
+                </li>
+                <li><strong>"User spelling element":</strong>
+                    <ul>
+                        <li>Enter the XML element name where user spelling should be stored</li>
+                        <li>Example: "UserSpelling" or "NativeSpeakerOrthography"</li>
+                    </ul>
+                </li>
+                <li><strong>"Tone group element":</strong>
+                    <ul>
+                        <li>Enter the XML element name where tone group assignments should be stored</li>
+                        <li>Example: "ToneGroup" or "ToneMelody"</li>
+                    </ul>
+                </li>
+            </ol>
+
+            <h4>Step 7: Create the Bundle</h4>
+            <ol>
+                <li>Click <strong>"Browse"</strong> next to "Output Bundle File"</li>
+                <li>Choose a location and filename (e.g., "cvcv_nouns_bundle.tncmp")</li>
+                <li>Click <strong>"Create Bundle"</strong></li>
+                <li>Wait for processing:
+                    <ul>
+                        <li>Progress bar will show status</li>
+                        <li>With audio processing: may take several minutes</li>
+                        <li>Without audio processing: usually under 1 minute</li>
+                    </ul>
+                </li>
+                <li>Review the results:
+                    <ul>
+                        <li>Any missing audio files will be reported</li>
+                        <li>Success message will confirm bundle creation</li>
+                    </ul>
+                </li>
+            </ol>
+
+            <div class="screenshot-placeholder">
+                <p>📸 Screenshot: Bundler App Main Interface</p>
+                <p class="placeholder-note">(Screenshot placeholder - showing all configuration sections)</p>
+            </div>
+
+            <h3>Tips for Bundler App</h3>
+            <ul>
+                <li><strong>Test with small bundles first:</strong> Start with 20-30 words to test your configuration</li>
+                <li><strong>Organize by pattern:</strong> Create separate bundles for different syllable patterns or categories</li>
+                <li><strong>Name meaningfully:</strong> Use descriptive names like "cvcv_nouns_speaker1.tncmp"</li>
+                <li><strong>Keep originals:</strong> Don't delete your original XML and audio files</li>
+            </ul>
+
+            <h2>2. Tone Matching Desktop</h2>
+            <p><strong>Purpose:</strong> Classify words by tone melody</p>
+            <p><strong>User:</strong> Native speaker or researcher</p>
+            <p><strong>Input:</strong> .tncmp bundle file</p>
+            <p><strong>Output:</strong> Results zip file with tone group assignments</p>
+
+            <h3>Step-by-Step Instructions</h3>
+
+            <h4>Step 1: Load a Bundle</h4>
+            <ol>
+                <li>Launch "Tone Matching Desktop"</li>
+                <li>Click <strong>"Open Bundle"</strong></li>
+                <li>Select your .tncmp file</li>
+                <li>Wait for loading (usually a few seconds)</li>
+                <li>The bundle information will appear</li>
+            </ol>
+
+            <h4>Step 2: Start Tone Matching</h4>
+            <ol>
+                <li>Click <strong>"Start Tone Matching"</strong></li>
+                <li>The first word will be displayed</li>
+            </ol>
+
+            <h4>Step 3: Create Your First Tone Group</h4>
+            <ol>
+                <li><strong>Listen:</strong> Click the play button to hear the word</li>
+                <li><strong>Draw:</strong> On paper, draw a simple picture representing the tone melody</li>
+                <li><strong>Upload:</strong> Click the camera/upload button to select your drawing image</li>
+                <li><strong>Type (if required):</strong> Enter your spelling of the word</li>
+                <li><strong>Confirm:</strong> The first tone group is created!</li>
+            </ol>
+
+            <h4>Step 4: Classify Remaining Words</h4>
+            <p>For each subsequent word:</p>
+
+            <ol>
+                <li><strong>Listen to current word:</strong>
+                    <ul>
+                        <li>Click play button (▶️) next to current word</li>
+                        <li>Listen as many times as needed</li>
+                    </ul>
+                </li>
+                <li><strong>Review existing tone groups:</strong>
+                    <ul>
+                        <li>Scroll through tone group cards</li>
+                        <li>Each shows: group number, your drawing, member words</li>
+                        <li>Click play on member words to compare</li>
+                    </ul>
+                </li>
+                <li><strong>Make a decision:</strong>
+                    <ul>
+                        <li><strong>Matches existing group:</strong> Click that tone group card</li>
+                        <li><strong>Doesn't match any:</strong> Click "Create New Group" at bottom
+                            <ul>
+                                <li>Draw a new picture</li>
+                                <li>Upload the image</li>
+                                <li>Type spelling if required</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </li>
+                <li><strong>Automatic advance:</strong> App moves to next word</li>
+            </ol>
+
+            <h4>Step 5: Review (Optional)</h4>
+            <ol>
+                <li>Click <strong>"Review"</strong> button (if available)</li>
+                <li>Look through each tone group</li>
+                <li>Play all words in a group to verify consistency</li>
+                <li>Adjust if needed (current version has limited reorganization)</li>
+            </ol>
+
+            <h4>Step 6: Export Results</h4>
+            <ol>
+                <li>When all words are classified, click <strong>"Export"</strong> or download icon</li>
+                <li>Choose a save location</li>
+                <li>A zip file will be created containing:
+                    <ul>
+                        <li>Updated XML with tone group assignments</li>
+                        <li>CSV summary of classifications</li>
+                        <li>Metadata about the session</li>
+                    </ul>
+                </li>
+            </ol>
+
+            <div class="screenshot-placeholder">
+                <p>📸 Screenshot: Desktop Matching App - Tone Classification Screen</p>
+                <p class="placeholder-note">(Screenshot placeholder - showing current word, tone group options, and audio controls)</p>
+            </div>
+
+            <h3>Tips for Tone Matching</h3>
+            <ul>
+                <li><strong>Don't rush:</strong> Take time to listen and compare carefully</li>
+                <li><strong>Replay often:</strong> It's normal to listen 3-5 times before deciding</li>
+                <li><strong>Trust your ears:</strong> If it sounds the same, it probably is</li>
+                <li><strong>When in doubt, create new:</strong> It's easier to merge groups later than split them</li>
+                <li><strong>Take breaks:</strong> Every 30-60 minutes, rest your ears</li>
+                <li><strong>Save periodically:</strong> Some versions auto-save, but manual saves are good practice</li>
+            </ul>
+
+            <h2>3. Tone Matching Mobile</h2>
+            <p><strong>Purpose:</strong> Classify words by tone melody on Android devices</p>
+            <p><strong>User:</strong> Native speaker</p>
+            <p><strong>Input:</strong> .tncmp bundle file</p>
+            <p><strong>Output:</strong> Results zip file</p>
+
+            <p><em>The workflow is very similar to the Desktop app, with these mobile-specific considerations:</em></p>
+
+            <h3>Additional Mobile Steps</h3>
+
+            <h4>Installation</h4>
+            <ol>
+                <li>Enable "Install from Unknown Sources" in Settings → Security</li>
+                <li>Download the APK file</li>
+                <li>Open the APK file to install</li>
+                <li>Grant camera and storage permissions</li>
+            </ol>
+
+            <h4>Loading Bundles</h4>
+            <ol>
+                <li>Transfer .tncmp file to device via:
+                    <ul>
+                        <li>USB connection</li>
+                        <li>Cloud storage (Dropbox, Google Drive)</li>
+                        <li>File sharing apps</li>
+                        <li>Email attachment</li>
+                    </ul>
+                </li>
+                <li>Remember the location (Downloads folder, etc.)</li>
+                <li>In app, tap "Load Bundle" and navigate to file</li>
+            </ol>
+
+            <h4>Taking Photos of Drawings</h4>
+            <ol>
+                <li>When creating a tone group, tap camera icon</li>
+                <li>Grant camera permission if prompted</li>
+                <li>Draw your tone pattern on paper</li>
+                <li>Hold phone steady and take photo</li>
+                <li>Make sure the drawing is clear and well-lit</li>
+            </ol>
+
+            <h4>Exporting Results</h4>
+            <ol>
+                <li>Tap export/download icon when finished</li>
+                <li>Results saved to device storage</li>
+                <li>Transfer back to researcher via:
+                    <ul>
+                        <li>USB connection</li>
+                        <li>Cloud upload</li>
+                        <li>File sharing</li>
+                        <li>Email</li>
+                    </ul>
+                </li>
+            </ol>
+
+            <div class="screenshot-placeholder">
+                <p>📸 Screenshot: Mobile App - Tone Group Selection</p>
+                <p class="placeholder-note">(Screenshot placeholder - showing mobile interface with tone groups)</p>
+            </div>
+
+            <h2>4. Tone Matching Comparison</h2>
+            <p><strong>Purpose:</strong> Compare tone classifications from multiple speakers</p>
+            <p><strong>User:</strong> Researcher</p>
+            <p><strong>Input:</strong> Multiple result zip files (from different speakers)</p>
+            <p><strong>Output:</strong> Comparison analysis</p>
+
+            <h3>Step-by-Step Instructions</h3>
+
+            <h4>Step 1: Launch and Load Results</h4>
+            <ol>
+                <li>Open "Tone Matching Comparison"</li>
+                <li>Click <strong>"Load Result Files"</strong></li>
+                <li>Select 2 or more result zip files (use Ctrl/Cmd+Click for multiple)</li>
+                <li>Click "Open"</li>
+                <li>Wait for analysis (usually a few seconds)</li>
+            </ol>
+
+            <h4>Step 2: Review Overall Statistics</h4>
+            <p>The app displays:</p>
+            <ul>
+                <li><strong>Total words:</strong> Number of words analyzed</li>
+                <li><strong>Full agreement:</strong> Words where all speakers agreed</li>
+                <li><strong>Disagreements:</strong> Words where speakers differed</li>
+                <li><strong>Agreement percentage:</strong> Overall consensus level</li>
+            </ul>
+
+            <h4>Step 3: Examine Disagreements</h4>
+            <ol>
+                <li>Scroll to "Disagreements" section</li>
+                <li>Table shows:
+                    <ul>
+                        <li>Word identifier (reference number or gloss)</li>
+                        <li>Tone group assigned by each speaker</li>
+                        <li>Whether disagreement is significant</li>
+                    </ul>
+                </li>
+                <li>For each disagreement, consider:
+                    <ul>
+                        <li>Do speakers need more instruction?</li>
+                        <li>Is this dialectal variation?</li>
+                        <li>Should this tone group be subdivided?</li>
+                        <li>Does the word have contextual variation?</li>
+                    </ul>
+                </li>
+            </ol>
+
+            <h4>Step 4: Review Merged Groups</h4>
+            <ol>
+                <li>Scroll to "Merged Groups" section</li>
+                <li>Shows groups with >80% word overlap but different exemplars</li>
+                <li>Example:
+                    <ul>
+                        <li>Speaker 1: Group 3, exemplar "mountain"</li>
+                        <li>Speaker 2: Group 7, exemplar "river"</li>
+                        <li>95% of words match</li>
+                    </ul>
+                </li>
+                <li>Decision: Which exemplar to use for final classification?</li>
+            </ol>
+
+            <h4>Step 5: Export Comparison Report</h4>
+            <ol>
+                <li>Click <strong>"Export Report"</strong> (if available)</li>
+                <li>Save as CSV or text file</li>
+                <li>Use for documentation and further analysis</li>
+            </ol>
+
+            <div class="screenshot-placeholder">
+                <p>📸 Screenshot: Comparison App - Analysis Results</p>
+                <p class="placeholder-note">(Screenshot placeholder - showing statistics and disagreement table)</p>
+            </div>
+
+            <h3>Interpreting Results</h3>
+
+            <h4>Agreement Levels</h4>
+            <ul>
+                <li><strong>&gt;90% agreement:</strong> Excellent - strong validation of tone groups</li>
+                <li><strong>70-90% agreement:</strong> Good - investigate disagreements for insights</li>
+                <li><strong>50-70% agreement:</strong> Moderate - may need clearer instructions or more training</li>
+                <li><strong>&lt;50% agreement:</strong> Low - consider redesigning approach or working with more homogeneous data sets</li>
+            </ul>
+
+            <h4>Common Patterns</h4>
+            <ul>
+                <li><strong>High agreement overall with a few outliers:</strong> Normal - investigate the outliers specifically</li>
+                <li><strong>Consistent disagreement on certain words:</strong> May indicate phonological conditioning or free variation</li>
+                <li><strong>One speaker differs from all others:</strong> May need additional training or clarification</li>
+            </ul>
+
+            <h2>Complete Workflow Example</h2>
+
+            <div class="info-box">
+                <h3>Case Study: Analyzing CVCV Nouns</h3>
+                
+                <p><strong>Background:</strong> Field linguist working with a tone language, wants to determine which tone melodies need to be marked in orthography.</p>
+
+                <h4>Phase 1: Preparation (1 hour)</h4>
+                <ol>
+                    <li>Export CVCV nouns from Dekereke (83 words)</li>
+                    <li>Verify all audio files present</li>
+                    <li>Use Bundler to create bundle with audio processing</li>
+                    <li>Test bundle by loading in Desktop app</li>
+                    <li>Transfer to 3 speakers' Android devices</li>
+                </ol>
+
+                <h4>Phase 2: Classification (3 sessions, 1 hour each)</h4>
+                <ol>
+                    <li>Each speaker works independently</li>
+                    <li>Classifies all 83 words into tone groups</li>
+                    <li>Returns result file to researcher</li>
+                </ol>
+
+                <h4>Phase 3: Analysis (30 minutes)</h4>
+                <ol>
+                    <li>Load all 3 result files into Comparison app</li>
+                    <li>Find 92% agreement</li>
+                    <li>Identify 7 disagreement words</li>
+                    <li>Find 2 merged groups (same melody, different exemplars)</li>
+                </ol>
+
+                <h4>Phase 4: Follow-up (1 hour)</h4>
+                <ol>
+                    <li>Meet with speakers to discuss disagreements</li>
+                    <li>Resolve 5 through clarification</li>
+                    <li>Discover 2 represent free variation</li>
+                    <li>Choose exemplars for merged groups</li>
+                </ol>
+
+                <h4>Result:</h4>
+                <ul>
+                    <li>Identified 4 distinct tone melodies on CVCV nouns</li>
+                    <li>High speaker agreement validates findings</li>
+                    <li>Ready to update Dekereke database</li>
+                    <li>Informed orthography decision: mark 2 of 4 tones</li>
+                </ul>
+            </div>
+
+            <h2>Next Steps</h2>
+            <p>After completing your tone matching workflow:</p>
+            <ul>
+                <li>Update your Dekereke database with tone group assignments</li>
+                <li>Use results for phonological analysis and orthography decisions</li>
+                <li>Create additional bundles for other grammatical categories or syllable patterns</li>
+                <li>Consider multi-dialect comparison using the same process</li>
+            </ul>
+
+            <p>For more information, see:</p>
+            <ul>
+                <li><a href="getting-started.html">Getting Started Guide</a> - Quick introduction</li>
+                <li><a href="faq.html">FAQ</a> - Common questions and troubleshooting</li>
+                <li><a href="https://github.com/rulingAnts/tone_comparison_app" target="_blank" rel="noopener">GitHub Repository</a> - Technical documentation</li>
+            </ul>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2025 Tone Matching Suite. Built for field linguists and native speakers working on tone language documentation.</p>
+            <p><a href="https://github.com/rulingAnts/tone_comparison_app" target="_blank" rel="noopener">View on GitHub</a></p>
+        </div>
+    </footer>
+</body>
+</html>
