@@ -33,5 +33,9 @@
   "tm_group_review_alert": "O grupo {groupNumber} tem {additions} novas entradas. Revise-o.",
   "tm_export_success": "Exportação bem-sucedida! Salvo em: {outputPath}",
   "tm_export_failed": "Falha na exportação: {error}",
-  "tm_languageLabel": "Idioma"
+  "tm_languageLabel": "Idioma",
+  "tm_resetSession": "Redefinir sessão",
+  "tm_reset_success": "A sessão foi redefinida",
+  "tm_reset_failed": "Falha ao redefinir: {error}",
+  "tm_reimport_success": "{count} grupos de tons reimportados da exportação anterior. Você pode continuar revisando e editando."
 }

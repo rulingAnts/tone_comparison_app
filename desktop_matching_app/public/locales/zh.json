@@ -33,5 +33,9 @@
   "tm_group_review_alert": "第 {groupNumber} 组新增 {additions} 个条目，请复查。",
   "tm_export_success": "导出成功！保存到：{outputPath}",
   "tm_export_failed": "导出失败: {error}",
-  "tm_languageLabel": "语言"
+  "tm_languageLabel": "语言",
+  "tm_resetSession": "Reset Session",
+  "tm_reset_success": "Session has been reset",
+  "tm_reset_failed": "Failed to reset session: {error}",
+  "tm_reimport_success": "Re-imported {count} tone groups from previous export. You can continue reviewing and editing."
 }

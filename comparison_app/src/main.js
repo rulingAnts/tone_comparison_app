@@ -292,6 +292,7 @@ function analyzeResults(results) {
   // Build word-to-groups map for each speaker
   const speakerAssignments = results.map(result => {
     const assignments = new Map();
+    const unassigned = [];
     
     result.records.forEach(record => {
       const reference = normalizeRefString(record.Reference);
@@ -299,20 +300,24 @@ function analyzeResults(results) {
       
       if (toneGroup) {
         assignments.set(reference, parseInt(toneGroup));
+      } else {
+        unassigned.push(reference);
       }
     });
     
     return {
       speaker: result.speaker,
       assignments,
+      unassigned,
       toneGroups: result.toneGroups,
     };
   });
   
-  // Find all unique words across speakers
+  // Find all unique words across speakers (both assigned and unassigned)
   const allWords = new Set();
   speakerAssignments.forEach(sa => {
     sa.assignments.forEach((_, ref) => allWords.add(normalizeRefString(ref)));
+    sa.unassigned.forEach(ref => allWords.add(normalizeRefString(ref)));
   });
   
   // Analyze agreement for each word
@@ -344,6 +349,15 @@ function analyzeResults(results) {
   const agreedWords = wordAnalysis.filter(w => w.agreement === 'full').length;
   const disagreedWords = wordAnalysis.filter(w => w.disagreement).length;
   
+  // Calculate unassigned words per speaker
+  const unassignedBySpeaker = speakerAssignments.map(sa => ({
+    speaker: sa.speaker,
+    unassigned: sortByNumericRef(sa.unassigned.map(ref => ({ Reference: ref }))).map(r => r.Reference),
+    count: sa.unassigned.length,
+  }));
+  
+  const totalUnassigned = Math.max(...unassignedBySpeaker.map(u => u.count));
+  
   // Sort lists by numeric reference for stable UI ordering
   const disagreementsSorted = sortByNumericRef(
     wordAnalysis.filter(w => w.disagreement).map(w => ({ Reference: w.word, ...w }))
@@ -357,6 +371,8 @@ function analyzeResults(results) {
     agreedWords,
     disagreedWords,
     agreementPercentage: totalWords > 0 ? (agreedWords / totalWords * 100).toFixed(1) : 0,
+    unassignedBySpeaker,
+    totalUnassigned,
     // Back-compat: wordAnalysis keeps disagreements list
     wordAnalysis: disagreementsSorted,
     wordAnalysisAll: wordAnalysisAllSorted,
@@ -366,6 +382,7 @@ function analyzeResults(results) {
       speaker: sa.speaker,
       groupCount: sa.toneGroups.length,
       wordCount: sa.assignments.size,
+      unassignedCount: sa.unassigned.length,
     })),
   };
 }

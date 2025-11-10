@@ -1,9 +1,111 @@
 {
+  "af": [
+    "home_reimport_success"
+  ],
+
+  "am": [
+    "home_reimport_success"
+  ],
+
+  "ar": [
+    "home_reimport_success"
+  ],
+
+  "de": [
+    "home_reimport_success"
+  ],
+
+  "es": [
+    "home_reimport_success"
+  ],
+
   "fr": [
+    "home_reimport_success",
     "tm_addWord_disabled_hint"
   ],
 
+  "ha": [
+    "home_reimport_success"
+  ],
+
+  "hi": [
+    "home_reimport_success"
+  ],
+
+  "id": [
+    "home_reimport_success"
+  ],
+
+  "ig": [
+    "home_reimport_success"
+  ],
+
+  "it": [
+    "home_reimport_success"
+  ],
+
+  "km": [
+    "home_reimport_success"
+  ],
+
+  "ln": [
+    "home_reimport_success"
+  ],
+
+  "lo": [
+    "home_reimport_success"
+  ],
+
+  "ms": [
+    "home_reimport_success"
+  ],
+
+  "my": [
+    "home_reimport_success"
+  ],
+
+  "nl": [
+    "home_reimport_success"
+  ],
+
+  "pga": [
+    "home_reimport_success"
+  ],
+
+  "pt": [
+    "home_reimport_success"
+  ],
+
+  "ru": [
+    "home_reimport_success"
+  ],
+
   "shu": [
+    "home_reimport_success",
     "tm_addWord_disabled_hint"
+  ],
+
+  "sw": [
+    "home_reimport_success"
+  ],
+
+  "th": [
+    "home_reimport_success"
+  ],
+
+  "tpi": [
+    "home_reimport_success"
+  ],
+
+  "vi": [
+    "home_reimport_success"
+  ],
+
+  "yo": [
+    "home_reimport_success"
+  ],
+
+  "zh": [
+    "home_reimport_success"
   ]
 }

@@ -33,5 +33,9 @@
   "tm_group_review_alert": "Grup {groupNumber} memiliki {additions} entri baru. Tinjau grup ini.",
   "tm_export_success": "Ekspor berhasil! Disimpan di: {outputPath}",
   "tm_export_failed": "Ekspor gagal: {error}",
-  "tm_languageLabel": "Bahasa"
+  "tm_languageLabel": "Bahasa",
+  "tm_resetSession": "Reset Sesi",
+  "tm_reset_success": "Sesi telah direset",
+  "tm_reset_failed": "Gagal mereset sesi: {error}",
+  "tm_reimport_success": "Berhasil mengimpor kembali {count} grup nada dari ekspor sebelumnya. Anda dapat melanjutkan peninjauan dan pengeditan."
 }

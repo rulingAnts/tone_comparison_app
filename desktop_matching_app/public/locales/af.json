@@ -33,5 +33,9 @@
   "tm_group_review_alert": "Groep {groupNumber} het {additions} nuwe inskrywings. Hersien asseblief.",
   "tm_export_success": "Eksport suksesvol! Gestoor by: {outputPath}",
   "tm_export_failed": "Eksport het misluk: {error}",
-  "tm_languageLabel": "Taal"
+  "tm_languageLabel": "Taal",
+  "tm_resetSession": "Herstel sessie",
+  "tm_reset_success": "Sessie is herstel",
+  "tm_reset_failed": "Kon nie sessie herstel nie: {error}",
+  "tm_reimport_success": "{count} toongroepe herinvoer vanaf vorige eksport. Jy kan voortgaan met hersien en wysig."
 }

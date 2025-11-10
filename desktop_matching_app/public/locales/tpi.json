@@ -33,5 +33,9 @@
   "tm_group_review_alert": "Grop {groupNumber} i gat {additions} nupela word. Lukluk gen long en.",
   "tm_export_success": "Export i orait! Sevim long: {outputPath}",
   "tm_export_failed": "Export i bagarap: {error}",
-  "tm_languageLabel": "Tokples"
+  "tm_languageLabel": "Tokples",
+  "tm_resetSession": "Resetim session",
+  "tm_reset_success": "Session i reset pinis",
+  "tm_reset_failed": "Session i no inap reset: {error}",
+  "tm_reimport_success": "Putim bek {count} ton grup long export bipo. Yu ken lukluk gen na senisim."
 }
