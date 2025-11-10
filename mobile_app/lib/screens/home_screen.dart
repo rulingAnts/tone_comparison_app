@@ -183,6 +183,20 @@ class HomeScreen extends StatelessWidget {
         if (!context.mounted || confirm != true) return;
       }
       await appState.loadBundle(file.path);
+
+      // Show notification if this was a re-import
+      if (!context.mounted) return;
+      if (appState.wasReimport && appState.importedGroupsCount > 0) {
+        final l10n = AppLocalizations.of(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              l10n.home_reimport_success(appState.importedGroupsCount),
+            ),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
     }
   }
 }

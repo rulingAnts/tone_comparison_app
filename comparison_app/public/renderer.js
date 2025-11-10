@@ -202,7 +202,9 @@ function displayResults() {
     totalWords, 
     agreedWords, 
     disagreedWords, 
-    agreementPercentage, 
+    agreementPercentage,
+    unassignedBySpeaker,
+    totalUnassigned,
     wordAnalysis, 
     wordAnalysisAll,
     mergedGroups, 
@@ -249,6 +251,7 @@ function displayResults() {
           <th>Speaker</th>
           <th>Tone Groups</th>
           <th>Words Grouped</th>
+          <th>Unassigned</th>
         </tr>
       </thead>
       <tbody>
@@ -257,11 +260,33 @@ function displayResults() {
             <td><strong>${s.speaker}</strong></td>
             <td>${s.groupCount}</td>
             <td>${s.wordCount}</td>
+            <td>${s.unassignedCount > 0 ? `<span style="color:#dc3545;font-weight:bold;">${s.unassignedCount}</span>` : '0'}</td>
           </tr>
         `).join('')}
       </tbody>
     </table>
   `;
+  
+  // Display unassigned words
+  if (totalUnassigned > 0) {
+    const unassignedEl = document.getElementById('unassignedSection');
+    unassignedEl.innerHTML = `
+      <h2 style="color:#dc3545;">Unassigned Words</h2>
+      <p style="color:#666; margin-bottom:15px;">
+        The following words were not assigned to any tone group by at least one speaker.
+      </p>
+      ${unassignedBySpeaker.map(u => u.count > 0 ? `
+        <div style="background:#fff3cd; padding:15px; margin-bottom:15px; border-radius:6px; border-left:4px solid #ffc107;">
+          <h3 style="margin:0 0 10px 0; font-size:16px;"><strong>${u.speaker}</strong>: ${u.count} unassigned word(s)</h3>
+          <div style="max-height:200px; overflow-y:auto; background:white; padding:10px; border-radius:4px;">
+            ${u.unassigned.map(ref => `<div style="padding:4px 0;">${ref}</div>`).join('')}
+          </div>
+        </div>
+      ` : '').join('')}
+    `;
+  } else {
+    document.getElementById('unassignedSection').innerHTML = '';
+  }
 
   // Display disagreements
   if (disagreedWords > 0) {

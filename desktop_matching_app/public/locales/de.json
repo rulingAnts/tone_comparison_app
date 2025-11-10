@@ -33,5 +33,9 @@
   "tm_group_review_alert": "Gruppe {groupNumber} hat {additions} neue Einträge. Bitte prüfen.",
   "tm_export_success": "Export erfolgreich! Gespeichert unter: {outputPath}",
   "tm_export_failed": "Export fehlgeschlagen: {error}",
-  "tm_languageLabel": "Sprache"
+  "tm_languageLabel": "Sprache",
+  "tm_resetSession": "Sitzung zurücksetzen",
+  "tm_reset_success": "Sitzung wurde zurückgesetzt",
+  "tm_reset_failed": "Fehler beim Zurücksetzen: {error}",
+  "tm_reimport_success": "{count} Tongruppen aus früherem Export erfolgreich reimportiert. Du kannst die Überprüfung und Bearbeitung fortsetzen."
 }

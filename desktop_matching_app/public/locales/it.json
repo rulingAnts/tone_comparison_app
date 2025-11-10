@@ -33,5 +33,9 @@
   "tm_group_review_alert": "Il gruppo {groupNumber} ha {additions} nuove voci. Rivedilo.",
   "tm_export_success": "Esportazione riuscita! Salvato in: {outputPath}",
   "tm_export_failed": "Esportazione fallita: {error}",
-  "tm_languageLabel": "Lingua"
+  "tm_languageLabel": "Lingua",
+  "tm_resetSession": "Reimposta sessione",
+  "tm_reset_success": "La sessione è stata reimpostata",
+  "tm_reset_failed": "Errore nel reimpostare: {error}",
+  "tm_reimport_success": "{count} gruppi tonali reimportati dall'esportazione precedente. Puoi continuare a rivedere e modificare."
 }

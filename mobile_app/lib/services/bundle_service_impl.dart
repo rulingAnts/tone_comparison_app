@@ -46,15 +46,33 @@ class BundleService {
       }
     }
 
+    // Check if this is a re-import (has data_updated.xml)
+    final updatedXmlPath = path.join(bundleDir.path, 'data_updated.xml');
+    final isReimport = await File(updatedXmlPath).exists();
+
     // Load settings
     final settingsFile = File(path.join(bundleDir.path, settingsFileName));
     final settingsJson =
         jsonDecode(await settingsFile.readAsString()) as Map<String, dynamic>;
     final settings = AppSettings.fromJson(settingsJson);
 
-    // Load and parse XML
-    final xmlFile = path.join(bundleDir.path, xmlFileName);
+    // Load and parse XML (use data_updated.xml if re-importing)
+    final xmlFile = isReimport
+        ? updatedXmlPath
+        : path.join(bundleDir.path, xmlFileName);
     final parsedXml = await XmlService.parseXml(xmlFile, settings);
+
+    // Count imported groups if this is a re-import
+    int importedGroupCount = 0;
+    if (isReimport) {
+      final groupNumbers = <int>{};
+      for (final record in parsedXml.records) {
+        if (record.toneGroup != null) {
+          groupNumbers.add(record.toneGroup!);
+        }
+      }
+      importedGroupCount = groupNumbers.length;
+    }
 
     return BundleData(
       settings: settings,
@@ -66,6 +84,8 @@ class BundleService {
       encoding: parsedXml.encoding,
       utf8Bom: parsedXml.utf8Bom,
       lineEnding: parsedXml.lineEnding,
+      isReimport: isReimport,
+      importedGroups: importedGroupCount,
     );
   }
 
@@ -418,6 +438,8 @@ class BundleData {
   final String encoding;
   final bool utf8Bom;
   final String lineEnding;
+  final bool isReimport;
+  final int importedGroups;
 
   BundleData({
     required this.settings,
@@ -429,5 +451,7 @@ class BundleData {
     required this.encoding,
     required this.utf8Bom,
     required this.lineEnding,
+    this.isReimport = false,
+    this.importedGroups = 0,
   });
 }

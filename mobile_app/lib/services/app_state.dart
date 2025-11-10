@@ -36,7 +36,6 @@ class AppState extends ChangeNotifier {
   // Currently selected audio variant index (global selection for playback)
   int _selectedAudioVariantIndex = 0;
 
-
   // Undo stack to support reverting the last few actions (capacity: 3)
   final List<_UndoEntry> _undoStack = [];
 
@@ -122,7 +121,7 @@ class AppState extends ChangeNotifier {
         _bundleFileBaseName = null;
       }
       _audioService.setBundlePath(_bundleData!.bundlePath);
-  _selectedAudioVariantIndex = 0;
+      _selectedAudioVariantIndex = 0;
       _currentWordIndex = 0;
       _toneGroups.clear();
       _unsortedQueue.clear();
@@ -147,6 +146,12 @@ class AppState extends ChangeNotifier {
       _setLoading(false);
     }
   }
+
+  /// Check if the last loaded bundle was a re-import
+  bool get wasReimport => _bundleData?.isReimport ?? false;
+
+  /// Get the number of imported groups from the last load
+  int get importedGroupsCount => _bundleData?.importedGroups ?? 0;
 
   // --- Localization & Intents ---
   static const _prefsLocaleKey = 'preferred_locale';
@@ -185,7 +190,7 @@ class AppState extends ChangeNotifier {
       _bundleData = existing;
       // No known original filename in this path; keep null to fall back later
       _audioService.setBundlePath(_bundleData!.bundlePath);
-  // Keep previous selection if state loads later
+      // Keep previous selection if state loads later
       _currentWordIndex = 0;
       _toneGroups.clear();
       final loaded = await _loadSavedState();
@@ -817,7 +822,7 @@ class AppState extends ChangeNotifier {
       // Sort groups by group number for consistent UI
       _toneGroups.sort((a, b) => a.groupNumber.compareTo(b.groupNumber));
 
-  // Restore queue if present, else compute from records (those without a group)
+      // Restore queue if present, else compute from records (those without a group)
       final q = (json['unsortedQueue'] as List<dynamic>?);
       if (q != null) {
         for (final e in q) {
@@ -838,7 +843,8 @@ class AppState extends ChangeNotifier {
       );
 
       // Restore selected audio variant index (optional)
-      _selectedAudioVariantIndex = (json['selectedAudioVariantIndex'] as int?) ?? 0;
+      _selectedAudioVariantIndex =
+          (json['selectedAudioVariantIndex'] as int?) ?? 0;
       final variants = settings?.audioFileVariants ?? const [];
       if (variants.isEmpty) {
         _selectedAudioVariantIndex = 0;

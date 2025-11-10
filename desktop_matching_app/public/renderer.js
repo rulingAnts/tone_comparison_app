@@ -82,6 +82,13 @@ async function loadBundle() {
     bundleSettings = result.settings;
     session = result.session;
     
+    // Notify user if this is a re-import
+    if (result.isReimport && result.importedGroups > 0) {
+      alert(window.i18n.t('tm_reimport_success', { 
+        count: result.importedGroups 
+      }));
+    }
+    
     // Initialize UI
     initializeAudioVariants();
     updateProgressIndicator();
@@ -633,4 +640,30 @@ async function exportBundle() {
   } else {
     alert(window.i18n.t('tm_export_failed', { error: result.error }));
   }
+}
+
+async function resetSession() {
+  const result = await ipcRenderer.invoke('reset-session');
+  
+  if (result.cancelled) {
+    // User cancelled
+    return;
+  }
+  
+  if (!result.success) {
+    alert(window.i18n.t('tm_reset_failed', { error: result.error || 'Unknown error' }));
+    return;
+  }
+  
+  // Update local session
+  session = result.session;
+  currentGroupId = null;
+  recordCache.clear();
+  
+  // Refresh UI
+  updateProgressIndicator();
+  renderGroups();
+  await loadCurrentWord();
+  
+  alert(window.i18n.t('tm_reset_success', 'Session has been reset'));
 }

@@ -4,6 +4,7 @@ const fs = require('fs');
 const AdmZip = require('adm-zip');
 const archiver = require('archiver');
 const { XMLParser, XMLBuilder } = require('fast-xml-parser');
+const { machineIdSync } = require('node-machine-id');
 const {
   normalizeRefString,
   sortByNumericRef,
@@ -116,9 +117,10 @@ ipcMain.handle('load-bundle', async (event, filePath) => {
     }
     const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
     
-    // Find XML file (prefer data_updated.xml, else data.xml)
+    // Find XML file (prefer data_updated.xml for re-imports, else data.xml)
     let xmlPath = path.join(extractedPath, 'data_updated.xml');
-    if (!fs.existsSync(xmlPath)) {
+    const isReimport = fs.existsSync(xmlPath);
+    if (!isReimport) {
       xmlPath = path.join(extractedPath, 'data.xml');
     }
     if (!fs.existsSync(xmlPath)) {
@@ -157,6 +159,7 @@ ipcMain.handle('load-bundle', async (event, filePath) => {
       records: dataForms,
       extractedPath,
       bundleId: settings.bundleId || null,
+      isReimport,
     };
     
     // Check if session matches this bundle
@@ -177,6 +180,69 @@ ipcMain.handle('load-bundle', async (event, filePath) => {
         records: {}, // { [ref]: { userSpelling: string } }
         locale: sessionData?.locale || 'en',
       };
+      
+      // If reimporting, reconstruct groups from XML tone assignments
+      if (isReimport) {
+        const tgKey = settings.toneGroupElement || 'SurfaceMelodyGroup';
+        const tgIdKey = settings.toneGroupIdElement || 'SurfaceMelodyGroupId';
+        const userSpellingKey = settings.userSpellingElement || 'Orthographic';
+        
+        // Build group map from records
+        const groupMap = new Map(); // groupNumber -> { id, members[], image }
+        
+        dataForms.forEach(record => {
+          const ref = normalizeRefString(record.Reference);
+          const toneGroup = record[tgKey];
+          const groupId = record[tgIdKey];
+          
+          if (toneGroup) {
+            const groupNum = parseInt(toneGroup);
+            if (!groupMap.has(groupNum)) {
+              groupMap.set(groupNum, {
+                id: groupId || `group_reimport_${groupNum}`,
+                groupNumber: groupNum,
+                members: [],
+                image: null,
+                additionsSinceReview: 0,
+                requiresReview: false,
+              });
+            }
+            groupMap.get(groupNum).members.push(ref);
+            
+            // Remove from queue
+            const qIdx = sessionData.queue.indexOf(ref);
+            if (qIdx !== -1) {
+              sessionData.queue.splice(qIdx, 1);
+            }
+          }
+          
+          // Import user spelling if present
+          if (record[userSpellingKey]) {
+            sessionData.records[ref] = {
+              userSpelling: record[userSpellingKey],
+            };
+          }
+        });
+        
+        // Convert to array and sort by group number
+        sessionData.groups = Array.from(groupMap.values()).sort((a, b) => a.groupNumber - b.groupNumber);
+        
+        // Try to load images from images/ folder if present
+        const imagesPath = path.join(extractedPath, 'images');
+        if (fs.existsSync(imagesPath)) {
+          sessionData.groups.forEach(group => {
+            // Look for image files matching group number pattern
+            const files = fs.readdirSync(imagesPath);
+            const groupImageFile = files.find(f => 
+              f.match(new RegExp(`^(group[_\\s-]?)?${group.groupNumber}[._]`, 'i'))
+            );
+            if (groupImageFile) {
+              group.image = path.join(imagesPath, groupImageFile);
+            }
+          });
+        }
+      }
+      
       saveSession();
     }
     
@@ -185,6 +251,8 @@ ipcMain.handle('load-bundle', async (event, filePath) => {
       settings: bundleData.settings,
       recordCount: dataForms.length,
       session: sessionData,
+      isReimport,
+      importedGroups: isReimport ? sessionData.groups.length : 0,
     };
   } catch (error) {
     return {
@@ -390,6 +458,44 @@ ipcMain.handle('get-record-by-ref', async (event, ref) => {
   return { ...record, ...edits };
 });
 
+ipcMain.handle('reset-session', async () => {
+  if (!bundleData || !sessionData) {
+    return { success: false, error: 'No active session' };
+  }
+  
+  // Confirm dialog
+  const result = await dialog.showMessageBox(mainWindow, {
+    type: 'warning',
+    buttons: ['Cancel', 'Reset'],
+    defaultId: 0,
+    title: 'Reset Session',
+    message: 'Are you sure you want to reset all tone groupings?',
+    detail: 'This will clear all groups and start over. This action cannot be undone.',
+  });
+  
+  if (result.response !== 1) {
+    return { success: false, cancelled: true };
+  }
+  
+  // Reset session but keep bundle and locale
+  const queue = bundleData.records.map(df => normalizeRefString(df.Reference));
+  sessionData = {
+    bundleId: bundleData.bundleId,
+    queue,
+    selectedAudioVariantIndex: sessionData.selectedAudioVariantIndex || 0,
+    groups: [],
+    records: {},
+    locale: sessionData.locale || 'en',
+  };
+  
+  saveSession();
+  
+  return {
+    success: true,
+    session: sessionData,
+  };
+});
+
 ipcMain.handle('export-bundle', async () => {
   const result = await dialog.showSaveDialog(mainWindow, {
     filters: [
@@ -473,12 +579,22 @@ ipcMain.handle('export-bundle', async () => {
     let originalXmlPath = path.join(extractedPath, 'data.xml');
     const originalXml = fs.readFileSync(originalXmlPath, 'utf8');
     
+    // Get unique machine ID
+    let machineId;
+    try {
+      machineId = machineIdSync();
+    } catch (error) {
+      console.error('Failed to get machine ID:', error);
+      machineId = 'unknown-desktop';
+    }
+    
     // Create meta.json
     const meta = {
       bundleId: bundleData.bundleId,
       bundleDescription: bundleData.settings.bundleDescription || '',
       generatedAt: new Date().toISOString(),
       platform: 'desktop',
+      deviceId: machineId,
     };
     
     // Create archive

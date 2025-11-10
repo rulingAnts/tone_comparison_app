@@ -93,7 +93,12 @@
   "home_confirmLoadNew_message": "Loading a different bundle will clear your current tone groups, images, and spellings. Continue?",
   "@home_confirmLoadNew_message": {"description": "Body text for loading another bundle confirmation"},
   "home_confirmLoadNew_confirm": "Load",
-  "@home_confirmLoadNew_confirm": {"description": "Confirm button label to load the selected new bundle"}
+  "@home_confirmLoadNew_confirm": {"description": "Confirm button label to load the selected new bundle"},
+  "home_reimport_success": "Re-imported {count} tone groups from previous export. You can continue reviewing and editing.",
+  "@home_reimport_success": {
+    "description": "Snackbar message when a previously exported bundle is re-imported",
+    "placeholders": {"count": {"type": "int"}}
+  }
   ,
   "tm_takePhoto": "Take photo",
   "@tm_takePhoto": {"description": "Bottom sheet option to take a photo with camera"},

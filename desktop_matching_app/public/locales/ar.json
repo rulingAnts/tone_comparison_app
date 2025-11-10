@@ -33,5 +33,9 @@
   "tm_group_review_alert": "المجموعة {groupNumber} لديها {additions} إضافات جديدة. يرجى المراجعة.",
   "tm_export_success": "تم التصدير بنجاح! تم الحفظ في: {outputPath}",
   "tm_export_failed": "فشل التصدير: {error}",
-  "tm_languageLabel": "اللغة"
+  "tm_languageLabel": "اللغة",
+  "tm_resetSession": "Reset Session",
+  "tm_reset_success": "Session has been reset",
+  "tm_reset_failed": "Failed to reset session: {error}",
+  "tm_reimport_success": "Re-imported {count} tone groups from previous export. You can continue reviewing and editing."
 }
