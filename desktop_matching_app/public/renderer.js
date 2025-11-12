@@ -11,6 +11,19 @@ const REVIEW_THRESHOLD = 5;
 
 // Initialize
 window.addEventListener('DOMContentLoaded', async () => {
+  // Load Contour6 font for pitch transcription
+  try {
+    const fontFace = new FontFace(
+      'Contour6SILDoulos',
+      'url(fonts/Contour6SILDoulos.ttf)'
+    );
+    await fontFace.load();
+    document.fonts.add(fontFace);
+    console.log('[desktop_matching] Contour6SILDoulos font loaded');
+  } catch (error) {
+    console.warn('[desktop_matching] Failed to load Contour6 font:', error.message);
+  }
+
   // Load previous locale if session exists
   try {
     const existingSession = await ipcRenderer.invoke('get-session');
@@ -44,6 +57,23 @@ window.addEventListener('DOMContentLoaded', async () => {
           // text will be replaced automatically if key didn't change
         }
       }
+    });
+  }
+
+  // Show references toggle listener
+  const showReferencesCheckbox = document.getElementById('showReferencesCheckbox');
+  if (showReferencesCheckbox) {
+    showReferencesCheckbox.addEventListener('change', async () => {
+      const showReferences = showReferencesCheckbox.checked;
+      // Persist in session
+      await ipcRenderer.invoke('update-session', { showReferenceNumbers: showReferences });
+      // Update session state
+      if (session) {
+        session.showReferenceNumbers = showReferences;
+      }
+      // Re-render to show/hide references
+      await loadCurrentWord();
+      await renderGroups();
     });
   }
 });
@@ -82,6 +112,19 @@ async function loadBundle() {
     bundleSettings = result.settings;
     session = result.session;
     
+    // Check if this is a hierarchical bundle
+    if (result.requiresNavigation && result.bundleType === 'hierarchical') {
+      // Show navigation screen for hierarchical bundles
+      document.getElementById('welcomeScreen').classList.add('hidden');
+      document.getElementById('navigationScreen').classList.remove('hidden');
+      document.getElementById('workArea').classList.add('hidden');
+      
+      // Render hierarchy tree
+      renderHierarchyTree(result.hierarchy, result.session.subBundles);
+      return;
+    }
+    
+    // Legacy bundle or returning from sub-bundle
     // Notify user if this is a re-import
     if (result.isReimport && result.importedGroups > 0) {
       alert(window.i18n.t('tm_reimport_success', { 
@@ -92,10 +135,22 @@ async function loadBundle() {
     // Initialize UI
     initializeAudioVariants();
     updateProgressIndicator();
+    initializeReferenceToggle();
     
     // Show work area
     document.getElementById('welcomeScreen').classList.add('hidden');
+    document.getElementById('navigationScreen').classList.add('hidden');
     document.getElementById('workArea').classList.remove('hidden');
+    
+    // Show sub-bundle indicator if hierarchical
+    if (session.bundleType === 'hierarchical' && session.currentSubBundle) {
+      document.getElementById('subBundleIndicator').classList.remove('hidden');
+      document.getElementById('subBundlePath').textContent = session.currentSubBundle;
+      document.getElementById('backToNavBtn').classList.remove('hidden');
+    } else {
+      document.getElementById('subBundleIndicator').classList.add('hidden');
+      document.getElementById('backToNavBtn').classList.add('hidden');
+    }
     
     // Load current word and groups
     await loadCurrentWord();
@@ -103,6 +158,205 @@ async function loadBundle() {
     
   } catch (error) {
     alert(window.i18n.t('tm_error_loading_bundle', { error: error.message }));
+  }
+}
+
+function renderHierarchyTree(hierarchy, subBundles) {
+  const treeContainer = document.getElementById('hierarchyTree');
+  treeContainer.innerHTML = '';
+  
+  // Build tree structure from flat sub-bundle list
+  const tree = buildTreeStructure(subBundles);
+  
+  // Render tree nodes
+  const rootNode = document.createElement('div');
+  rootNode.className = 'hierarchy-level';
+  renderTreeNode(tree, rootNode, subBundles);
+  treeContainer.appendChild(rootNode);
+}
+
+function buildTreeStructure(subBundles) {
+  const tree = {};
+  
+  subBundles.forEach(sb => {
+    const parts = sb.path.split('/');
+    let current = tree;
+    
+    parts.forEach((part, index) => {
+      if (!current[part]) {
+        current[part] = {
+          name: part,
+          isLeaf: index === parts.length - 1,
+          subBundle: index === parts.length - 1 ? sb : null,
+          children: {}
+        };
+      }
+      current = current[part].children;
+    });
+  });
+  
+  return tree;
+}
+
+function renderTreeNode(treeNode, container, subBundles, depth = 0) {
+  Object.keys(treeNode).forEach(key => {
+    const node = treeNode[key];
+    
+    if (node.isLeaf && node.subBundle) {
+      // Leaf node - render as sub-bundle item
+      const item = createSubBundleItem(node.subBundle);
+      container.appendChild(item);
+    } else {
+      // Category node - render as collapsible category
+      const categoryDiv = document.createElement('div');
+      categoryDiv.className = 'category-node';
+      
+      const header = document.createElement('div');
+      header.className = 'category-header';
+      header.innerHTML = `
+        <span class="toggle">▼</span>
+        <span class="label">${node.name}</span>
+        <span class="count">${countSubBundles(node.children)} items</span>
+      `;
+      
+      const childrenDiv = document.createElement('div');
+      childrenDiv.className = 'category-children';
+      
+      // Toggle functionality
+      header.addEventListener('click', () => {
+        childrenDiv.classList.toggle('collapsed');
+        header.querySelector('.toggle').textContent = childrenDiv.classList.contains('collapsed') ? '▶' : '▼';
+      });
+      
+      categoryDiv.appendChild(header);
+      categoryDiv.appendChild(childrenDiv);
+      container.appendChild(categoryDiv);
+      
+      // Recursively render children
+      renderTreeNode(node.children, childrenDiv, subBundles, depth + 1);
+    }
+  });
+}
+
+function countSubBundles(children) {
+  let count = 0;
+  Object.keys(children).forEach(key => {
+    const node = children[key];
+    if (node.isLeaf) {
+      count++;
+    } else {
+      count += countSubBundles(node.children);
+    }
+  });
+  return count;
+}
+
+function createSubBundleItem(subBundle) {
+  const item = document.createElement('div');
+  item.className = 'sub-bundle-item';
+  
+  const assignedCount = subBundle.assignedCount || 0;
+  const totalCount = subBundle.recordCount || 0;
+  const progressPercent = totalCount > 0 ? (assignedCount / totalCount * 100) : 0;
+  const isComplete = assignedCount === totalCount && totalCount > 0;
+  const isPartial = assignedCount > 0 && assignedCount < totalCount;
+  
+  // Review status icons
+  let reviewIcon = '○'; // Not started
+  if (subBundle.reviewed && isComplete) {
+    reviewIcon = '✓'; // Reviewed and complete
+  } else if (isComplete && !subBundle.reviewed) {
+    reviewIcon = '⚠️'; // Complete but needs review
+  } else if (isPartial) {
+    reviewIcon = '◐'; // In progress
+  }
+  
+  item.innerHTML = `
+    <div class="info">
+      <div class="name">${subBundle.path.split('/').pop()}</div>
+      <div class="progress-bar">
+        <div class="progress-fill ${isPartial ? 'partial' : ''}" style="width: ${progressPercent}%"></div>
+      </div>
+      <div class="stats">${assignedCount} / ${totalCount} words assigned</div>
+    </div>
+    <div class="review-status" title="${getReviewStatusText(subBundle, isComplete)}">${reviewIcon}</div>
+  `;
+  
+  item.addEventListener('click', () => selectSubBundle(subBundle.path));
+  
+  return item;
+}
+
+function getReviewStatusText(subBundle, isComplete) {
+  if (subBundle.reviewed && isComplete) return 'Reviewed';
+  if (isComplete && !subBundle.reviewed) return 'Needs review';
+  if (subBundle.assignedCount > 0) return 'In progress';
+  return 'Not started';
+}
+
+async function selectSubBundle(subBundlePath) {
+  try {
+    const result = await ipcRenderer.invoke('load-sub-bundle', subBundlePath);
+    if (!result.success) {
+      alert(`Failed to load sub-bundle: ${result.error}`);
+      return;
+    }
+    
+    // Update session and settings
+    session = result.session;
+    bundleSettings = result.subBundle.audioConfig || bundleSettings;
+    
+    // Notify if re-import
+    if (result.isReimport && result.importedGroups > 0) {
+      alert(`Re-import successful! Loaded ${result.importedGroups} tone groups.`);
+    }
+    
+    // Initialize UI
+    initializeAudioVariants();
+    updateProgressIndicator();
+    initializeReferenceToggle();
+    
+    // Show work area
+    document.getElementById('navigationScreen').classList.add('hidden');
+    document.getElementById('workArea').classList.remove('hidden');
+    
+    // Show sub-bundle indicator and back button
+    document.getElementById('subBundleIndicator').classList.remove('hidden');
+    document.getElementById('subBundlePath').textContent = subBundlePath;
+    document.getElementById('backToNavBtn').classList.remove('hidden');
+    
+    // Load current word and groups
+    await loadCurrentWord();
+    renderGroups();
+    
+  } catch (error) {
+    alert(`Error loading sub-bundle: ${error.message}`);
+  }
+}
+
+async function backToNavigation() {
+  try {
+    const result = await ipcRenderer.invoke('navigate-to-hierarchy');
+    if (!result.success) {
+      alert(`Failed to return to navigation: ${result.error}`);
+      return;
+    }
+    
+    // Update session
+    session = result.session || session;
+    
+    // Hide work area and back button
+    document.getElementById('workArea').classList.add('hidden');
+    document.getElementById('backToNavBtn').classList.add('hidden');
+    
+    // Show navigation screen
+    document.getElementById('navigationScreen').classList.remove('hidden');
+    
+    // Re-render hierarchy tree with updated progress
+    renderHierarchyTree(result.hierarchy, result.subBundles);
+    
+  } catch (error) {
+    alert(`Error returning to navigation: ${error.message}`);
   }
 }
 
@@ -123,6 +377,26 @@ function initializeAudioVariants() {
     session.selectedAudioVariantIndex = parseInt(select.value);
     await ipcRenderer.invoke('update-session', { selectedAudioVariantIndex: session.selectedAudioVariantIndex });
   });
+}
+
+function initializeReferenceToggle() {
+  const checkbox = document.getElementById('showReferencesCheckbox');
+  if (!checkbox) return;
+  
+  // Priority: session preference > bundleSettings > default (true)
+  let showReferences = true;
+  if (session.showReferenceNumbers !== undefined) {
+    showReferences = session.showReferenceNumbers;
+  } else if (bundleSettings.showReferenceNumbers !== undefined) {
+    showReferences = bundleSettings.showReferenceNumbers;
+  }
+  
+  checkbox.checked = showReferences;
+  
+  // Update session to reflect current state
+  if (session.showReferenceNumbers === undefined) {
+    session.showReferenceNumbers = showReferences;
+  }
 }
 
 function updateProgressIndicator() {
@@ -163,6 +437,19 @@ async function loadCurrentWord() {
     glossLine.style.display = 'block';
   } else {
     glossLine.style.display = 'none';
+  }
+  
+  // Update reference number
+  const referenceLine = document.getElementById('referenceLine');
+  const showReferences = session.showReferenceNumbers !== undefined 
+    ? session.showReferenceNumbers 
+    : (bundleSettings.showReferenceNumbers !== undefined ? bundleSettings.showReferenceNumbers : true);
+  
+  if (showReferences && currentWord.Reference) {
+    referenceLine.textContent = `Reference: ${currentWord.Reference}`;
+    referenceLine.style.display = 'block';
+  } else {
+    referenceLine.style.display = 'none';
   }
   
   // Update spelling section
@@ -485,6 +772,23 @@ async function renderGroups() {
   groupNumber.textContent = window.i18n.t('tm_groupNumber', { number: group.groupNumber });
     header.appendChild(groupNumber);
     
+    // Button container for header actions
+    const headerActions = document.createElement('div');
+    headerActions.style.display = 'flex';
+    headerActions.style.gap = '8px';
+    
+    // Edit button
+    const editBtn = document.createElement('button');
+    editBtn.textContent = '✏️ Edit';
+    editBtn.className = 'secondary';
+    editBtn.style.fontSize = '12px';
+    editBtn.style.padding = '4px 8px';
+    editBtn.onclick = (e) => {
+      e.stopPropagation();
+      openEditGroupModal(group.id);
+    };
+    headerActions.appendChild(editBtn);
+    
     if (group.requiresReview) {
       const reviewBadge = document.createElement('button');
   reviewBadge.textContent = `✓ ${window.i18n.t('tm_markReviewed')}`;
@@ -495,10 +799,54 @@ async function renderGroups() {
         e.stopPropagation();
         markGroupReviewed(group.id);
       };
-      header.appendChild(reviewBadge);
+      headerActions.appendChild(reviewBadge);
     }
     
+    header.appendChild(headerActions);
+    
     card.appendChild(header);
+    
+    // Enhanced Display (pitch transcription, tone abbreviation, exemplar)
+    if (group.pitchTranscription || group.toneAbbreviation || group.exemplarWord) {
+      const enhancedDisplay = document.createElement('div');
+      enhancedDisplay.className = 'group-enhanced-display';
+      
+      if (group.pitchTranscription) {
+        const pitchDiv = document.createElement('div');
+        pitchDiv.className = 'group-pitch-transcription';
+        pitchDiv.textContent = group.pitchTranscription;
+        enhancedDisplay.appendChild(pitchDiv);
+      }
+      
+      if (group.toneAbbreviation) {
+        const abbrevDiv = document.createElement('div');
+        abbrevDiv.className = 'group-tone-abbreviation';
+        abbrevDiv.textContent = group.toneAbbreviation;
+        enhancedDisplay.appendChild(abbrevDiv);
+      }
+      
+      if (group.exemplarWord) {
+        const exemplarDiv = document.createElement('div');
+        exemplarDiv.className = 'group-exemplar';
+        exemplarDiv.textContent = group.exemplarWord;
+        
+        // Add reference number if configured and available
+        const showReferences = session.showReferenceNumbers !== undefined 
+          ? session.showReferenceNumbers 
+          : (bundleSettings.showReferenceNumbers !== undefined ? bundleSettings.showReferenceNumbers : true);
+        
+        if (showReferences && group.exemplarWordRef) {
+          const refSpan = document.createElement('span');
+          refSpan.className = 'ref';
+          refSpan.textContent = `(${group.exemplarWordRef})`;
+          exemplarDiv.appendChild(refSpan);
+        }
+        
+        enhancedDisplay.appendChild(exemplarDiv);
+      }
+      
+      card.appendChild(enhancedDisplay);
+    }
     
     // Image
     const imageContainer = document.createElement('div');
@@ -592,6 +940,21 @@ async function renderGroups() {
           memberText.appendChild(title);
         }
         
+        // Add reference number if enabled
+        const showReferences = session.showReferenceNumbers !== undefined 
+          ? session.showReferenceNumbers 
+          : (bundleSettings.showReferenceNumbers !== undefined ? bundleSettings.showReferenceNumbers : true);
+        
+        if (showReferences && ref) {
+          const refLine = document.createElement('div');
+          refLine.className = 'member-ref';
+          refLine.style.color = '#999';
+          refLine.style.fontSize = '11px';
+          refLine.style.marginTop = '2px';
+          refLine.textContent = ref;
+          memberText.appendChild(refLine);
+        }
+        
         memberItem.appendChild(memberText);
         
         const actions = document.createElement('div');
@@ -667,3 +1030,95 @@ async function resetSession() {
   
   alert(window.i18n.t('tm_reset_success', 'Session has been reset'));
 }
+
+// Edit Group Modal Functions
+let editingGroupId = null;
+
+function openEditGroupModal(groupId) {
+  const group = session.groups.find(g => g.id === groupId);
+  if (!group) return;
+  
+  editingGroupId = groupId;
+  
+  // Populate form fields
+  document.getElementById('editGroupTitle').textContent = `Edit Group ${group.groupNumber}`;
+  document.getElementById('pitchTranscriptionInput').value = group.pitchTranscription || '';
+  document.getElementById('toneAbbreviationInput').value = group.toneAbbreviation || '';
+  document.getElementById('exemplarWordInput').value = group.exemplarWord || '';
+  document.getElementById('exemplarWordRefInput').value = group.exemplarWordRef || '';
+  document.getElementById('markReviewedCheckbox').checked = false;
+  
+  // Show modal
+  document.getElementById('editGroupModal').classList.remove('hidden');
+}
+
+function closeEditGroupModal() {
+  editingGroupId = null;
+  document.getElementById('editGroupModal').classList.add('hidden');
+  
+  // Clear form
+  document.getElementById('pitchTranscriptionInput').value = '';
+  document.getElementById('toneAbbreviationInput').value = '';
+  document.getElementById('exemplarWordInput').value = '';
+  document.getElementById('exemplarWordRefInput').value = '';
+  document.getElementById('markReviewedCheckbox').checked = false;
+}
+
+async function saveGroupEdits() {
+  if (!editingGroupId) return;
+  
+  const group = session.groups.find(g => g.id === editingGroupId);
+  if (!group) return;
+  
+  // Get values from form
+  const pitchTranscription = document.getElementById('pitchTranscriptionInput').value.trim() || null;
+  const toneAbbreviation = document.getElementById('toneAbbreviationInput').value.trim() || null;
+  const exemplarWord = document.getElementById('exemplarWordInput').value.trim() || null;
+  const exemplarWordRef = document.getElementById('exemplarWordRefInput').value.trim() || null;
+  const markReviewed = document.getElementById('markReviewedCheckbox').checked;
+  
+  // Update group in session
+  group.pitchTranscription = pitchTranscription;
+  group.toneAbbreviation = toneAbbreviation;
+  group.exemplarWord = exemplarWord;
+  group.exemplarWordRef = exemplarWordRef;
+  
+  if (markReviewed) {
+    group.additionsSinceReview = 0;
+    group.requiresReview = false;
+  }
+  
+  // Update via IPC
+  await ipcRenderer.invoke('update-group', editingGroupId, {
+    pitchTranscription,
+    toneAbbreviation,
+    exemplarWord,
+    exemplarWordRef,
+    ...(markReviewed ? { additionsSinceReview: 0, requiresReview: false } : {})
+  });
+  
+  // Update session
+  await ipcRenderer.invoke('update-session', { groups: session.groups });
+  
+  // Close modal and re-render
+  closeEditGroupModal();
+  renderGroups();
+}
+
+// Close modal when clicking outside
+document.addEventListener('click', (e) => {
+  const modal = document.getElementById('editGroupModal');
+  if (e.target === modal) {
+    closeEditGroupModal();
+  }
+});
+
+// Close modal with Escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const modal = document.getElementById('editGroupModal');
+    if (!modal.classList.contains('hidden')) {
+      closeEditGroupModal();
+    }
+  }
+});
