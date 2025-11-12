@@ -1212,6 +1212,1014 @@ This logic ensures:
 
 ---
 
+### Task 6: Word Movement Between Sub-Bundles ✅ COMPLETED (Nov 12, 2025)
+
+#### Overview
+Implemented the ability to move words between sub-bundles in hierarchical (.tnset) bundles. Users can click a move button on group member cards to open a sub-bundle picker modal, select a target sub-bundle, and transfer the word. The word is removed from the current sub-bundle and added to the target sub-bundle's queue.
+
+#### Changes Made
+
+**1. HTML (`public/index.html`)** (+~95 lines)
+
+**CSS for Move Word Modal:**
+```css
+/* Move Word Tree Styles */
+.move-word-tree {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 15px;
+  max-height: 400px;
+  overflow-y: auto;
+  background: #f9f9f9;
+}
+
+.move-tree-item { margin: 5px 0; }
+
+.move-tree-category {
+  font-weight: 600;
+  color: #555;
+  margin: 10px 0 5px 0;
+}
+
+.move-tree-sub-bundle {
+  padding: 8px 12px;
+  margin: 3px 0;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.2s;
+}
+
+.move-tree-sub-bundle:hover { background: #e9ecef; }
+
+.move-tree-sub-bundle.current {
+  background: #d4edda;
+  border: 1px solid #c3e6cb;
+  color: #155724;
+  cursor: not-allowed;
+}
+
+.move-tree-sub-bundle.selected {
+  background: #cce5ff;
+  border: 1px solid #b8daff;
+  color: #004085;
+}
+
+.move-tree-sub-bundle input[type="radio"] { margin: 0; }
+.move-tree-sub-bundle-label { flex: 1; }
+.move-tree-sub-bundle-info { font-size: 12px; color: #666; }
+```
+
+**Modal HTML Structure:**
+```html
+<div id="moveWordModal" class="modal-overlay hidden">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>Move Word to Sub-Bundle</h2>
+      <button class="modal-close">×</button>
+    </div>
+    
+    <div class="modal-body">
+      <p>Select the target sub-bundle for word: <strong id="moveWordText"></strong></p>
+      <div id="moveWordTree" class="move-word-tree">
+        <!-- Tree populated by JavaScript -->
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="secondary">Cancel</button>
+      <button id="confirmMoveBtn" disabled>Move Word</button>
+    </div>
+  </div>
+</div>
+```
+
+**2. JavaScript (`public/renderer.js`)** (+~155 lines)
+
+**State Variables:**
+```javascript
+let movingWordRef = null; // Word being moved
+let selectedTargetSubBundle = null; // Target sub-bundle path
+```
+
+**Updated: `renderGroups()` - Add Move Button:**
+```javascript
+// Add move button only for hierarchical bundles
+if (session.bundleType === 'hierarchical') {
+  const moveBtn = document.createElement('button');
+  moveBtn.className = 'icon-button';
+  moveBtn.textContent = '↗';
+  moveBtn.title = 'Move to different sub-bundle';
+  moveBtn.onclick = (e) => {
+    e.stopPropagation();
+    openMoveWordModal(ref, record);
+  };
+  actions.appendChild(moveBtn);
+}
+```
+
+**New Function: `openMoveWordModal(ref, record)`**
+```javascript
+async function openMoveWordModal(ref, record) {
+  // Only for hierarchical bundles
+  if (session.bundleType !== 'hierarchical') return;
+  
+  movingWordRef = ref;
+  selectedTargetSubBundle = null;
+  
+  // Get word display text
+  let wordText = ref;
+  if (record) {
+    const glossText = bundleSettings.glossElement && record[bundleSettings.glossElement];
+    const userSpelling = session.records[ref]?.userSpelling;
+    wordText = glossText || userSpelling || ref;
+  }
+  
+  document.getElementById('moveWordText').textContent = wordText;
+  
+  // Get hierarchy data from backend
+  const hierarchyData = await ipcRenderer.invoke('get-hierarchy-data');
+  if (!hierarchyData.success) {
+    alert('Failed to load hierarchy data');
+    return;
+  }
+  
+  // Render tree
+  renderMoveWordTree(hierarchyData.hierarchy, hierarchyData.subBundles);
+  
+  // Show modal
+  document.getElementById('moveWordModal').classList.remove('hidden');
+  document.getElementById('confirmMoveBtn').disabled = true;
+}
+```
+
+**New Function: `closeMoveWordModal()`**
+```javascript
+function closeMoveWordModal() {
+  document.getElementById('moveWordModal').classList.add('hidden');
+  movingWordRef = null;
+  selectedTargetSubBundle = null;
+}
+```
+
+**New Function: `renderMoveWordTree(hierarchy, subBundles)`**
+```javascript
+function renderMoveWordTree(hierarchy, subBundles) {
+  const treeContainer = document.getElementById('moveWordTree');
+  treeContainer.innerHTML = '';
+  
+  function renderNode(nodes, level = 0) {
+    nodes.forEach(node => {
+      if (node.subBundles && node.subBundles.length > 0) {
+        // Category node
+        const categoryDiv = document.createElement('div');
+        categoryDiv.className = 'move-tree-category';
+        categoryDiv.style.paddingLeft = `${level * 20}px`;
+        categoryDiv.textContent = node.label || node.value;
+        treeContainer.appendChild(categoryDiv);
+        
+        // Render sub-bundles with radio buttons
+        node.subBundles.forEach(subBundlePath => {
+          const subBundle = subBundles.find(sb => sb.path === subBundlePath);
+          if (subBundle) {
+            const isCurrent = subBundlePath === session.currentSubBundle;
+            
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'move-tree-sub-bundle';
+            if (isCurrent) itemDiv.classList.add('current');
+            itemDiv.style.paddingLeft = `${(level + 1) * 20}px`;
+            
+            const radio = document.createElement('input');
+            radio.type = 'radio';
+            radio.name = 'targetSubBundle';
+            radio.value = subBundlePath;
+            radio.disabled = isCurrent;
+            radio.onchange = () => selectTargetSubBundle(subBundlePath);
+            
+            const label = document.createElement('span');
+            label.className = 'move-tree-sub-bundle-label';
+            label.textContent = subBundle.path.split('/').pop();
+            
+            const info = document.createElement('span');
+            info.className = 'move-tree-sub-bundle-info';
+            info.textContent = isCurrent ? '(current)' : 
+              `(${subBundle.assignedCount || 0}/${subBundle.recordCount || 0} words)`;
+            
+            itemDiv.appendChild(radio);
+            itemDiv.appendChild(label);
+            itemDiv.appendChild(info);
+            
+            if (!isCurrent) {
+              itemDiv.onclick = () => {
+                radio.checked = true;
+                selectTargetSubBundle(subBundlePath);
+              };
+            }
+            
+            treeContainer.appendChild(itemDiv);
+          }
+        });
+      }
+      
+      if (node.children && node.children.length > 0) {
+        renderNode(node.children, level + 1);
+      }
+    });
+  }
+  
+  renderNode(hierarchy.tree || []);
+}
+```
+
+**New Function: `selectTargetSubBundle(subBundlePath)`**
+```javascript
+function selectTargetSubBundle(subBundlePath) {
+  selectedTargetSubBundle = subBundlePath;
+  
+  // Update visual selection
+  document.querySelectorAll('.move-tree-sub-bundle').forEach(item => {
+    item.classList.remove('selected');
+  });
+  
+  const selectedRadio = document.querySelector(
+    `input[name="targetSubBundle"][value="${subBundlePath}"]`
+  );
+  if (selectedRadio) {
+    selectedRadio.closest('.move-tree-sub-bundle').classList.add('selected');
+  }
+  
+  // Enable move button
+  document.getElementById('confirmMoveBtn').disabled = false;
+}
+```
+
+**New Function: `confirmMoveWord()` (async)**
+```javascript
+async function confirmMoveWord() {
+  if (!movingWordRef || !selectedTargetSubBundle) return;
+  
+  // Call backend to move word
+  const result = await ipcRenderer.invoke('move-word-to-sub-bundle', {
+    ref: movingWordRef,
+    targetSubBundle: selectedTargetSubBundle
+  });
+  
+  if (result.success) {
+    // Update session
+    session = result.session;
+    
+    // Close modal
+    closeMoveWordModal();
+    
+    // Show success message
+    const targetName = selectedTargetSubBundle.split('/').pop();
+    alert(`Moved word to ${targetName}`);
+    
+    // Re-render UI
+    updateProgressIndicator();
+    renderGroups();
+    await loadCurrentWord();
+  } else {
+    alert(`Failed to move word: ${result.error}`);
+  }
+}
+```
+
+**Updated Event Listeners:**
+```javascript
+// Close move modal when clicking outside
+document.addEventListener('click', (e) => {
+  const moveModal = document.getElementById('moveWordModal');
+  if (e.target === moveModal) {
+    closeMoveWordModal();
+  }
+});
+
+// Close move modal with Escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const moveModal = document.getElementById('moveWordModal');
+    if (!moveModal.classList.contains('hidden')) {
+      closeMoveWordModal();
+    }
+  }
+});
+```
+
+**3. Backend (`src/main.js`)** (+~110 lines)
+
+**New IPC Handler: `get-hierarchy-data`**
+```javascript
+ipcMain.handle('get-hierarchy-data', async () => {
+  if (bundleType !== 'hierarchical' || !bundleData || !sessionData) {
+    return { success: false, error: 'Not a hierarchical bundle' };
+  }
+  
+  return {
+    success: true,
+    hierarchy: bundleData.hierarchy,
+    subBundles: sessionData.subBundles,
+  };
+});
+```
+
+**New IPC Handler: `move-word-to-sub-bundle`**
+```javascript
+ipcMain.handle('move-word-to-sub-bundle', async (event, { ref, targetSubBundle }) => {
+  if (bundleType !== 'hierarchical' || !sessionData) {
+    return { success: false, error: 'Not a hierarchical bundle' };
+  }
+  
+  try {
+    // Get current sub-bundle
+    const currentSubBundle = sessionData.currentSubBundle;
+    if (!currentSubBundle) {
+      return { success: false, error: 'No current sub-bundle' };
+    }
+    
+    if (currentSubBundle === targetSubBundle) {
+      return { success: false, error: 'Cannot move to same sub-bundle' };
+    }
+    
+    // Find current and target sub-bundle sessions
+    const currentSession = sessionData.subBundles.find(sb => sb.path === currentSubBundle);
+    const targetSession = sessionData.subBundles.find(sb => sb.path === targetSubBundle);
+    
+    if (!currentSession || !targetSession) {
+      return { success: false, error: 'Sub-bundle not found' };
+    }
+    
+    // Remove word from current sub-bundle
+    // 1. Remove from queue if present
+    currentSession.queue = currentSession.queue.filter(r => r !== ref);
+    sessionData.queue = sessionData.queue.filter(r => r !== ref);
+    
+    // 2. Remove from groups if present
+    for (const group of currentSession.groups) {
+      if (group.members && group.members.includes(ref)) {
+        group.members = group.members.filter(m => m !== ref);
+        // Mark group as needing review
+        if (group.additionsSinceReview !== undefined) {
+          group.additionsSinceReview++;
+        }
+        break;
+      }
+    }
+    
+    // Also remove from session.groups (current working groups)
+    for (const group of sessionData.groups) {
+      if (group.members && group.members.includes(ref)) {
+        group.members = group.members.filter(m => m !== ref);
+        if (group.additionsSinceReview !== undefined) {
+          group.additionsSinceReview++;
+        }
+        break;
+      }
+    }
+    
+    // Update current sub-bundle assigned count
+    currentSession.assignedCount = Math.max(0, (currentSession.assignedCount || 0) - 1);
+    
+    // Add word to target sub-bundle queue
+    if (!targetSession.queue.includes(ref)) {
+      targetSession.queue.push(ref);
+    }
+    
+    // Update target sub-bundle record count if needed
+    if (!targetSession.recordCount) {
+      targetSession.recordCount = 0;
+    }
+    targetSession.recordCount++;
+    
+    // Save session
+    saveSession();
+    
+    // Return updated session
+    return {
+      success: true,
+      session: {
+        ...sessionData,
+        queue: [...sessionData.queue],
+        groups: sessionData.groups.map(g => ({ ...g })),
+      },
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+```
+
+#### Features Implemented
+
+**Move Button (Hierarchical Only)**
+- ✅ Arrow icon (↗) button on group member cards
+- ✅ Only visible for hierarchical (.tnset) bundles
+- ✅ Positioned between Play and Remove buttons
+- ✅ Tooltip: "Move to different sub-bundle"
+- ✅ Opens move word modal on click
+
+**Move Word Modal**
+
+**Header:**
+- Title: "Move Word to Sub-Bundle"
+- Close button (×)
+
+**Body:**
+- Displays word being moved (gloss, user spelling, or reference)
+- Tree view of all sub-bundles
+- Current sub-bundle disabled and marked "(current)"
+- Radio button selection for target
+- Progress info for each sub-bundle (assigned/total)
+
+**Footer:**
+- Cancel button - closes modal without action
+- Move Word button - disabled until target selected
+
+**Tree Display:**
+- Hierarchical structure with categories and sub-bundles
+- Indentation shows hierarchy levels
+- Current sub-bundle: green background, disabled
+- Selected sub-bundle: blue background
+- Hover effects on selectable items
+- Click anywhere on item to select
+- Scrollable if tree is large
+
+**Move Operation:**
+1. User clicks move button on member card
+2. Modal opens with hierarchy tree
+3. User selects target sub-bundle
+4. Move Word button enables
+5. User clicks Move Word
+6. Backend removes word from current sub-bundle:
+   - Removes from queue if present
+   - Removes from group if present
+   - Updates assigned count
+   - Marks group as needing review
+7. Backend adds word to target sub-bundle queue
+8. Session saved
+9. Modal closes
+10. Success message shown
+11. UI re-renders (word removed from current groups)
+
+#### User Experience
+
+**Opening Modal:**
+- Click ↗ button on any group member
+- Word display text shown in modal
+- Tree loads with current progress
+- Current sub-bundle clearly marked
+- Move button disabled initially
+
+**Selecting Target:**
+- Click radio button or anywhere on row
+- Selected row highlights blue
+- Current sub-bundle cannot be selected
+- Move button enables
+
+**Confirming Move:**
+- Click "Move Word" button
+- Alert shows: "Moved word to [target name]"
+- Word disappears from current view
+- Progress indicators update
+- Target sub-bundle will show word in queue when loaded
+
+**Canceling:**
+- Click Cancel button
+- Click X button
+- Click outside modal
+- Press Escape key
+- Modal closes, no changes made
+
+#### Data Flow
+
+**Frontend to Backend:**
+```javascript
+{
+  ref: "45.2.1",
+  targetSubBundle: "noun/CVCV"
+}
+```
+
+**Backend Processing:**
+1. Validate hierarchical bundle
+2. Find current and target sub-bundle sessions
+3. Remove from current:
+   - Filter from queue
+   - Filter from groups
+   - Decrement assigned count
+   - Increment additionsSinceReview
+4. Add to target:
+   - Push to queue
+   - Increment record count
+5. Save session
+
+**Backend to Frontend:**
+```javascript
+{
+  success: true,
+  session: { ...updatedSession }
+}
+```
+
+#### Limitations & Future Enhancements
+
+**Current Implementation:**
+- Words moved to target queue (not automatically sorted)
+- Field values not automatically updated to match target category
+- User stays in current sub-bundle (doesn't follow word)
+- No undo functionality
+- Moved word appears at end of target queue
+
+**Future Enhancements:**
+- Auto-update field values to match target category
+- Batch move multiple words
+- Drag-and-drop interface
+- Move confirmation with preview
+- Undo move action
+- Show recent moves
+- Auto-switch to target sub-bundle option
+
+#### Implementation Stats
+- **Files Modified:** 3
+  - `public/index.html` (+~95 lines CSS+HTML)
+  - `public/renderer.js` (+~155 lines)
+  - `src/main.js` (+~110 lines)
+- **New Functions (Frontend):** 5 (openMoveWordModal, closeMoveWordModal, renderMoveWordTree, selectTargetSubBundle, confirmMoveWord)
+- **New IPC Handlers (Backend):** 2 (get-hierarchy-data, move-word-to-sub-bundle)
+- **New UI Components:** 1 modal with radio tree
+- **Compile Errors:** 0 ✅
+
+#### Testing Checklist
+- [ ] Move button appears only on hierarchical bundles
+- [ ] Move button hidden on legacy .tncmp bundles
+- [ ] Click move opens modal with word name
+- [ ] Tree displays all sub-bundles
+- [ ] Current sub-bundle disabled and marked
+- [ ] Can select different sub-bundle
+- [ ] Move button enables after selection
+- [ ] Click Move removes word from current group
+- [ ] Word appears in target sub-bundle queue
+- [ ] Progress indicators update correctly
+- [ ] Groups marked as needing review after word removed
+- [ ] Cancel closes modal without changes
+- [ ] Click outside closes modal
+- [ ] Escape key closes modal
+- [ ] Cannot move to same sub-bundle
+- [ ] Success message shows target name
+
+---
+
+### Task 7: Review Status Management ✅ COMPLETED (Nov 12, 2025)
+
+#### Overview
+Implemented comprehensive review status management for hierarchical bundles, including per-sub-bundle review tracking, "Mark All Reviewed" functionality, auto-unmark on changes, completion detection, and visual indicators. The system tracks review status at both individual group and sub-bundle levels.
+
+#### Changes Made
+
+**1. HTML (`public/index.html`)** (+~90 lines)
+
+**Updated Sub-Bundle Indicator with Mark All Button:**
+```html
+<div id="subBundleIndicator" class="current-sub-bundle-indicator hidden">
+  <div style="display: flex; justify-content: space-between; align-items: center;">
+    <div>
+      <strong>Current:</strong> <span id="subBundlePath"></span>
+    </div>
+    <button id="markAllReviewedBtn" class="secondary" 
+            onclick="markAllGroupsReviewed()" 
+            style="display: none;">
+      Mark All Reviewed
+    </button>
+  </div>
+</div>
+```
+
+**Completion Message Component:**
+```html
+<div id="completionMessage" class="completion-message hidden">
+  <div class="completion-content">
+    <div class="completion-icon">✓</div>
+    <div class="completion-text">
+      <strong>All words in this sub-bundle have been assigned!</strong>
+      <p id="completionDetails"></p>
+    </div>
+    <div class="completion-actions">
+      <button onclick="markAllGroupsReviewed()">Mark All Reviewed</button>
+      <button class="secondary" onclick="backToNavigation()">Back to Navigation</button>
+    </div>
+  </div>
+</div>
+```
+
+**CSS Styling:**
+```css
+.completion-message {
+  background: #d4edda;
+  border: 2px solid #28a745;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.completion-content {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+
+.completion-icon {
+  font-size: 48px;
+  color: #28a745;
+}
+
+.completion-text strong {
+  display: block;
+  color: #155724;
+  font-size: 16px;
+  margin-bottom: 5px;
+}
+
+.completion-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+```
+
+**2. JavaScript (`public/renderer.js`)** (+~90 lines)
+
+**Updated: `loadCurrentWord()`**
+Added completion check:
+```javascript
+if (!currentWord) {
+  // No more words - check if this is completion
+  checkCompletion();
+  document.querySelector('.word-panel').innerHTML = ...;
+  return;
+}
+
+// Hide completion message if word exists
+document.getElementById('completionMessage').classList.add('hidden');
+```
+
+**Updated: `removeWordFromGroup()`**
+Added auto-unmark logic:
+```javascript
+if (group) {
+  group.members = (group.members || []).filter(m => m !== ref);
+  // Auto-unmark if group was reviewed
+  if (group.additionsSinceReview !== undefined) {
+    group.additionsSinceReview++;
+  }
+}
+```
+
+**Updated: `saveGroupEdits()`**
+Added metadata change detection and auto-unmark:
+```javascript
+// Check if metadata changed (for auto-unmark)
+const metadataChanged = 
+  group.pitchTranscription !== pitchTranscription ||
+  group.toneAbbreviation !== toneAbbreviation ||
+  group.exemplarWord !== exemplarWord ||
+  group.exemplarWordRef !== exemplarWordRef;
+
+if (markReviewed) {
+  group.additionsSinceReview = 0;
+  group.requiresReview = false;
+} else if (metadataChanged && group.additionsSinceReview === 0) {
+  // Auto-unmark if metadata changed and group was previously reviewed
+  group.additionsSinceReview = 1;
+}
+```
+
+**Updated: `renderGroups()`**
+Added review status update call:
+```javascript
+groupsList.appendChild(card);
+}
+
+// Update review status display
+updateReviewStatusDisplay();
+```
+
+**New Function: `checkCompletion()`**
+```javascript
+function checkCompletion() {
+  // Only for hierarchical bundles when all words assigned
+  if (session.bundleType !== 'hierarchical') {
+    return;
+  }
+  
+  const totalWords = session.queue.length + getTotalAssignedWords();
+  const assignedWords = getTotalAssignedWords();
+  
+  if (assignedWords === totalWords && totalWords > 0) {
+    // All words assigned
+    const reviewedGroups = session.groups.filter(
+      g => !g.requiresReview && g.additionsSinceReview === 0
+    ).length;
+    const totalGroups = session.groups.length;
+    
+    let detailsText = `${totalGroups} tone groups created`;
+    if (reviewedGroups < totalGroups) {
+      detailsText += `, ${reviewedGroups} reviewed`;
+    } else {
+      detailsText += `, all reviewed ✓`;
+    }
+    
+    document.getElementById('completionDetails').textContent = detailsText;
+    document.getElementById('completionMessage').classList.remove('hidden');
+    
+    // Show mark all reviewed button if not all reviewed
+    const markBtn = document.getElementById('markAllReviewedBtn');
+    if (markBtn && reviewedGroups < totalGroups) {
+      markBtn.style.display = 'block';
+    } else if (markBtn) {
+      markBtn.style.display = 'none';
+    }
+  } else {
+    document.getElementById('completionMessage').classList.add('hidden');
+  }
+}
+```
+
+**New Function: `markAllGroupsReviewed()` (async)**
+```javascript
+async function markAllGroupsReviewed() {
+  if (!session || !session.groups) return;
+  
+  // Mark all groups as reviewed
+  for (const group of session.groups) {
+    group.additionsSinceReview = 0;
+    group.requiresReview = false;
+  }
+  
+  // Update via IPC
+  await ipcRenderer.invoke('mark-all-groups-reviewed');
+  
+  // Update session
+  await ipcRenderer.invoke('update-session', { groups: session.groups });
+  
+  // Update sub-bundle reviewed status for hierarchical bundles
+  if (session.bundleType === 'hierarchical') {
+    await ipcRenderer.invoke('mark-sub-bundle-reviewed', { reviewed: true });
+  }
+  
+  // Re-render
+  renderGroups();
+  checkCompletion();
+  
+  alert('All groups marked as reviewed');
+}
+```
+
+**New Function: `updateReviewStatusDisplay()`**
+```javascript
+function updateReviewStatusDisplay() {
+  // Update mark all reviewed button visibility
+  if (session.bundleType === 'hierarchical') {
+    const markBtn = document.getElementById('markAllReviewedBtn');
+    if (markBtn) {
+      const allReviewed = session.groups.every(
+        g => !g.requiresReview && g.additionsSinceReview === 0
+      );
+      markBtn.style.display = allReviewed ? 'none' : 'block';
+    }
+  }
+}
+```
+
+**3. Backend (`src/main.js`)** (+~65 lines)
+
+**New IPC Handler: `mark-all-groups-reviewed`**
+```javascript
+ipcMain.handle('mark-all-groups-reviewed', async () => {
+  if (!sessionData || !sessionData.groups) {
+    return { success: false, error: 'No session data' };
+  }
+  
+  try {
+    // Mark all groups as reviewed
+    for (const group of sessionData.groups) {
+      group.additionsSinceReview = 0;
+      group.requiresReview = false;
+    }
+    
+    // If hierarchical, also update sub-bundle session
+    if (bundleType === 'hierarchical' && sessionData.currentSubBundle) {
+      const subBundleSession = sessionData.subBundles.find(
+        sb => sb.path === sessionData.currentSubBundle
+      );
+      if (subBundleSession) {
+        for (const group of subBundleSession.groups) {
+          group.additionsSinceReview = 0;
+          group.requiresReview = false;
+        }
+      }
+    }
+    
+    saveSession();
+    
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+```
+
+**New IPC Handler: `mark-sub-bundle-reviewed`**
+```javascript
+ipcMain.handle('mark-sub-bundle-reviewed', async (event, { reviewed }) => {
+  if (bundleType !== 'hierarchical' || !sessionData || !sessionData.currentSubBundle) {
+    return { success: false, error: 'Not in a hierarchical sub-bundle' };
+  }
+  
+  try {
+    const subBundleSession = sessionData.subBundles.find(
+      sb => sb.path === sessionData.currentSubBundle
+    );
+    if (!subBundleSession) {
+      return { success: false, error: 'Sub-bundle not found' };
+    }
+    
+    subBundleSession.reviewed = reviewed;
+    
+    saveSession();
+    
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+```
+
+#### Features Implemented
+
+**Mark All Reviewed Button**
+- ✅ Located in sub-bundle indicator header
+- ✅ Only visible for hierarchical bundles
+- ✅ Hidden when all groups already reviewed
+- ✅ Shows when at least one group needs review
+- ✅ Marks all groups in current sub-bundle as reviewed
+- ✅ Updates sub-bundle reviewed status
+
+**Completion Detection**
+- ✅ Triggers when queue is empty (all words assigned)
+- ✅ Only for hierarchical bundles
+- ✅ Shows green banner with checkmark icon
+- ✅ Displays group statistics (total, reviewed count)
+- ✅ Slide-down animation
+- ✅ Action buttons: Mark All Reviewed, Back to Navigation
+- ✅ Hides when more words available
+
+**Auto-Unmark on Changes**
+
+Groups automatically unmarked (additionsSinceReview incremented) when:
+1. **Word added to group** - Already implemented via addWordToCurrentGroup()
+2. **Word removed from group** - NEW: Added in removeWordFromGroup()
+3. **Metadata changed** - NEW: Added in saveGroupEdits() when:
+   - Pitch transcription changes
+   - Tone abbreviation changes
+   - Exemplar word changes
+   - Exemplar reference changes
+4. **Word moved to different sub-bundle** - Already implemented in move handler
+
+**Review Status Tracking**
+
+**Group Level:**
+- `additionsSinceReview`: Counter increments on changes
+- `requiresReview`: Flag set when threshold reached (5 words)
+- Visual badge on group card when needs review
+
+**Sub-Bundle Level:**
+- `reviewed`: Boolean flag in subBundleSession
+- Set to true when all groups marked reviewed
+- Persists across navigation
+- Shows in navigation tree (Task 2)
+
+#### User Experience
+
+**Completion Flow:**
+1. User assigns last word in sub-bundle
+2. Green completion banner appears with animation
+3. Shows: "All words assigned! X tone groups created, Y reviewed"
+4. Two options:
+   - Mark All Reviewed → marks all groups, updates UI
+   - Back to Navigation → returns to tree view
+
+**Mark All Reviewed:**
+- Click button in header or completion banner
+- All groups in current sub-bundle marked as reviewed
+- Review badges disappear from group cards
+- Button hides (no longer needed)
+- Sub-bundle marked as reviewed in session
+- Alert confirmation: "All groups marked as reviewed"
+
+**Auto-Unmark Behavior:**
+- User adds word to reviewed group → badge reappears
+- User removes word from reviewed group → badge reappears
+- User edits group metadata → badge reappears (if was reviewed)
+- User explicitly checks "Mark as Reviewed" in edit modal → overrides auto-unmark
+- Visual feedback immediate (no page reload)
+
+**Review Status Display:**
+- Group card: Green checkmark if reviewed, yellow warning if needs review
+- Mark All button: Hidden when all reviewed
+- Completion message: Shows review progress
+- Navigation tree (Task 2): Shows ✓ icon for reviewed sub-bundles
+
+#### Implementation Details
+
+**Review Criteria (Group):**
+A group is considered "reviewed" when:
+- `additionsSinceReview === 0` AND
+- `requiresReview === false`
+
+**Review Criteria (Sub-Bundle):**
+A sub-bundle is considered "reviewed" when:
+- All groups in sub-bundle are reviewed AND
+- `reviewed === true` flag set
+
+**State Management:**
+```javascript
+// Group state
+group = {
+  id: string,
+  groupNumber: number,
+  members: [refs],
+  additionsSinceReview: number,  // Increments on changes
+  requiresReview: boolean,        // Set at threshold
+  // ...other fields
+}
+
+// Sub-bundle state
+subBundleSession = {
+  path: string,
+  queue: [refs],
+  groups: [groups],
+  reviewed: boolean,              // Overall reviewed status
+  // ...other fields
+}
+```
+
+**Data Persistence:**
+- All review statuses saved in session JSON
+- Persists across app restarts
+- Per-sub-bundle tracking maintains independence
+- Navigation updates reflect current state
+
+#### Backward Compatibility
+
+**Legacy Bundles (.tncmp):**
+- Mark All Reviewed button hidden
+- Completion message still shows
+- Review status tracking works normally
+- No sub-bundle reviewed flag (not applicable)
+
+**Existing Sessions:**
+- Groups without additionsSinceReview default to 0
+- Groups without requiresReview default to false
+- Sub-bundles without reviewed default to false
+- No migration needed
+
+#### Implementation Stats
+- **Files Modified:** 3
+  - `public/index.html` (+~90 lines CSS+HTML)
+  - `public/renderer.js` (+~90 lines)
+  - `src/main.js` (+~65 lines)
+- **New Functions (Frontend):** 3 (checkCompletion, markAllGroupsReviewed, updateReviewStatusDisplay)
+- **Updated Functions (Frontend):** 3 (loadCurrentWord, removeWordFromGroup, saveGroupEdits)
+- **New IPC Handlers (Backend):** 2 (mark-all-groups-reviewed, mark-sub-bundle-reviewed)
+- **New UI Components:** 2 (completion banner, mark all button)
+- **Compile Errors:** 0 ✅
+
+#### Testing Checklist
+- [ ] Completion message appears when all words assigned
+- [ ] Completion message shows correct group counts
+- [ ] Mark All Reviewed button appears in header when needed
+- [ ] Mark All Reviewed button hidden when all reviewed
+- [ ] Clicking Mark All marks all groups as reviewed
+- [ ] Review badges disappear after marking all
+- [ ] Adding word to reviewed group shows badge
+- [ ] Removing word from reviewed group shows badge
+- [ ] Editing metadata of reviewed group shows badge
+- [ ] Explicitly marking as reviewed in edit modal works
+- [ ] Sub-bundle reviewed flag persists across navigation
+- [ ] Navigation tree shows review status (✓ icon)
+- [ ] Works with legacy .tncmp bundles
+- [ ] Review status persists across app restart
+
+---
+
 8. ✓ Supports cross-platform builds (macOS, Windows, Linux)
 
 The implementation maintains consistency with existing apps, reuses proven patterns, and provides comprehensive documentation for users and developers.

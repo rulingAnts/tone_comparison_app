@@ -911,7 +911,227 @@ ipcMain.handle('navigate-to-hierarchy', async () => {
 });
 
 ipcMain.handle('export-bundle', async () => {
-  const result = await dialog.showSaveDialog(mainWindow, {
+  if (!bundleData || !sessionData) {
+    return { success: false, error: 'No bundle loaded' };
+  }
+  
+  // Determine export type based on bundle type
+  if (bundleType === 'hierarchical') {
+    return await exportHierarchicalBundle();
+  } else {
+    return await exportLegacyBundle();
+  }
+});
+
+// Export hierarchical bundle (.tnset)
+async function exportHierarchicalBundle() {
+  const { dialog } = require('electron');
+  const result = await dialog.showSaveDialog({
+    title: 'Export Hierarchical Bundle',
+    defaultPath: `${bundleData.bundleId}_export.tnset`,
+    filters: [{ name: 'Hierarchical Tone Bundle', extensions: ['tnset'] }],
+  });
+
+  if (result.canceled || !result.filePath) {
+    return { success: false, error: 'Export cancelled' };
+  }
+
+  try {
+    const outputPath = result.filePath;
+    
+    // Create archive
+    const output = fs.createWriteStream(outputPath);
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    
+    archive.pipe(output);
+    
+    // Add manifest.json (from original bundle)
+    const manifestPath = path.join(extractedPath, 'manifest.json');
+    if (fs.existsSync(manifestPath)) {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      // Update export timestamp
+      manifest.exportedAt = new Date().toISOString();
+      archive.append(JSON.stringify(manifest, null, 2), { name: 'manifest.json' });
+    }
+    
+    // Add hierarchy.json (from original bundle)
+    const hierarchyPath = path.join(extractedPath, 'hierarchy.json');
+    if (fs.existsSync(hierarchyPath)) {
+      archive.file(hierarchyPath, { name: 'hierarchy.json' });
+    }
+    
+    // Add data_original.xml (unchanged)
+    const originalXmlPath = path.join(extractedPath, 'data_original.xml');
+    if (fs.existsSync(originalXmlPath)) {
+      archive.file(originalXmlPath, { name: 'data_original.xml' });
+    }
+    
+    // Add settings.json (bundle-level settings)
+    const settingsPath = path.join(extractedPath, 'settings.json');
+    if (fs.existsSync(settingsPath)) {
+      archive.file(settingsPath, { name: 'settings.json' });
+    }
+    
+    // Add fonts folder
+    const fontsPath = path.join(extractedPath, 'fonts');
+    if (fs.existsSync(fontsPath)) {
+      archive.directory(fontsPath, 'fonts');
+    }
+    
+    // Process each sub-bundle
+    for (const subBundle of sessionData.subBundles) {
+      const subBundlePath = subBundle.path;
+      const subBundleDir = `sub_bundles/${subBundlePath}`;
+      
+      // Create data_updated.xml for this sub-bundle with tone group assignments
+      const updatedXml = buildSubBundleDataXml(subBundle);
+      archive.append(updatedXml, { name: `${subBundleDir}/data_updated.xml` });
+      
+      // Copy original data.xml
+      const originalDataPath = path.join(extractedPath, 'sub_bundles', subBundlePath, 'data.xml');
+      if (fs.existsSync(originalDataPath)) {
+        archive.file(originalDataPath, { name: `${subBundleDir}/data.xml` });
+      }
+      
+      // Copy audio folder
+      const audioDir = path.join(extractedPath, 'sub_bundles', subBundlePath, 'audio');
+      if (fs.existsSync(audioDir)) {
+        archive.directory(audioDir, `${subBundleDir}/audio`);
+      }
+      
+      // Create metadata.json with progress and review status
+      const metadata = {
+        path: subBundlePath,
+        recordCount: subBundle.recordCount || 0,
+        assignedCount: subBundle.assignedCount || 0,
+        reviewed: subBundle.reviewed || false,
+        groupCount: subBundle.groups.length,
+        exportedAt: new Date().toISOString(),
+      };
+      archive.append(JSON.stringify(metadata, null, 2), { name: `${subBundleDir}/metadata.json` });
+      
+      // Add group images to sub-bundle images folder
+      const imagesAdded = new Set();
+      for (const group of subBundle.groups) {
+        if (group.image && fs.existsSync(group.image) && !imagesAdded.has(group.image)) {
+          const imageName = `group_${group.groupNumber}${path.extname(group.image)}`;
+          archive.file(group.image, { name: `${subBundleDir}/images/${imageName}` });
+          imagesAdded.add(group.image);
+        }
+      }
+    }
+    
+    // Add export_meta.json with overall statistics
+    const exportMeta = {
+      bundleId: bundleData.bundleId,
+      exportedAt: new Date().toISOString(),
+      platform: 'desktop',
+      subBundleCount: sessionData.subBundles.length,
+      totalGroups: sessionData.subBundles.reduce((sum, sb) => sum + sb.groups.length, 0),
+      reviewedSubBundles: sessionData.subBundles.filter(sb => sb.reviewed).length,
+    };
+    archive.append(JSON.stringify(exportMeta, null, 2), { name: 'export_meta.json' });
+    
+    await archive.finalize();
+    
+    return { success: true, outputPath };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+// Build data_updated.xml for a sub-bundle with tone group assignments
+function buildSubBundleDataXml(subBundle) {
+  const tgKey = bundleData.settings.toneGroupElement || 'SurfaceMelodyGroup';
+  const tgIdKey = bundleData.settings.toneGroupIdElement || 'SurfaceMelodyGroupId';
+  const userSpellingKey = bundleData.settings.userSpellingElement || 'Orthographic';
+  
+  // Create map of ref -> tone group data
+  const refToGroup = new Map();
+  subBundle.groups.forEach(group => {
+    (group.members || []).forEach(ref => {
+      refToGroup.set(ref, {
+        groupNumber: group.groupNumber,
+        groupId: group.id,
+        pitchTranscription: group.pitchTranscription,
+        toneAbbreviation: group.toneAbbreviation,
+        exemplarWord: group.exemplarWord,
+        exemplarWordRef: group.exemplarWordRef,
+      });
+    });
+  });
+  
+  // Get records for this sub-bundle (from queue + assigned)
+  const subBundleRefs = new Set([...subBundle.queue, ...refToGroup.keys()]);
+  const subBundleRecords = bundleData.records.filter(record => {
+    const ref = normalizeRefString(record.Reference);
+    return subBundleRefs.has(ref);
+  });
+  
+  // Update records with assignments
+  const updatedRecords = subBundleRecords.map(record => {
+    const ref = normalizeRefString(record.Reference);
+    const updated = { ...record };
+    
+    // Apply user spelling if present
+    const edits = sessionData.records[ref];
+    if (edits && edits.userSpelling) {
+      updated[userSpellingKey] = edits.userSpelling;
+    }
+    
+    // Apply tone group assignment if present
+    const groupData = refToGroup.get(ref);
+    if (groupData) {
+      updated[tgKey] = String(groupData.groupNumber);
+      updated[tgIdKey] = groupData.groupId;
+      
+      // Add enhanced fields if present
+      if (groupData.pitchTranscription) {
+        updated['SurfaceMelodyPitch'] = groupData.pitchTranscription;
+      }
+      if (groupData.toneAbbreviation) {
+        updated['SurfaceMelody'] = groupData.toneAbbreviation;
+      }
+      if (groupData.exemplarWord) {
+        updated['SurfaceMelodyEx'] = groupData.exemplarWord;
+      }
+    }
+    
+    return updated;
+  });
+  
+  // Build XML
+  const escapeXml = (s) => String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+
+  const buildDataForm = (rec) => {
+    const keys = Object.keys(rec).filter((k) => !k.startsWith('@_'));
+    const parts = [];
+    for (const k of keys) {
+      const v = rec[k];
+      if (v == null) continue;
+      parts.push(`  <${k}>${escapeXml(v)}</${k}>`);
+    }
+    return ['<data_form>', ...parts, '</data_form>'].join('\n');
+  };
+
+  return [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<phon_data>',
+    ...updatedRecords.map((r) => buildDataForm(r)),
+    '</phon_data>',
+    '',
+  ].join('\n');
+}
+
+// Export legacy bundle (.tncmp / .zip)
+async function exportLegacyBundle() {
+  const { dialog } = require('electron');
+  const result = await dialog.showSaveDialog({
     filters: [
       { name: 'Tone Bundle', extensions: ['zip'] },
     ],
@@ -1051,6 +1271,271 @@ ipcMain.handle('export-bundle', async () => {
     await archive.finalize();
     
     return { success: true, outputPath };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+// Export single sub-bundle as legacy format (.zip)
+ipcMain.handle('export-sub-bundle', async (event, { subBundlePath }) => {
+  if (!bundleData || !sessionData || bundleType !== 'hierarchical') {
+    return { success: false, error: 'No hierarchical bundle loaded' };
+  }
+  
+  const subBundleSession = sessionData.subBundles.find(sb => sb.path === subBundlePath);
+  if (!subBundleSession) {
+    return { success: false, error: 'Sub-bundle not found' };
+  }
+  
+  const { dialog } = require('electron');
+  const subBundleName = path.basename(subBundlePath);
+  const result = await dialog.showSaveDialog({
+    title: `Export Sub-Bundle: ${subBundleName}`,
+    defaultPath: `${bundleData.bundleId}_${subBundleName}.zip`,
+    filters: [{ name: 'Tone Bundle', extensions: ['zip'] }],
+  });
+
+  if (result.canceled || !result.filePath) {
+    return { success: false, error: 'Export cancelled' };
+  }
+
+  try {
+    const outputPath = result.filePath;
+    
+    // Build updated XML for this sub-bundle only
+    const updatedXml = buildSubBundleDataXml(subBundleSession);
+    
+    // Get original data.xml for this sub-bundle
+    const originalDataPath = path.join(extractedPath, 'sub_bundles', subBundlePath, 'data.xml');
+    const originalXml = fs.readFileSync(originalDataPath, 'utf8');
+    
+    // Get unique machine ID
+    let machineId;
+    try {
+      machineId = machineIdSync();
+    } catch (error) {
+      console.error('Failed to get machine ID:', error);
+      machineId = 'unknown-desktop';
+    }
+    
+    // Create meta.json
+    const meta = {
+      bundleId: bundleData.bundleId,
+      subBundle: subBundlePath,
+      bundleDescription: bundleData.settings.bundleDescription || '',
+      generatedAt: new Date().toISOString(),
+      platform: 'desktop',
+      deviceId: machineId,
+    };
+    
+    // Create archive
+    const output = fs.createWriteStream(outputPath);
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    
+    archive.pipe(output);
+    
+    // Add XML files
+    archive.append(originalXml, { name: 'data.xml' });
+    archive.append(updatedXml, { name: 'data_updated.xml' });
+    
+    // Add meta.json
+    archive.append(JSON.stringify(meta, null, 2), { name: 'meta.json' });
+    
+    // Add settings (with legacy audioFileSuffix)
+    const exportSettings = { ...bundleData.settings };
+    if (Array.isArray(exportSettings.audioFileVariants) && exportSettings.audioFileVariants.length > 0) {
+      const firstSuf = exportSettings.audioFileVariants[0]?.suffix || '';
+      exportSettings.audioFileSuffix = firstSuf === '' ? null : firstSuf;
+    }
+    archive.append(JSON.stringify(exportSettings, null, 2), { name: 'settings.json' });
+    
+    // Add audio files for this sub-bundle
+    const audioDir = path.join(extractedPath, 'sub_bundles', subBundlePath, 'audio');
+    if (fs.existsSync(audioDir)) {
+      archive.directory(audioDir, 'audio');
+    }
+    
+    // Create images folder and add group images
+    const tempImagesDir = path.join(extractedPath, 'temp_images_export');
+    if (!fs.existsSync(tempImagesDir)) {
+      fs.mkdirSync(tempImagesDir, { recursive: true });
+    }
+    
+    // Copy group images
+    for (const group of subBundleSession.groups) {
+      if (group.image && fs.existsSync(group.image)) {
+        const imageName = `group_${group.groupNumber}${path.extname(group.image)}`;
+        const destPath = path.join(tempImagesDir, imageName);
+        fs.copyFileSync(group.image, destPath);
+        archive.file(destPath, { name: `images/${imageName}` });
+      }
+    }
+    
+    await archive.finalize();
+    
+    // Clean up temp images folder
+    if (fs.existsSync(tempImagesDir)) {
+      fs.rmSync(tempImagesDir, { recursive: true, force: true });
+    }
+    
+    return { success: true, outputPath };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Get hierarchy data for move word modal
+ipcMain.handle('get-hierarchy-data', async () => {
+  if (bundleType !== 'hierarchical' || !bundleData || !sessionData) {
+    return { success: false, error: 'Not a hierarchical bundle' };
+  }
+  
+  return {
+    success: true,
+    hierarchy: bundleData.hierarchy,
+    subBundles: sessionData.subBundles,
+  };
+});
+
+// Move word to different sub-bundle
+ipcMain.handle('move-word-to-sub-bundle', async (event, { ref, targetSubBundle }) => {
+  if (bundleType !== 'hierarchical' || !sessionData) {
+    return { success: false, error: 'Not a hierarchical bundle' };
+  }
+  
+  try {
+    // Get current sub-bundle
+    const currentSubBundle = sessionData.currentSubBundle;
+    if (!currentSubBundle) {
+      return { success: false, error: 'No current sub-bundle' };
+    }
+    
+    if (currentSubBundle === targetSubBundle) {
+      return { success: false, error: 'Cannot move to same sub-bundle' };
+    }
+    
+    // Find current and target sub-bundle sessions
+    const currentSession = sessionData.subBundles.find(sb => sb.path === currentSubBundle);
+    const targetSession = sessionData.subBundles.find(sb => sb.path === targetSubBundle);
+    
+    if (!currentSession || !targetSession) {
+      return { success: false, error: 'Sub-bundle not found' };
+    }
+    
+    // Remove word from current sub-bundle
+    // 1. Remove from queue if present
+    currentSession.queue = currentSession.queue.filter(r => r !== ref);
+    sessionData.queue = sessionData.queue.filter(r => r !== ref);
+    
+    // 2. Remove from groups if present
+    let removedFromGroup = false;
+    for (const group of currentSession.groups) {
+      if (group.members && group.members.includes(ref)) {
+        group.members = group.members.filter(m => m !== ref);
+        removedFromGroup = true;
+        // Mark group as needing review if it had been reviewed
+        if (group.additionsSinceReview !== undefined) {
+          group.additionsSinceReview++;
+        }
+        break;
+      }
+    }
+    
+    // Also remove from session.groups (current working groups)
+    for (const group of sessionData.groups) {
+      if (group.members && group.members.includes(ref)) {
+        group.members = group.members.filter(m => m !== ref);
+        if (group.additionsSinceReview !== undefined) {
+          group.additionsSinceReview++;
+        }
+        break;
+      }
+    }
+    
+    // Update current sub-bundle assigned count
+    currentSession.assignedCount = Math.max(0, (currentSession.assignedCount || 0) - 1);
+    
+    // Add word to target sub-bundle queue
+    if (!targetSession.queue.includes(ref)) {
+      targetSession.queue.push(ref);
+    }
+    
+    // Update target sub-bundle record count if needed
+    if (!targetSession.recordCount) {
+      targetSession.recordCount = 0;
+    }
+    targetSession.recordCount++;
+    
+    // Update word's field values to match target sub-bundle category
+    // This would require parsing the hierarchy and updating the record
+    // For now, we'll just move the word and let the user handle field updates
+    
+    // Save session
+    saveSession();
+    
+    // Return updated session
+    return {
+      success: true,
+      session: {
+        ...sessionData,
+        queue: [...sessionData.queue],
+        groups: sessionData.groups.map(g => ({ ...g })),
+      },
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Mark all groups in current session as reviewed
+ipcMain.handle('mark-all-groups-reviewed', async () => {
+  if (!sessionData || !sessionData.groups) {
+    return { success: false, error: 'No session data' };
+  }
+  
+  try {
+    // Mark all groups as reviewed
+    for (const group of sessionData.groups) {
+      group.additionsSinceReview = 0;
+      group.requiresReview = false;
+    }
+    
+    // If hierarchical, also update sub-bundle session
+    if (bundleType === 'hierarchical' && sessionData.currentSubBundle) {
+      const subBundleSession = sessionData.subBundles.find(sb => sb.path === sessionData.currentSubBundle);
+      if (subBundleSession) {
+        for (const group of subBundleSession.groups) {
+          group.additionsSinceReview = 0;
+          group.requiresReview = false;
+        }
+      }
+    }
+    
+    saveSession();
+    
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Mark sub-bundle as reviewed (hierarchical bundles only)
+ipcMain.handle('mark-sub-bundle-reviewed', async (event, { reviewed }) => {
+  if (bundleType !== 'hierarchical' || !sessionData || !sessionData.currentSubBundle) {
+    return { success: false, error: 'Not in a hierarchical sub-bundle' };
+  }
+  
+  try {
+    const subBundleSession = sessionData.subBundles.find(sb => sb.path === sessionData.currentSubBundle);
+    if (!subBundleSession) {
+      return { success: false, error: 'Sub-bundle not found' };
+    }
+    
+    subBundleSession.reviewed = reviewed;
+    
+    saveSession();
+    
+    return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
   }
