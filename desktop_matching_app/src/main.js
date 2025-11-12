@@ -14,6 +14,9 @@ let mainWindow;
 let sessionData = null;
 let bundleData = null;
 let extractedPath = null;
+let bundleType = 'legacy'; // 'legacy' or 'hierarchical'
+let hierarchyConfig = null; // For hierarchical bundles
+let currentSubBundlePath = null; // Track which sub-bundle is currently loaded
 
 function getSessionPath() {
   try {
@@ -87,7 +90,11 @@ app.on('activate', () => {
 ipcMain.handle('select-bundle-file', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
-    filters: [{ name: 'Tone Bundle', extensions: ['tncmp'] }],
+    filters: [
+      { name: 'All Tone Bundles', extensions: ['tncmp', 'tnset'] },
+      { name: 'Legacy Bundle', extensions: ['tncmp'] },
+      { name: 'Hierarchical Macro-Bundle', extensions: ['tnset'] },
+    ],
   });
   
   if (!result.canceled && result.filePaths.length > 0) {
@@ -98,7 +105,27 @@ ipcMain.handle('select-bundle-file', async () => {
 
 ipcMain.handle('load-bundle', async (event, filePath) => {
   try {
-    // Extract bundle
+    // Detect bundle type from file extension
+    const ext = path.extname(filePath).toLowerCase();
+    bundleType = ext === '.tnset' ? 'hierarchical' : 'legacy';
+    
+    console.log(`[desktop_matching] Loading ${bundleType} bundle from:`, filePath);
+    
+    if (bundleType === 'hierarchical') {
+      return await loadHierarchicalBundle(filePath);
+    } else {
+      return await loadLegacyBundle(filePath);
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+});
+
+async function loadLegacyBundle(filePath) {
+  try {
     const zip = new AdmZip(filePath);
     extractedPath = getExtractedBundlePath();
     
@@ -260,10 +287,154 @@ ipcMain.handle('load-bundle', async (event, filePath) => {
       error: error.message,
     };
   }
-});
+}
+
+async function loadHierarchicalBundle(filePath) {
+  try {
+    const zip = new AdmZip(filePath);
+    extractedPath = getExtractedBundlePath();
+    
+    // Clear old extraction
+    if (fs.existsSync(extractedPath)) {
+      fs.rmSync(extractedPath, { recursive: true, force: true });
+    }
+    fs.mkdirSync(extractedPath, { recursive: true });
+    
+    zip.extractAllTo(extractedPath, true);
+    
+    // Load manifest.json
+    const manifestPath = path.join(extractedPath, 'manifest.json');
+    if (!fs.existsSync(manifestPath)) {
+      throw new Error('Hierarchical bundle missing manifest.json');
+    }
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    
+    // Verify it's a hierarchical bundle
+    if (manifest.bundleType !== 'hierarchical') {
+      throw new Error('Invalid bundle type in manifest');
+    }
+    
+    // Load hierarchy.json
+    const hierarchyPath = path.join(extractedPath, 'hierarchy.json');
+    if (!fs.existsSync(hierarchyPath)) {
+      throw new Error('Hierarchical bundle missing hierarchy.json');
+    }
+    hierarchyConfig = JSON.parse(fs.readFileSync(hierarchyPath, 'utf8'));
+    
+    // Load settings.json
+    const settingsPath = path.join(extractedPath, 'settings.json');
+    if (!fs.existsSync(settingsPath)) {
+      throw new Error('Bundle missing settings.json');
+    }
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    
+    // Build sub-bundle list
+    const subBundlesDir = path.join(extractedPath, 'sub_bundles');
+    const subBundles = [];
+    
+    if (fs.existsSync(subBundlesDir)) {
+      const scanSubBundles = (dir, pathPrefix = '') => {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            const subPath = pathPrefix ? `${pathPrefix}/${entry.name}` : entry.name;
+            const subDir = path.join(dir, entry.name);
+            const metadataPath = path.join(subDir, 'metadata.json');
+            
+            if (fs.existsSync(metadataPath)) {
+              // This is a leaf sub-bundle
+              const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+              subBundles.push({
+                path: subPath,
+                categoryPath: metadata.categoryPath || subPath,
+                recordCount: metadata.recordCount || 0,
+                audioConfig: metadata.audioConfig || { includeAudio: true, suffix: '' },
+                fullPath: subDir,
+              });
+            } else {
+              // Recurse into subdirectory
+              scanSubBundles(subDir, subPath);
+            }
+          }
+        }
+      };
+      
+      scanSubBundles(subBundlesDir);
+    }
+    
+    console.log(`[desktop_matching] Found ${subBundles.length} sub-bundles in hierarchical bundle`);
+    
+    // Build bundle data structure
+    bundleData = {
+      settings,
+      manifest,
+      hierarchy: hierarchyConfig,
+      subBundles,
+      extractedPath,
+      bundleId: settings.bundleId || manifest.bundleId || null,
+      bundleType: 'hierarchical',
+    };
+    
+    // Check if session matches this bundle
+    let needNewSession = true;
+    if (sessionData && sessionData.bundleId === bundleData.bundleId && sessionData.bundleType === 'hierarchical') {
+      // Session matches, use it
+      needNewSession = false;
+    }
+    
+    if (needNewSession) {
+      // Create new session for hierarchical bundle
+      sessionData = {
+        bundleId: bundleData.bundleId,
+        bundleType: 'hierarchical',
+        hierarchyConfig: hierarchyConfig,
+        subBundles: subBundles.map(sb => ({
+          path: sb.path,
+          categoryPath: sb.categoryPath,
+          recordCount: sb.recordCount,
+          assignedCount: 0,
+          reviewed: false,
+          queue: [],
+          groups: [],
+        })),
+        currentSubBundle: null, // null means navigation screen
+        selectedAudioVariantIndex: 0,
+        records: {}, // { [ref]: { userSpelling: string, ... } }
+        locale: sessionData?.locale || 'en',
+      };
+      
+      saveSession();
+    }
+    
+    return {
+      success: true,
+      bundleType: 'hierarchical',
+      settings: bundleData.settings,
+      manifest: manifest,
+      hierarchy: hierarchyConfig,
+      subBundleCount: subBundles.length,
+      session: sessionData,
+      requiresNavigation: true, // Signal to UI to show navigation screen
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+}
 
 ipcMain.handle('get-current-word', async () => {
-  if (!bundleData || !sessionData || sessionData.queue.length === 0) {
+  if (!bundleData || !sessionData) {
+    return null;
+  }
+  
+  // For hierarchical bundles, check if we're in a sub-bundle
+  if (bundleType === 'hierarchical' && !sessionData.currentSubBundle) {
+    return null; // No current word when in navigation view
+  }
+  
+  if (sessionData.queue.length === 0) {
     return null;
   }
   
@@ -298,6 +469,22 @@ ipcMain.handle('update-session', async (event, updates) => {
   }
   if (updates.locale) {
     sessionData.locale = updates.locale;
+  }
+  
+  // For hierarchical bundles, also update the current sub-bundle session
+  if (bundleType === 'hierarchical' && sessionData.currentSubBundle) {
+    const subBundleSession = sessionData.subBundles.find(sb => sb.path === sessionData.currentSubBundle);
+    if (subBundleSession) {
+      if (updates.queue) {
+        subBundleSession.queue = [...updates.queue];
+      }
+      if (updates.groups) {
+        subBundleSession.groups = updates.groups.map(g => ({ ...g }));
+      }
+      // Update assigned count
+      const totalRecords = subBundleSession.recordCount;
+      subBundleSession.assignedCount = totalRecords - subBundleSession.queue.length;
+    }
   }
   
   saveSession();
@@ -379,6 +566,12 @@ ipcMain.handle('update-group', async (event, groupId, updates) => {
     if (updates.image !== undefined) group.image = updates.image;
     if (updates.additionsSinceReview !== undefined) group.additionsSinceReview = updates.additionsSinceReview;
     if (updates.requiresReview !== undefined) group.requiresReview = updates.requiresReview;
+    
+    // Enhanced group fields
+    if (updates.pitchTranscription !== undefined) group.pitchTranscription = updates.pitchTranscription;
+    if (updates.toneAbbreviation !== undefined) group.toneAbbreviation = updates.toneAbbreviation;
+    if (updates.exemplarWord !== undefined) group.exemplarWord = updates.exemplarWord;
+    if (updates.exemplarWordRef !== undefined) group.exemplarWordRef = updates.exemplarWordRef;
   }
   
   saveSession();
@@ -493,6 +686,227 @@ ipcMain.handle('reset-session', async () => {
   return {
     success: true,
     session: sessionData,
+  };
+});
+
+// Hierarchical bundle IPC handlers
+
+ipcMain.handle('get-hierarchy', async () => {
+  if (bundleType !== 'hierarchical' || !bundleData) {
+    return null;
+  }
+  
+  return {
+    hierarchy: bundleData.hierarchy,
+    subBundles: sessionData?.subBundles || bundleData.subBundles,
+    currentSubBundle: sessionData?.currentSubBundle || null,
+  };
+});
+
+ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
+  try {
+    if (bundleType !== 'hierarchical' || !bundleData) {
+      throw new Error('Not a hierarchical bundle');
+    }
+    
+    // Find sub-bundle
+    const subBundle = bundleData.subBundles.find(sb => sb.path === subBundlePath);
+    if (!subBundle) {
+      throw new Error(`Sub-bundle not found: ${subBundlePath}`);
+    }
+    
+    // Find XML file (prefer data_updated.xml for re-imports, else data.xml)
+    let xmlPath = path.join(subBundle.fullPath, 'data_updated.xml');
+    const isReimport = fs.existsSync(xmlPath);
+    if (!isReimport) {
+      xmlPath = path.join(subBundle.fullPath, 'data.xml');
+    }
+    if (!fs.existsSync(xmlPath)) {
+      throw new Error('Sub-bundle missing data.xml');
+    }
+    
+    // Parse XML with encoding detection
+    const xmlBuffer = fs.readFileSync(xmlPath);
+    const probe = xmlBuffer.slice(0, 200).toString('utf8');
+    const declMatch = probe.match(/encoding\s*=\s*"([^"]+)"/i);
+    const declared = declMatch ? declMatch[1].toLowerCase() : null;
+    let xmlData;
+    if ((declared && declared.includes('utf-16')) || probe.includes('\u0000')) {
+      xmlData = xmlBuffer.toString('utf16le');
+    } else {
+      xmlData = xmlBuffer.toString('utf8');
+    }
+    
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: '@_',
+      trimValues: true,
+      parseAttributeValue: false,
+      parseTagValue: false,
+    });
+    const xmlResult = parser.parse(xmlData);
+    
+    const phonData = xmlResult.phon_data;
+    const dataForms = Array.isArray(phonData.data_form) 
+      ? phonData.data_form 
+      : [phonData.data_form];
+    
+    // Update bundleData with current sub-bundle records
+    bundleData.records = dataForms;
+    bundleData.currentSubBundlePath = subBundlePath;
+    currentSubBundlePath = subBundlePath;
+    
+    // Update or create session data for this sub-bundle
+    const subBundleSession = sessionData.subBundles.find(sb => sb.path === subBundlePath);
+    if (!subBundleSession) {
+      throw new Error('Sub-bundle session not found');
+    }
+    
+    // Check if this sub-bundle has been loaded before
+    if (!subBundleSession.queue || subBundleSession.queue.length === 0) {
+      // First time loading - initialize queue and groups
+      const queue = dataForms.map(df => normalizeRefString(df.Reference));
+      subBundleSession.queue = queue;
+      subBundleSession.groups = [];
+      
+      // If reimporting, reconstruct groups from XML tone assignments
+      if (isReimport) {
+        const tgKey = bundleData.settings.toneGroupElement || 'SurfaceMelodyGroup';
+        const tgIdKey = bundleData.settings.toneGroupIdElement || 'SurfaceMelodyGroupId';
+        const userSpellingKey = bundleData.settings.userSpellingElement || 'Orthographic';
+        
+        // Build group map from records
+        const groupMap = new Map();
+        
+        dataForms.forEach(record => {
+          const ref = normalizeRefString(record.Reference);
+          const toneGroup = record[tgKey];
+          const groupId = record[tgIdKey];
+          
+          if (toneGroup) {
+            const groupNum = parseInt(toneGroup);
+            if (!groupMap.has(groupNum)) {
+              groupMap.set(groupNum, {
+                id: groupId || `group_reimport_${subBundlePath}_${groupNum}`,
+                groupNumber: groupNum,
+                members: [],
+                image: null,
+                additionsSinceReview: 0,
+                requiresReview: false,
+              });
+            }
+            groupMap.get(groupNum).members.push(ref);
+            
+            // Remove from queue
+            const qIdx = subBundleSession.queue.indexOf(ref);
+            if (qIdx !== -1) {
+              subBundleSession.queue.splice(qIdx, 1);
+            }
+          }
+          
+          // Import user spelling if present
+          if (record[userSpellingKey]) {
+            if (!sessionData.records[ref]) {
+              sessionData.records[ref] = {};
+            }
+            sessionData.records[ref].userSpelling = record[userSpellingKey];
+          }
+        });
+        
+        // Convert to array and sort by group number
+        subBundleSession.groups = Array.from(groupMap.values()).sort((a, b) => a.groupNumber - b.groupNumber);
+        
+        // Try to load images from images/ folder if present
+        const imagesPath = path.join(subBundle.fullPath, 'images');
+        if (fs.existsSync(imagesPath)) {
+          subBundleSession.groups.forEach(group => {
+            // Look for image files matching group number pattern
+            const files = fs.readdirSync(imagesPath);
+            const groupImageFile = files.find(f => 
+              f.match(new RegExp(`^(group[_\\s-]?)?${group.groupNumber}[._]`, 'i'))
+            );
+            if (groupImageFile) {
+              group.image = path.join(imagesPath, groupImageFile);
+            }
+          });
+        }
+      }
+      
+      // Update assigned count
+      const assignedCount = dataForms.length - subBundleSession.queue.length;
+      subBundleSession.assignedCount = assignedCount;
+    }
+    
+    // Set current sub-bundle in session
+    sessionData.currentSubBundle = subBundlePath;
+    
+    // Create compatibility layer - populate session.queue and session.groups from current sub-bundle
+    sessionData.queue = [...subBundleSession.queue];
+    sessionData.groups = subBundleSession.groups.map(g => ({ ...g }));
+    
+    saveSession();
+    
+    return {
+      success: true,
+      subBundle: {
+        path: subBundlePath,
+        categoryPath: subBundle.categoryPath,
+        recordCount: dataForms.length,
+        audioConfig: subBundle.audioConfig,
+      },
+      recordCount: dataForms.length,
+      session: sessionData,
+      isReimport,
+      importedGroups: isReimport ? subBundleSession.groups.length : 0,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+});
+
+ipcMain.handle('get-sub-bundle-progress', async () => {
+  if (bundleType !== 'hierarchical' || !sessionData) {
+    return null;
+  }
+  
+  return {
+    subBundles: sessionData.subBundles,
+    currentSubBundle: sessionData.currentSubBundle,
+  };
+});
+
+ipcMain.handle('navigate-to-hierarchy', async () => {
+  if (bundleType !== 'hierarchical' || !sessionData) {
+    return { success: false, error: 'Not a hierarchical bundle' };
+  }
+  
+  // Save current sub-bundle state back to session if we were in one
+  if (sessionData.currentSubBundle) {
+    const subBundleSession = sessionData.subBundles.find(sb => sb.path === sessionData.currentSubBundle);
+    if (subBundleSession) {
+      subBundleSession.queue = [...sessionData.queue];
+      subBundleSession.groups = sessionData.groups.map(g => ({ ...g }));
+      
+      // Update assigned count
+      const totalRecords = subBundleSession.recordCount;
+      subBundleSession.assignedCount = totalRecords - subBundleSession.queue.length;
+    }
+  }
+  
+  // Clear current sub-bundle
+  sessionData.currentSubBundle = null;
+  currentSubBundlePath = null;
+  bundleData.currentSubBundlePath = null;
+  
+  saveSession();
+  
+  return {
+    success: true,
+    hierarchy: bundleData.hierarchy,
+    subBundles: sessionData.subBundles,
   };
 });
 

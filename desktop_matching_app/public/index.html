@@ -252,6 +252,45 @@
       margin-bottom: 10px;
     }
 
+    .group-enhanced-display {
+      background: #f8f9fa;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 10px;
+      border: 1px solid #e9ecef;
+    }
+
+    .group-pitch-transcription {
+      font-family: 'Contour6SILDoulos', monospace;
+      font-size: 20px;
+      color: #495057;
+      margin-bottom: 6px;
+      text-align: center;
+      line-height: 1.4;
+      word-wrap: break-word;
+    }
+
+    .group-tone-abbreviation {
+      font-size: 16px;
+      font-weight: 600;
+      color: #007bff;
+      text-align: center;
+      margin-bottom: 6px;
+    }
+
+    .group-exemplar {
+      font-size: 14px;
+      color: #6c757d;
+      text-align: center;
+      font-style: italic;
+    }
+
+    .group-exemplar .ref {
+      font-weight: 500;
+      color: #495057;
+      margin-left: 4px;
+    }
+
     .group-image {
       max-width: 100%;
       max-height: 150px;
@@ -359,6 +398,297 @@
     [dir="rtl"] .spelling-display { flex-direction: row-reverse; }
     [dir="rtl"] .spelling-input-group { flex-direction: row-reverse; }
     [dir="rtl"] .audio-controls { flex-direction: row-reverse; }
+
+    /* Navigation Screen Styles */
+    .navigation-screen {
+      padding: 20px;
+    }
+
+    /* Contour6 Font for Pitch Transcription */
+    @font-face {
+      font-family: 'Contour6SILDoulos';
+      src: url('fonts/Contour6SILDoulos.ttf') format('truetype');
+      font-weight: normal;
+      font-style: normal;
+    }
+
+    .navigation-screen h2 {
+      margin-bottom: 10px;
+      color: #333;
+    }
+
+    .navigation-screen .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+
+    .hierarchy-tree {
+      margin-top: 20px;
+    }
+
+    .hierarchy-level {
+      margin-left: 20px;
+    }
+
+    .hierarchy-level:first-child {
+      margin-left: 0;
+    }
+
+    .category-node {
+      margin-bottom: 8px;
+    }
+
+    .category-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: #f8f9fa;
+      border-radius: 4px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .category-header:hover {
+      background: #e9ecef;
+    }
+
+    .category-header .toggle {
+      font-size: 12px;
+      color: #666;
+      width: 16px;
+    }
+
+    .category-header .label {
+      font-weight: 500;
+      color: #333;
+      flex: 1;
+    }
+
+    .category-header .count {
+      font-size: 12px;
+      color: #666;
+      background: #e9ecef;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+
+    .category-children {
+      margin-left: 20px;
+      margin-top: 4px;
+    }
+
+    .category-children.collapsed {
+      display: none;
+    }
+
+    .sub-bundle-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      margin: 4px 0;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .sub-bundle-item:hover {
+      border-color: #007bff;
+      background: #f8f9ff;
+      box-shadow: 0 2px 4px rgba(0,123,255,0.1);
+    }
+
+    .sub-bundle-item .info {
+      flex: 1;
+    }
+
+    .sub-bundle-item .name {
+      font-weight: 500;
+      color: #333;
+      margin-bottom: 4px;
+    }
+
+    .sub-bundle-item .progress-bar {
+      height: 6px;
+      background: #e9ecef;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 4px;
+    }
+
+    .sub-bundle-item .progress-fill {
+      height: 100%;
+      background: #28a745;
+      transition: width 0.3s;
+    }
+
+    .sub-bundle-item .progress-fill.partial {
+      background: #ffc107;
+    }
+
+    .sub-bundle-item .stats {
+      font-size: 12px;
+      color: #666;
+    }
+
+    .sub-bundle-item .review-status {
+      font-size: 20px;
+      min-width: 24px;
+      text-align: center;
+    }
+
+    .back-to-nav-btn {
+      position: fixed;
+      top: 80px;
+      left: 20px;
+      z-index: 1000;
+      background: #6c757d;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+
+    .back-to-nav-btn:hover {
+      background: #545b62;
+    }
+
+    .current-sub-bundle-indicator {
+      background: #d4edda;
+      border: 1px solid #c3e6cb;
+      color: #155724;
+      padding: 8px 12px;
+      border-radius: 4px;
+      margin-bottom: 15px;
+      font-size: 14px;
+    }
+
+    .current-sub-bundle-indicator strong {
+      font-weight: 600;
+    }
+
+    /* Modal Styles */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+    }
+
+    .modal-overlay.hidden {
+      display: none;
+    }
+
+    .modal-content {
+      background: white;
+      border-radius: 8px;
+      padding: 30px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .modal-header h2 {
+      margin: 0;
+      color: #333;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      color: #999;
+      cursor: pointer;
+      padding: 0;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-close:hover {
+      color: #333;
+    }
+
+    .modal-body {
+      margin-bottom: 20px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 8px;
+      color: #333;
+    }
+
+    .form-group input[type="text"],
+    .form-group textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    .form-group textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .form-group textarea.pitch-input {
+      font-family: 'Contour6SILDoulos', monospace;
+      font-size: 18px;
+    }
+
+    .form-group input[type="checkbox"] {
+      margin-right: 8px;
+    }
+
+    .form-group .checkbox-label {
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+    }
+
+    .form-help {
+      font-size: 12px;
+      color: #666;
+      margin-top: 4px;
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
   </style>
 </head>
 <body>
@@ -383,10 +713,19 @@
           <option value="zh">中文</option>
         </select>
       </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <label for="showReferencesCheckbox" data-i18n="tm_showReferences">Show References</label>
+        <input type="checkbox" id="showReferencesCheckbox" checked>
+      </div>
     </div>
   </div>
 
   <div class="container">
+    <!-- Back to Navigation button (shown only when in sub-bundle) -->
+    <button id="backToNavBtn" class="back-to-nav-btn hidden" onclick="backToNavigation()">
+      ← Back to Navigation
+    </button>
+
     <!-- Main Panel -->
     <div class="main-panel">
       <div id="welcomeScreen" class="welcome-screen">
@@ -395,7 +734,22 @@
         <button onclick="loadBundle()" data-i18n="tm_loadBundle">Load Bundle</button>
       </div>
 
+      <!-- Navigation Screen for Hierarchical Bundles -->
+      <div id="navigationScreen" class="navigation-screen hidden">
+        <h2 data-i18n="tm_selectSubBundle">Select Sub-Bundle</h2>
+        <p class="subtitle" data-i18n="tm_selectSubBundle_subtitle">Choose a category to begin sorting tone groups</p>
+        
+        <div id="hierarchyTree" class="hierarchy-tree">
+          <!-- Tree will be populated by JavaScript -->
+        </div>
+      </div>
+
       <div id="workArea" class="hidden">
+        <!-- Current Sub-Bundle Indicator (for hierarchical bundles) -->
+        <div id="subBundleIndicator" class="current-sub-bundle-indicator hidden">
+          <strong>Current:</strong> <span id="subBundlePath"></span>
+        </div>
+
         <!-- Current Word Panel -->
         <div class="word-panel">
           <h2 style="margin-bottom: 15px;" data-i18n="tm_currentWord">Current Word</h2>
@@ -403,6 +757,7 @@
           <div class="word-display" id="wordDisplay">
             <div class="word-line" id="writtenFormLine"></div>
             <div class="gloss-line" id="glossLine"></div>
+            <div class="reference-line" id="referenceLine" style="color: #666; font-size: 13px; margin-top: 4px; display: none;"></div>
           </div>
 
           <!-- Audio Controls -->
@@ -453,6 +808,73 @@
   </div>
 
   <audio id="audioPlayer"></audio>
+
+  <!-- Edit Group Modal -->
+  <div id="editGroupModal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="editGroupTitle">Edit Group</h2>
+        <button class="modal-close" onclick="closeEditGroupModal()">&times;</button>
+      </div>
+      
+      <div class="modal-body">
+        <!-- Pitch Transcription -->
+        <div class="form-group">
+          <label for="pitchTranscriptionInput">Pitch Transcription</label>
+          <textarea 
+            id="pitchTranscriptionInput" 
+            class="pitch-input"
+            placeholder="Enter pitch transcription using Contour6 font..."
+            rows="3"></textarea>
+          <div class="form-help">Use Contour6 characters to represent tone contours</div>
+        </div>
+
+        <!-- Tone Abbreviation -->
+        <div class="form-group">
+          <label for="toneAbbreviationInput">Tone Abbreviation</label>
+          <input 
+            type="text" 
+            id="toneAbbreviationInput" 
+            placeholder="e.g., LHL, MH, etc.">
+          <div class="form-help">Short code representing the tone pattern</div>
+        </div>
+
+        <!-- Exemplar Word -->
+        <div class="form-group">
+          <label for="exemplarWordInput">Exemplar Word</label>
+          <input 
+            type="text" 
+            id="exemplarWordInput" 
+            placeholder="Representative word for this tone group">
+          <div class="form-help">A typical word that represents this tone group</div>
+        </div>
+
+        <!-- Exemplar Word Reference -->
+        <div class="form-group">
+          <label for="exemplarWordRefInput">Exemplar Reference Number</label>
+          <input 
+            type="text" 
+            id="exemplarWordRefInput" 
+            placeholder="Reference number (optional)">
+          <div class="form-help">Reference number for the exemplar word</div>
+        </div>
+
+        <!-- Mark as Reviewed -->
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="markReviewedCheckbox">
+            <span>Mark this group as reviewed</span>
+          </label>
+          <div class="form-help">Clear the "needs review" badge for this group</div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="secondary" onclick="closeEditGroupModal()">Cancel</button>
+        <button onclick="saveGroupEdits()">Save Changes</button>
+      </div>
+    </div>
+  </div>
 
   <script src="localization.js"></script>
   <script src="renderer.js"></script>
