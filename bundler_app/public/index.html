@@ -202,11 +202,176 @@
       font-size: 16px;
       margin-top: 20px;
     }
+    
+    /* Bundle type toggle */
+    .bundle-type-section {
+      background: #e7f3ff;
+      border: 2px solid #007bff;
+      margin-bottom: 25px;
+    }
+    
+    .bundle-type-toggle {
+      display: flex;
+      gap: 30px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    
+    .bundle-type-toggle label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+    }
+    
+    .bundle-type-toggle input[type="radio"] {
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+    }
+    
+    .bundle-type-info {
+      color: #666;
+      font-size: 14px;
+      margin-top: 10px;
+      padding: 10px;
+      background: #fff;
+      border-radius: 4px;
+    }
+    
+    /* Hierarchical section (initially hidden) */
+    .hierarchical-only {
+      display: none;
+    }
+    
+    .hierarchical-only.visible {
+      display: block;
+    }
+    
+    /* Tree builder styles */
+    .tree-builder {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 15px;
+      background: #fafafa;
+    }
+    
+    .tree-level {
+      margin-left: 20px;
+      border-left: 2px solid #ccc;
+      padding-left: 15px;
+      margin-top: 10px;
+    }
+    
+    .tree-node {
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+    
+    .tree-node-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    
+    .tree-node-field {
+      flex: 1;
+    }
+    
+    .tree-node-field select {
+      width: 100%;
+    }
+    
+    .tree-node-values {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+      padding: 8px;
+      background: #f5f5f5;
+      border-radius: 4px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    
+    .tree-value-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      font-size: 13px;
+    }
+    
+    .tree-value-item input[type="checkbox"] {
+      width: auto;
+      margin: 0;
+    }
+    
+    .tree-value-count {
+      color: #666;
+      font-size: 11px;
+      margin-left: 4px;
+    }
+    
+    .tree-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    
+    .btn-tree {
+      padding: 6px 12px;
+      font-size: 13px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    .btn-tree.add {
+      background: #28a745;
+      color: white;
+    }
+    
+    .btn-tree.remove {
+      background: #dc3545;
+      color: white;
+    }
+    
+    .btn-tree:hover {
+      opacity: 0.8;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Tone Matching Bundler</h1>
+
+    <div class="section bundle-type-section">
+      <h2>Bundle Type</h2>
+      <div class="bundle-type-toggle">
+        <label>
+          <input type="radio" name="bundleType" value="legacy" checked onchange="handleBundleTypeChange()">
+          Legacy Single Bundle (.tncmp)
+        </label>
+        <label>
+          <input type="radio" name="bundleType" value="hierarchical" onchange="handleBundleTypeChange()">
+          Hierarchical Macro-Bundle (.tnset)
+        </label>
+      </div>
+      <div class="bundle-type-info" id="bundleTypeInfo">
+        <strong>Legacy mode:</strong> Creates a single bundle file with all words. Compatible with all app versions.
+      </div>
+    </div>
 
     <div class="section">
       <h2>1. XML File</h2>
@@ -272,6 +437,22 @@
       </div>
     </div>
 
+    <div class="section hierarchical-only">
+      <h2>3b. Hierarchical Organization</h2>
+      <div class="info" style="margin-bottom: 15px;">
+        Build a category hierarchy to organize words into sub-bundles. Each level filters by an XML field, 
+        and each value becomes a sub-bundle. Select which values to include at each level.
+      </div>
+      <div class="tree-builder">
+        <div id="hierarchyTree">
+          <!-- Tree will be rendered here dynamically -->
+        </div>
+        <div class="tree-actions">
+          <button class="btn-tree add" onclick="addHierarchyLevel()">Add Category Level</button>
+        </div>
+      </div>
+    </div>
+
     <div class="section">
       <h2>4. Record Filtering</h2>
       <div class="form-group">
@@ -290,12 +471,60 @@
         </div>
       </div>
       <div class="form-group">
+        <div class="checkbox-group">
+          <input type="checkbox" id="showReferenceNumbers">
+          <label for="showReferenceNumbers">Show reference numbers in matching apps</label>
+        </div>
+        <div class="info">Display reference numbers alongside words during matching sessions</div>
+      </div>
+      <div class="form-group">
         <label>Element to store user spelling</label>
-        <input type="text" id="userSpellingElement" value="Orthographic">
+        <select id="userSpellingElement">
+          <option value="">— Select element —</option>
+        </select>
+        <div id="userSpellingWarning" style="color: #d9534f; font-size: 12px; margin-top: 6px; display: none;"></div>
       </div>
       <div class="form-group">
         <label>Element to store tone group assignment</label>
-        <input type="text" id="toneGroupElement" value="SurfaceMelodyGroup">
+        <select id="toneGroupElement">
+          <option value="">— Select element —</option>
+        </select>
+      </div>
+      <div class="form-group hierarchical-only">
+        <label style="font-weight: bold; margin-bottom: 8px; display: block;">Optional Tone Fields</label>
+        <div class="info" style="margin-bottom: 12px;">Configure additional fields for tone group metadata (Hierarchical bundles only)</div>
+        
+        <div style="display: flex; align-items: center; margin-bottom: 8px;">
+          <input type="checkbox" id="enableToneGroupId" style="width: auto; margin-right: 8px;">
+          <label for="enableToneGroupId" style="flex: 0 0 120px; margin: 0;">ID Field:</label>
+          <select id="toneGroupIdField" style="flex: 1;" disabled>
+            <option value="">— Select element —</option>
+          </select>
+        </div>
+        
+        <div style="display: flex; align-items: center; margin-bottom: 8px;">
+          <input type="checkbox" id="enablePitchField" style="width: auto; margin-right: 8px;">
+          <label for="enablePitchField" style="flex: 0 0 120px; margin: 0;">Pitch Field:</label>
+          <select id="pitchField" style="flex: 1;" disabled>
+            <option value="">— Select element —</option>
+          </select>
+        </div>
+        
+        <div style="display: flex; align-items: center; margin-bottom: 8px;">
+          <input type="checkbox" id="enableAbbreviationField" style="width: auto; margin-right: 8px;">
+          <label for="enableAbbreviationField" style="flex: 0 0 120px; margin: 0;">Abbreviation Field:</label>
+          <select id="abbreviationField" style="flex: 1;" disabled>
+            <option value="">— Select element —</option>
+          </select>
+        </div>
+        
+        <div style="display: flex; align-items: center; margin-bottom: 8px;">
+          <input type="checkbox" id="enableExemplarField" style="width: auto; margin-right: 8px;">
+          <label for="enableExemplarField" style="flex: 0 0 120px; margin: 0;">Exemplar Field:</label>
+          <select id="exemplarField" style="flex: 1;" disabled>
+            <option value="">— Select element —</option>
+          </select>
+        </div>
       </div>
     </div>
 

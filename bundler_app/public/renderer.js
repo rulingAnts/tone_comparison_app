@@ -6,11 +6,46 @@ let audioFolderPath = null;
 let outputFilePath = null;
 let persisted = null; // settings loaded from main
 let audioVariants = [];
+let bundleType = 'legacy'; // 'legacy' or 'hierarchical'
+let hierarchyLevels = []; // Array of {field, values: {value, included, count}}
+let parsedXmlData = null; // Store full parsed XML data for hierarchy analysis
 
 window.addEventListener('DOMContentLoaded', async () => {
   await loadPersistedSettings();
+  setupToneFieldToggles();
   attachChangePersistence();
 });
+
+function handleBundleTypeChange() {
+  const selected = document.querySelector('input[name="bundleType"]:checked');
+  if (!selected) return;
+  
+  bundleType = selected.value;
+  
+  // Update info text
+  const infoDiv = document.getElementById('bundleTypeInfo');
+  if (bundleType === 'legacy') {
+    infoDiv.innerHTML = '<strong>Legacy mode:</strong> Creates a single bundle file with all words. Compatible with all app versions.';
+  } else {
+    infoDiv.innerHTML = '<strong>Hierarchical mode:</strong> Organize words into sub-bundles using XML field categories (e.g., by word class, syllable pattern). Advanced workflow for complex tone analysis.';
+  }
+  
+  // Show/hide hierarchical-specific sections
+  const hierarchicalSections = document.querySelectorAll('.hierarchical-only');
+  hierarchicalSections.forEach(section => {
+    if (bundleType === 'hierarchical') {
+      section.classList.add('visible');
+    } else {
+      section.classList.remove('visible');
+    }
+  });
+  
+  // Update output file extension in the button text
+  updateCreateButtonText();
+  
+  // Persist bundle type choice
+  persistSettings();
+}
 
 async function loadPersistedSettings() {
   try {
@@ -26,8 +61,11 @@ async function loadPersistedSettings() {
     const result = await ipcRenderer.invoke('parse-xml', persisted.xmlPath);
     if (result && result.success) {
       availableFields = result.fields;
+      parsedXmlData = result; // Store for hierarchy analysis
       updateWrittenFormElements(persisted.settings?.writtenFormElements || []);
       updateGlossOptions();
+      updateToneFieldOptions();
+      updateUserSpellingOptions();
       document.getElementById('xmlInfo').textContent = `✓ Loaded ${result.recordCount} records`;
       document.getElementById('xmlInfo').style.color = 'green';
     } else {
@@ -46,11 +84,73 @@ async function loadPersistedSettings() {
   }
 
   const s = persisted.settings || {};
+  
+  // Restore bundle type
+  if (s.bundleType) {
+    bundleType = s.bundleType;
+    const radioToCheck = document.querySelector(`input[name="bundleType"][value="${bundleType}"]`);
+    if (radioToCheck) {
+      radioToCheck.checked = true;
+      handleBundleTypeChange();
+    }
+  }
+  
   document.getElementById('showWrittenForm').checked = !!s.showWrittenForm;
   document.getElementById('showGloss').checked = !!s.showGloss;
   document.getElementById('requireUserSpelling').checked = !!s.requireUserSpelling;
-  document.getElementById('userSpellingElement').value = s.userSpellingElement || 'Orthographic';
-  document.getElementById('toneGroupElement').value = s.toneGroupElement || 'SurfaceMelodyGroup';
+  document.getElementById('showReferenceNumbers').checked = !!s.showReferenceNumbers;
+  
+  // Restore user spelling element
+  const userSpellingSelect = document.getElementById('userSpellingElement');
+  if (userSpellingSelect && s.userSpellingElement) {
+    userSpellingSelect.value = s.userSpellingElement;
+  }
+  validateUserSpellingField();
+  
+  // Restore tone group element
+  const toneGroupSelect = document.getElementById('toneGroupElement');
+  if (toneGroupSelect && s.toneGroupElement) {
+    toneGroupSelect.value = s.toneGroupElement;
+  }
+  
+  // Restore optional tone fields
+  if (s.toneGroupIdField) {
+    const cb = document.getElementById('enableToneGroupId');
+    const sel = document.getElementById('toneGroupIdField');
+    if (cb) cb.checked = true;
+    if (sel) {
+      sel.disabled = false;
+      sel.value = s.toneGroupIdField;
+    }
+  }
+  if (s.pitchField) {
+    const cb = document.getElementById('enablePitchField');
+    const sel = document.getElementById('pitchField');
+    if (cb) cb.checked = true;
+    if (sel) {
+      sel.disabled = false;
+      sel.value = s.pitchField;
+    }
+  }
+  if (s.abbreviationField) {
+    const cb = document.getElementById('enableAbbreviationField');
+    const sel = document.getElementById('abbreviationField');
+    if (cb) cb.checked = true;
+    if (sel) {
+      sel.disabled = false;
+      sel.value = s.abbreviationField;
+    }
+  }
+  if (s.exemplarField) {
+    const cb = document.getElementById('enableExemplarField');
+    const sel = document.getElementById('exemplarField');
+    if (cb) cb.checked = true;
+    if (sel) {
+      sel.disabled = false;
+      sel.value = s.exemplarField;
+    }
+  }
+  
   document.getElementById('bundleDescription').value = s.bundleDescription || '';
   // Audio processing defaults
   const ap = s.audioProcessing || {};
@@ -78,6 +178,19 @@ async function loadPersistedSettings() {
       }))
     : [{ description: 'Default', suffix: (s.audioFileSuffix || '') }];
   renderAudioVariants();
+  
+  // Restore hierarchy levels
+  if (Array.isArray(s.hierarchyLevels) && s.hierarchyLevels.length > 0) {
+    hierarchyLevels = s.hierarchyLevels.map(level => ({
+      ...level,
+      audioConfig: level.audioConfig || {
+        includeAudio: true,
+        suffix: '',
+        applyTo: 'this'
+      }
+    }));
+    renderHierarchyTree();
+  }
 
   checkFormValid();
 }
@@ -86,14 +199,21 @@ function attachChangePersistence() {
   const persist = () => persistSettings();
   const byId = (id) => document.getElementById(id);
   [
-    'showWrittenForm', 'showGloss', 'requireUserSpelling',
+    'showWrittenForm', 'showGloss', 'requireUserSpelling', 'showReferenceNumbers',
     'userSpellingElement', 'toneGroupElement', 'referenceNumbers', 'glossElement', 'bundleDescription',
     'autoTrim', 'autoNormalize', 'convertToFlac',
+    'toneGroupIdField', 'pitchField', 'abbreviationField', 'exemplarField',
   ].forEach((id) => {
     const el = byId(id);
     if (!el) return;
     el.addEventListener('change', persist);
   });
+  
+  // Add validation listener to user spelling field
+  const userSpellingEl = byId('userSpellingElement');
+  if (userSpellingEl) {
+    userSpellingEl.addEventListener('change', validateUserSpellingField);
+  }
 
   const addBtn = document.getElementById('addAudioVariantBtn');
   if (addBtn) {
@@ -111,24 +231,46 @@ function collectCurrentSettings() {
   const showWrittenForm = document.getElementById('showWrittenForm').checked;
   const variants = getAudioVariantsFromDOM();
   const firstSuffix = (variants.length > 0 ? (variants[0].suffix || '') : '');
+  
+  // Collect optional tone fields
+  const toneGroupIdField = document.getElementById('enableToneGroupId')?.checked 
+    ? document.getElementById('toneGroupIdField')?.value?.trim() 
+    : null;
+  const pitchField = document.getElementById('enablePitchField')?.checked
+    ? document.getElementById('pitchField')?.value?.trim()
+    : null;
+  const abbreviationField = document.getElementById('enableAbbreviationField')?.checked
+    ? document.getElementById('abbreviationField')?.value?.trim()
+    : null;
+  const exemplarField = document.getElementById('enableExemplarField')?.checked
+    ? document.getElementById('exemplarField')?.value?.trim()
+    : null;
+  
   return {
     xmlPath: xmlFilePath,
     audioFolder: audioFolderPath,
     outputPath: outputFilePath,
     settings: {
+      bundleType: bundleType,
       writtenFormElements,
       showWrittenForm,
       audioFileSuffix: firstSuffix === '' ? null : firstSuffix,
       audioFileVariants: variants,
       referenceNumbers: parseReferenceNumbers(document.getElementById('referenceNumbers').value),
       requireUserSpelling: document.getElementById('requireUserSpelling').checked,
+      showReferenceNumbers: document.getElementById('showReferenceNumbers').checked,
       userSpellingElement: document.getElementById('userSpellingElement').value.trim(),
       toneGroupElement: document.getElementById('toneGroupElement').value.trim(),
+      toneGroupIdField: toneGroupIdField || undefined,
+      pitchField: pitchField || undefined,
+      abbreviationField: abbreviationField || undefined,
+      exemplarField: exemplarField || undefined,
       showGloss: document.getElementById('showGloss').checked,
       glossElement: (document.getElementById('showGloss').checked
         ? (document.getElementById('glossElement').value || null)
         : null),
       bundleDescription: document.getElementById('bundleDescription').value.trim(),
+      hierarchyLevels: hierarchyLevels, // Save hierarchy configuration
       audioProcessing: {
         autoTrim: !!document.getElementById('autoTrim')?.checked,
         autoNormalize: !!document.getElementById('autoNormalize')?.checked,
@@ -154,9 +296,13 @@ async function selectXmlFile() {
     
     if (result.success) {
       availableFields = result.fields;
+      parsedXmlData = result; // Store for hierarchy analysis
       const pre = persisted?.settings?.writtenFormElements || [];
       updateWrittenFormElements(pre);
       updateGlossOptions();
+      updateToneFieldOptions();
+      updateUserSpellingOptions();
+      renderHierarchyTree();
       document.getElementById('xmlInfo').textContent = 
         `✓ Loaded ${result.recordCount} records`;
       document.getElementById('xmlInfo').style.color = 'green';
@@ -192,7 +338,10 @@ function updateWrittenFormElements(preselected = []) {
     label.appendChild(document.createTextNode(field));
     container.appendChild(label);
 
-    checkbox.addEventListener('change', persistSettings);
+    checkbox.addEventListener('change', () => {
+      persistSettings();
+      validateUserSpellingField();
+    });
   });
 }
 
@@ -223,6 +372,395 @@ function updateGlossOptions() {
   }
 }
 
+function updateToneFieldOptions() {
+  const toneGroupSelect = document.getElementById('toneGroupElement');
+  const toneGroupIdSelect = document.getElementById('toneGroupIdField');
+  const pitchSelect = document.getElementById('pitchField');
+  const abbreviationSelect = document.getElementById('abbreviationField');
+  const exemplarSelect = document.getElementById('exemplarField');
+  
+  const selects = [toneGroupSelect, toneGroupIdSelect, pitchSelect, abbreviationSelect, exemplarSelect];
+  const currentValues = selects.map(s => s ? s.value : '');
+  
+  selects.forEach((select, index) => {
+    if (!select) return;
+    select.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = '— Select element —';
+    select.appendChild(placeholder);
+    
+    availableFields.forEach((f) => {
+      const opt = document.createElement('option');
+      opt.value = f;
+      opt.textContent = f;
+      select.appendChild(opt);
+    });
+    
+    // Restore previous value if still valid
+    if (availableFields.includes(currentValues[index])) {
+      select.value = currentValues[index];
+    } else if (index === 0 && availableFields.includes('SurfaceMelodyGroup')) {
+      // Default tone group to SurfaceMelodyGroup if available
+      select.value = 'SurfaceMelodyGroup';
+    }
+  });
+}
+
+function updateUserSpellingOptions() {
+  const select = document.getElementById('userSpellingElement');
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = '— Select element —';
+  select.appendChild(placeholder);
+
+  availableFields.forEach((f) => {
+    const opt = document.createElement('option');
+    opt.value = f;
+    opt.textContent = f;
+    select.appendChild(opt);
+  });
+
+  // Prefer "Orthographic" if present
+  if (availableFields.includes('Orthographic')) {
+    select.value = 'Orthographic';
+  } else if (availableFields.includes(current)) {
+    select.value = current;
+  } else {
+    select.value = '';
+  }
+  
+  validateUserSpellingField();
+}
+
+function validateUserSpellingField() {
+  const userSpellingSelect = document.getElementById('userSpellingElement');
+  const warningDiv = document.getElementById('userSpellingWarning');
+  if (!userSpellingSelect || !warningDiv) return;
+  
+  const selectedSpelling = userSpellingSelect.value;
+  if (!selectedSpelling) {
+    warningDiv.style.display = 'none';
+    return;
+  }
+  
+  // Check if selected spelling field conflicts with written form elements
+  const writtenFormElements = getSelectedWrittenFormElements();
+  if (writtenFormElements.includes(selectedSpelling)) {
+    warningDiv.textContent = `⚠️ Warning: "${selectedSpelling}" is also used for written form display. This field will be overwritten by user input.`;
+    warningDiv.style.display = 'block';
+  } else {
+    warningDiv.style.display = 'none';
+  }
+}
+
+function setupToneFieldToggles() {
+  const toggles = [
+    { checkbox: 'enableToneGroupId', select: 'toneGroupIdField' },
+    { checkbox: 'enablePitchField', select: 'pitchField' },
+    { checkbox: 'enableAbbreviationField', select: 'abbreviationField' },
+    { checkbox: 'enableExemplarField', select: 'exemplarField' }
+  ];
+  
+  toggles.forEach(({ checkbox, select }) => {
+    const checkboxEl = document.getElementById(checkbox);
+    const selectEl = document.getElementById(select);
+    if (checkboxEl && selectEl) {
+      checkboxEl.addEventListener('change', () => {
+        selectEl.disabled = !checkboxEl.checked;
+        persistSettings();
+      });
+    }
+  });
+}
+
+// Hierarchy Tree Builder Functions
+function addHierarchyLevel() {
+  hierarchyLevels.push({
+    field: '',
+    values: [],
+    audioConfig: {
+      includeAudio: true, // Whether to include audio at all
+      suffix: '', // Audio suffix for this level (empty = use parent/default)
+      applyTo: 'this' // 'this', 'children', or 'selected'
+    }
+  });
+  renderHierarchyTree();
+  persistSettings();
+}
+
+function removeHierarchyLevel(index) {
+  hierarchyLevels.splice(index, 1);
+  renderHierarchyTree();
+  persistSettings();
+}
+
+function updateHierarchyField(index, field) {
+  hierarchyLevels[index].field = field;
+  hierarchyLevels[index].values = [];
+  
+  // Auto-detect values and counts from XML data
+  if (parsedXmlData && field) {
+    const valueCounts = new Map();
+    
+    // Apply filters from previous levels
+    const filteredRecords = getFilteredRecords(index);
+    
+    filteredRecords.forEach(record => {
+      const value = record[field];
+      if (value) {
+        valueCounts.set(value, (valueCounts.get(value) || 0) + 1);
+      }
+    });
+    
+    // Convert to array and sort by value
+    hierarchyLevels[index].values = Array.from(valueCounts.entries())
+      .map(([value, count]) => ({
+        value,
+        included: true, // Include by default
+        count
+      }))
+      .sort((a, b) => a.value.localeCompare(b.value));
+  }
+  
+  renderHierarchyTree();
+  persistSettings();
+}
+
+function getFilteredRecords(upToLevel) {
+  if (!parsedXmlData || !parsedXmlData.records) return [];
+  
+  let filtered = parsedXmlData.records;
+  
+  // Apply filters from levels 0 to upToLevel-1
+  for (let i = 0; i < upToLevel && i < hierarchyLevels.length; i++) {
+    const level = hierarchyLevels[i];
+    if (!level.field) continue;
+    
+    const includedValues = new Set(
+      level.values.filter(v => v.included).map(v => v.value)
+    );
+    
+    if (includedValues.size > 0) {
+      filtered = filtered.filter(record => 
+        includedValues.has(record[level.field])
+      );
+    }
+  }
+  
+  return filtered;
+}
+
+function toggleHierarchyValue(levelIndex, valueIndex) {
+  hierarchyLevels[levelIndex].values[valueIndex].included = 
+    !hierarchyLevels[levelIndex].values[valueIndex].included;
+  
+  // Recalculate counts for subsequent levels
+  for (let i = levelIndex + 1; i < hierarchyLevels.length; i++) {
+    if (hierarchyLevels[i].field) {
+      updateHierarchyField(i, hierarchyLevels[i].field);
+    }
+  }
+  
+  renderHierarchyTree();
+  persistSettings();
+}
+
+function updateAudioConfig(levelIndex, field, value) {
+  if (!hierarchyLevels[levelIndex].audioConfig) {
+    hierarchyLevels[levelIndex].audioConfig = {
+      includeAudio: true,
+      suffix: '',
+      applyTo: 'this'
+    };
+  }
+  hierarchyLevels[levelIndex].audioConfig[field] = value;
+  persistSettings();
+}
+
+function renderHierarchyTree() {
+  const container = document.getElementById('hierarchyTree');
+  if (!container) return;
+  
+  if (hierarchyLevels.length === 0) {
+    container.innerHTML = '<div style="color: #999; font-style: italic; padding: 10px;">No category levels defined. Click "Add Category Level" to start.</div>';
+    return;
+  }
+  
+  container.innerHTML = '';
+  
+  hierarchyLevels.forEach((level, index) => {
+    const levelDiv = document.createElement('div');
+    levelDiv.className = 'tree-level';
+    
+    const nodeDiv = document.createElement('div');
+    nodeDiv.className = 'tree-node';
+    
+    // Header with field selector and remove button
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'tree-node-header';
+    
+    const fieldLabel = document.createElement('strong');
+    fieldLabel.textContent = `Level ${index + 1}:`;
+    fieldLabel.style.flex = '0 0 70px';
+    
+    const fieldDiv = document.createElement('div');
+    fieldDiv.className = 'tree-node-field';
+    
+    const fieldSelect = document.createElement('select');
+    fieldSelect.innerHTML = '<option value="">— Select field —</option>';
+    availableFields.forEach(f => {
+      const opt = document.createElement('option');
+      opt.value = f;
+      opt.textContent = f;
+      if (f === level.field) opt.selected = true;
+      fieldSelect.appendChild(opt);
+    });
+    fieldSelect.addEventListener('change', () => updateHierarchyField(index, fieldSelect.value));
+    
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'btn-tree remove';
+    removeBtn.textContent = 'Remove';
+    removeBtn.onclick = () => removeHierarchyLevel(index);
+    
+    fieldDiv.appendChild(fieldSelect);
+    headerDiv.appendChild(fieldLabel);
+    headerDiv.appendChild(fieldDiv);
+    headerDiv.appendChild(removeBtn);
+    
+    nodeDiv.appendChild(headerDiv);
+    
+    // Values with checkboxes and counts
+    if (level.field && level.values.length > 0) {
+      const valuesDiv = document.createElement('div');
+      valuesDiv.className = 'tree-node-values';
+      
+      level.values.forEach((valueItem, valueIndex) => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'tree-value-item';
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = valueItem.included;
+        checkbox.addEventListener('change', () => toggleHierarchyValue(index, valueIndex));
+        
+        const label = document.createElement('span');
+        label.textContent = valueItem.value;
+        
+        const count = document.createElement('span');
+        count.className = 'tree-value-count';
+        count.textContent = `(${valueItem.count})`;
+        
+        itemDiv.appendChild(checkbox);
+        itemDiv.appendChild(label);
+        itemDiv.appendChild(count);
+        valuesDiv.appendChild(itemDiv);
+      });
+      
+      nodeDiv.appendChild(valuesDiv);
+    } else if (level.field) {
+      const noValues = document.createElement('div');
+      noValues.style.color = '#999';
+      noValues.style.fontStyle = 'italic';
+      noValues.style.padding = '8px';
+      noValues.textContent = 'No values found for this field';
+      nodeDiv.appendChild(noValues);
+    }
+    
+    // Audio configuration section
+    if (level.field) {
+      const audioConfigDiv = document.createElement('div');
+      audioConfigDiv.style.marginTop = '12px';
+      audioConfigDiv.style.padding = '10px';
+      audioConfigDiv.style.background = '#f9f9f9';
+      audioConfigDiv.style.borderRadius = '4px';
+      audioConfigDiv.style.border = '1px solid #e0e0e0';
+      
+      const audioTitle = document.createElement('div');
+      audioTitle.style.fontWeight = 'bold';
+      audioTitle.style.marginBottom = '8px';
+      audioTitle.style.fontSize = '13px';
+      audioTitle.textContent = 'Audio Configuration';
+      audioConfigDiv.appendChild(audioTitle);
+      
+      // Include audio checkbox
+      const includeAudioDiv = document.createElement('div');
+      includeAudioDiv.style.marginBottom = '8px';
+      
+      const includeAudioCb = document.createElement('input');
+      includeAudioCb.type = 'checkbox';
+      includeAudioCb.checked = level.audioConfig?.includeAudio !== false;
+      includeAudioCb.style.width = 'auto';
+      includeAudioCb.style.marginRight = '6px';
+      includeAudioCb.addEventListener('change', () => {
+        updateAudioConfig(index, 'includeAudio', includeAudioCb.checked);
+        renderHierarchyTree(); // Re-render to show/hide suffix options
+      });
+      
+      const includeAudioLabel = document.createElement('label');
+      includeAudioLabel.textContent = 'Include audio in sub-bundles';
+      includeAudioLabel.style.cursor = 'pointer';
+      includeAudioLabel.onclick = () => includeAudioCb.click();
+      
+      includeAudioDiv.appendChild(includeAudioCb);
+      includeAudioDiv.appendChild(includeAudioLabel);
+      audioConfigDiv.appendChild(includeAudioDiv);
+      
+      // Audio suffix configuration (only if audio is included)
+      if (level.audioConfig?.includeAudio !== false) {
+        const suffixDiv = document.createElement('div');
+        suffixDiv.style.display = 'flex';
+        suffixDiv.style.alignItems = 'center';
+        suffixDiv.style.gap = '8px';
+        suffixDiv.style.marginTop = '8px';
+        
+        const suffixLabel = document.createElement('span');
+        suffixLabel.textContent = 'Audio suffix:';
+        suffixLabel.style.fontSize = '13px';
+        suffixLabel.style.flex = '0 0 90px';
+        
+        const suffixInput = document.createElement('input');
+        suffixInput.type = 'text';
+        suffixInput.value = level.audioConfig?.suffix || '';
+        suffixInput.placeholder = 'e.g., -slow';
+        suffixInput.style.flex = '1';
+        suffixInput.style.padding = '4px 8px';
+        suffixInput.style.fontSize = '13px';
+        suffixInput.addEventListener('change', () => {
+          updateAudioConfig(index, 'suffix', suffixInput.value.trim());
+        });
+        
+        suffixDiv.appendChild(suffixLabel);
+        suffixDiv.appendChild(suffixInput);
+        audioConfigDiv.appendChild(suffixDiv);
+        
+        const suffixInfo = document.createElement('div');
+        suffixInfo.style.fontSize = '11px';
+        suffixInfo.style.color = '#666';
+        suffixInfo.style.marginTop = '4px';
+        suffixInfo.textContent = 'Leave empty to use default audio files. Add suffix to use variant (e.g., file-slow.wav)';
+        audioConfigDiv.appendChild(suffixInfo);
+      } else {
+        const noAudioInfo = document.createElement('div');
+        noAudioInfo.style.fontSize = '12px';
+        noAudioInfo.style.color = '#666';
+        noAudioInfo.style.fontStyle = 'italic';
+        noAudioInfo.style.marginTop = '8px';
+        noAudioInfo.textContent = 'Sub-bundles will be created without audio files (text-only mode)';
+        audioConfigDiv.appendChild(noAudioInfo);
+      }
+      
+      nodeDiv.appendChild(audioConfigDiv);
+    }
+    
+    levelDiv.appendChild(nodeDiv);
+    container.appendChild(levelDiv);
+  });
+}
+
 async function selectAudioFolder() {
   const path = await ipcRenderer.invoke('select-audio-folder');
   if (path) {
@@ -234,7 +772,7 @@ async function selectAudioFolder() {
 }
 
 async function selectOutputFile() {
-  const path = await ipcRenderer.invoke('select-output-file');
+  const path = await ipcRenderer.invoke('select-output-file', bundleType);
   if (path) {
     outputFilePath = path;
     document.getElementById('outputPath').value = path;
@@ -529,8 +1067,11 @@ async function loadProfile() {
     const parsed = await ipcRenderer.invoke('parse-xml', profile.xmlPath);
     if (parsed && parsed.success) {
       availableFields = parsed.fields;
+      parsedXmlData = parsed; // Store for hierarchy analysis
       updateWrittenFormElements(profile.settings?.writtenFormElements || []);
       updateGlossOptions();
+      updateToneFieldOptions();
+      updateUserSpellingOptions();
       document.getElementById('xmlInfo').textContent = `✓ Loaded ${parsed.recordCount} records`;
       document.getElementById('xmlInfo').style.color = 'green';
     } else {
@@ -560,4 +1101,15 @@ async function loadProfile() {
 
   await persistSettings();
   checkFormValid();
+}
+
+function updateCreateButtonText() {
+  const btn = document.getElementById('createBtn');
+  if (!btn) return;
+  
+  if (bundleType === 'hierarchical') {
+    btn.textContent = 'Create Macro-Bundle (.tnset)';
+  } else {
+    btn.textContent = 'Create Bundle (.tncmp)';
+  }
 }

@@ -256,10 +256,20 @@ ipcMain.handle('parse-xml', async (event, xmlPath) => {
     const firstForm = dataForms[0];
     const fields = Object.keys(firstForm).filter(key => !key.startsWith('@_'));
     
+    // Extract record data for hierarchy analysis (only non-attribute fields)
+    const records = dataForms.map(form => {
+      const record = {};
+      fields.forEach(field => {
+        record[field] = form[field] || '';
+      });
+      return record;
+    });
+    
     return {
       success: true,
       fields,
       recordCount: dataForms.length,
+      records, // Include full record data for hierarchy analysis
     };
   } catch (error) {
     return {
@@ -270,6 +280,31 @@ ipcMain.handle('parse-xml', async (event, xmlPath) => {
 });
 
 ipcMain.handle('create-bundle', async (event, config) => {
+  try {
+    const {
+      xmlPath,
+      audioFolder,
+      outputPath,
+      settings,
+    } = config;
+    
+    // Determine bundle type
+    const bundleType = settings?.bundleType || 'legacy';
+    
+    if (bundleType === 'hierarchical') {
+      return await createHierarchicalBundle(config, event);
+    } else {
+      return await createLegacyBundle(config, event);
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+});
+
+async function createLegacyBundle(config, event) {
   try {
     const {
       xmlPath,
@@ -544,21 +579,254 @@ ipcMain.handle('create-bundle', async (event, config) => {
       error: error.message,
     };
   }
-});
+}
 
-ipcMain.handle('select-output-file', async () => {
+async function createHierarchicalBundle(config, event) {
+  try {
+    const {
+      xmlPath,
+      audioFolder,
+      outputPath,
+      settings,
+    } = config;
+    
+    const settingsWithMeta = { ...(settings || {}) };
+    if (!settingsWithMeta.bundleId) settingsWithMeta.bundleId = generateUuid();
+    if (settingsWithMeta.bundleDescription == null) settingsWithMeta.bundleDescription = '';
+    
+    // Parse XML
+    const xmlData = fs.readFileSync(xmlPath, 'utf16le');
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: '@_',
+      trimValues: true,
+      parseAttributeValue: false,
+      parseTagValue: false,
+    });
+    const result = parser.parse(xmlData);
+    
+    const phonData = result.phon_data;
+    const dataForms = Array.isArray(phonData.data_form) 
+      ? phonData.data_form 
+      : [phonData.data_form];
+    
+    // Filter records by reference numbers
+    const referenceNumbers = (settingsWithMeta.referenceNumbers || []).map((r) => normalizeRefString(r));
+    const refSet = new Set(referenceNumbers);
+    let filteredRecords = referenceNumbers.length > 0
+      ? dataForms.filter(df => {
+          const ref = df && df.Reference != null ? normalizeRefString(df.Reference) : '';
+          return refSet.has(ref);
+        })
+      : dataForms;
+    
+    filteredRecords = sortByNumericRef(filteredRecords);
+    
+    // Build hierarchy structure from settings
+    const hierarchyLevels = settingsWithMeta.hierarchyLevels || [];
+    if (hierarchyLevels.length === 0) {
+      throw new Error('Hierarchical bundle requires at least one hierarchy level');
+    }
+    
+    // Generate sub-bundles recursively
+    const subBundles = generateSubBundles(filteredRecords, hierarchyLevels, 0, '', settingsWithMeta);
+    
+    // Create .tnset archive
+    const output = fs.createWriteStream(outputPath);
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.pipe(output);
+    
+    // Create manifest.json
+    const manifest = {
+      version: '1.0',
+      bundleType: 'hierarchical',
+      bundleId: settingsWithMeta.bundleId,
+      bundleDescription: settingsWithMeta.bundleDescription || '',
+      createdAt: new Date().toISOString(),
+      totalRecords: filteredRecords.length,
+      subBundleCount: subBundles.length,
+    };
+    archive.append(JSON.stringify(manifest, null, 2), { name: 'manifest.json' });
+    
+    // Create hierarchy.json
+    const hierarchy = {
+      levels: hierarchyLevels.map((level, index) => ({
+        level: index,
+        field: level.field,
+        values: level.values.filter(v => v.included).map(v => v.value),
+        audioConfig: level.audioConfig || { includeAudio: true, suffix: '' }
+      }))
+    };
+    archive.append(JSON.stringify(hierarchy, null, 2), { name: 'hierarchy.json' });
+    
+    // Add settings.json
+    archive.append(JSON.stringify(settingsWithMeta, null, 2), { name: 'settings.json' });
+    
+    // Add each sub-bundle
+    const tgKey = settingsWithMeta.toneGroupElement || 'SurfaceMelodyGroup';
+    const tgIdKey = settingsWithMeta.toneGroupIdElement || 'SurfaceMelodyGroupId';
+    
+    for (const subBundle of subBundles) {
+      const subBundlePath = subBundle.path;
+      
+      // Create XML for this sub-bundle
+      const subXml = createSubBundleXml(subBundle.records, tgKey, tgIdKey);
+      archive.append(subXml, { name: `sub_bundles/${subBundlePath}/data.xml` });
+      
+      // Create metadata for this sub-bundle
+      const subMeta = {
+        path: subBundlePath,
+        categoryPath: subBundle.categoryPath,
+        recordCount: subBundle.records.length,
+        audioConfig: subBundle.audioConfig,
+      };
+      archive.append(JSON.stringify(subMeta, null, 2), { name: `sub_bundles/${subBundlePath}/metadata.json` });
+      
+      // Add audio files if configured
+      if (subBundle.audioConfig.includeAudio) {
+        const audioSuffix = subBundle.audioConfig.suffix || '';
+        for (const record of subBundle.records) {
+          if (record.SoundFile) {
+            let soundFile = record.SoundFile;
+            if (audioSuffix) {
+              const lastDot = soundFile.lastIndexOf('.');
+              if (lastDot !== -1) {
+                soundFile = soundFile.substring(0, lastDot) + audioSuffix + soundFile.substring(lastDot);
+              }
+            }
+            const srcPath = path.join(audioFolder, soundFile);
+            if (fs.existsSync(srcPath)) {
+              archive.file(srcPath, { name: `sub_bundles/${subBundlePath}/audio/${soundFile}` });
+            }
+          }
+        }
+      }
+    }
+    
+    // Add Contour6 font for pitch transcription display
+    const fontPath = path.join(__dirname, '..', '..', 'assets', 'fonts', 'CONCODR1.TTF');
+    if (fs.existsSync(fontPath)) {
+      archive.file(fontPath, { name: 'fonts/Contour6SILDoulos.ttf' });
+      console.log('[bundler] Added Contour6 font to hierarchical bundle');
+    } else {
+      console.warn('[bundler] Contour6 font not found at:', fontPath);
+    }
+    
+    await archive.finalize();
+    
+    return {
+      success: true,
+      recordCount: filteredRecords.length,
+      subBundleCount: subBundles.length,
+      hierarchicalBundle: true,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+}
+
+function generateSubBundles(records, hierarchyLevels, levelIndex, pathPrefix, settings) {
+  const subBundles = [];
+  
+  if (levelIndex >= hierarchyLevels.length) {
+    // Leaf node - create a sub-bundle
+    return [{
+      path: pathPrefix || 'root',
+      categoryPath: pathPrefix || 'root',
+      records: records,
+      audioConfig: hierarchyLevels[levelIndex - 1]?.audioConfig || { includeAudio: true, suffix: '' }
+    }];
+  }
+  
+  const level = hierarchyLevels[levelIndex];
+  const field = level.field;
+  const includedValues = new Set(level.values.filter(v => v.included).map(v => v.value));
+  
+  // Group records by field value
+  const groups = new Map();
+  for (const record of records) {
+    const value = record[field];
+    if (value && includedValues.has(value)) {
+      if (!groups.has(value)) {
+        groups.set(value, []);
+      }
+      groups.get(value).push(record);
+    }
+  }
+  
+  // Generate sub-bundles for each group
+  for (const [value, groupRecords] of groups.entries()) {
+    const safeName = value.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const newPath = pathPrefix ? `${pathPrefix}/${safeName}` : safeName;
+    
+    if (levelIndex === hierarchyLevels.length - 1) {
+      // This is the last level - create leaf sub-bundle
+      subBundles.push({
+        path: newPath,
+        categoryPath: newPath,
+        records: groupRecords,
+        audioConfig: level.audioConfig || { includeAudio: true, suffix: '' }
+      });
+    } else {
+      // Recurse to next level
+      const childBundles = generateSubBundles(groupRecords, hierarchyLevels, levelIndex + 1, newPath, settings);
+      subBundles.push(...childBundles);
+    }
+  }
+  
+  return subBundles;
+}
+
+function createSubBundleXml(records, tgKey, tgIdKey) {
+  const escapeXml = (s) => String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+
+  const buildDataForm = (rec) => {
+    const keys = Object.keys(rec).filter((k) => !k.startsWith('@_'));
+    const parts = [];
+    for (const k of keys) {
+      if (k === tgKey || k === tgIdKey) continue; // strip previous tone grouping
+      const v = rec[k];
+      if (v == null) continue;
+      parts.push(`  <${k}>${escapeXml(v)}</${k}>`);
+    }
+    return ['<data_form>', ...parts, '</data_form>'].join('\n');
+  };
+
+  return [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<phon_data>',
+    ...records.map((r) => buildDataForm(r)),
+    '</phon_data>',
+    '',
+  ].join('\n');
+}
+
+ipcMain.handle('select-output-file', async (event, bundleType = 'legacy') => {
+  const isHierarchical = bundleType === 'hierarchical';
+  const extension = isHierarchical ? 'tnset' : 'tncmp';
+  const typeName = isHierarchical ? 'Hierarchical Macro-Bundle' : 'Tone Bundle';
+  const defaultName = isHierarchical ? 'tone_matching_macro_bundle.tnset' : 'tone_matching_bundle.tncmp';
+  
   const result = await dialog.showSaveDialog(mainWindow, {
     filters: [
-      { name: 'Tone Bundle', extensions: ['tncmp'] },
+      { name: typeName, extensions: [extension] },
     ],
-    defaultPath: 'tone_matching_bundle.tncmp',
+    defaultPath: defaultName,
   });
 
   if (!result.canceled && result.filePath) {
     let out = result.filePath;
-    // Ensure .tncmp extension
-    if (path.extname(out).toLowerCase() !== '.tncmp') {
-      out = out + '.tncmp';
+    // Ensure correct extension
+    if (path.extname(out).toLowerCase() !== `.${extension}`) {
+      out = out + `.${extension}`;
     }
     return out;
   }
