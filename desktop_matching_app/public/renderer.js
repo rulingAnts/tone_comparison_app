@@ -6,6 +6,11 @@ let session = null;
 let currentWord = null;
 let currentGroupId = null;
 let recordCache = new Map(); // Cache for fetched records
+let editingGroupId = null; // For edit modal
+let movingWordRef = null; // For move word modal
+let selectedTargetSubBundle = null; // For move word modal
+let bundleType = null; // Track bundle type (hierarchical vs legacy)
+let currentSubBundle = null; // Track current sub-bundle for hierarchical bundles
 
 const REVIEW_THRESHOLD = 5;
 
@@ -111,6 +116,7 @@ async function loadBundle() {
     
     bundleSettings = result.settings;
     session = result.session;
+    bundleType = result.bundleType || (result.requiresNavigation ? 'hierarchical' : 'legacy');
     
     // Check if this is a hierarchical bundle
     if (result.requiresNavigation && result.bundleType === 'hierarchical') {
@@ -144,12 +150,19 @@ async function loadBundle() {
     
     // Show sub-bundle indicator if hierarchical
     if (session.bundleType === 'hierarchical' && session.currentSubBundle) {
+      currentSubBundle = session.currentSubBundle;
       document.getElementById('subBundleIndicator').classList.remove('hidden');
-      document.getElementById('subBundlePath').textContent = session.currentSubBundle;
+      document.getElementById('subBundlePath').textContent = currentSubBundle;
       document.getElementById('backToNavBtn').classList.remove('hidden');
+      // Show hierarchical export section
+      document.getElementById('hierarchicalExportSection').classList.remove('hidden');
+      document.getElementById('legacyExportSection').classList.add('hidden');
     } else {
       document.getElementById('subBundleIndicator').classList.add('hidden');
       document.getElementById('backToNavBtn').classList.add('hidden');
+      // Show legacy export section
+      document.getElementById('hierarchicalExportSection').classList.add('hidden');
+      document.getElementById('legacyExportSection').classList.remove('hidden');
     }
     
     // Load current word and groups
@@ -413,10 +426,14 @@ async function loadCurrentWord() {
   currentWord = await ipcRenderer.invoke('get-current-word');
   
   if (!currentWord) {
-    // No more words
+    // No more words - check if this is completion
+    checkCompletion();
     document.querySelector('.word-panel').innerHTML = `<h2>${window.i18n.t('tm_allWordsAssigned_title')}</h2><p>${window.i18n.t('tm_allWordsAssigned_message')}</p>`;
     return;
   }
+  
+  // Hide completion message if word exists
+  document.getElementById('completionMessage').classList.add('hidden');
   
   // Update written form
   const writtenFormLine = document.getElementById('writtenFormLine');
@@ -628,6 +645,10 @@ async function removeWordFromGroup(ref, groupId) {
   const group = session.groups.find(g => g.id === groupId);
   if (group) {
     group.members = (group.members || []).filter(m => m !== ref);
+    // Auto-unmark if group was reviewed
+    if (group.additionsSinceReview !== undefined) {
+      group.additionsSinceReview++;
+    }
   }
   
   // Add to front of queue
@@ -969,6 +990,19 @@ async function renderGroups() {
         };
         actions.appendChild(playBtn);
         
+        // Add move button only for hierarchical bundles
+        if (session.bundleType === 'hierarchical') {
+          const moveBtn = document.createElement('button');
+          moveBtn.className = 'icon-button';
+          moveBtn.textContent = '↗';
+          moveBtn.title = 'Move to different sub-bundle';
+          moveBtn.onclick = (e) => {
+            e.stopPropagation();
+            openMoveWordModal(ref, record);
+          };
+          actions.appendChild(moveBtn);
+        }
+        
         const removeBtn = document.createElement('button');
         removeBtn.className = 'icon-button danger';
         removeBtn.textContent = '✕';
@@ -994,6 +1028,9 @@ async function renderGroups() {
     
     groupsList.appendChild(card);
   }
+  
+  // Update review status display
+  updateReviewStatusDisplay();
 }
 
 async function exportBundle() {
@@ -1002,6 +1039,34 @@ async function exportBundle() {
     alert(window.i18n.t('tm_export_success', { outputPath: result.outputPath }));
   } else {
     alert(window.i18n.t('tm_export_failed', { error: result.error }));
+  }
+}
+
+async function exportHierarchicalBundle() {
+  if (bundleType !== 'hierarchical') {
+    alert('This function is only available for hierarchical bundles');
+    return;
+  }
+  
+  const result = await ipcRenderer.invoke('export-bundle');
+  if (result.success) {
+    alert(`Complete session exported successfully!\n\nLocation: ${result.outputPath}`);
+  } else {
+    alert(`Export failed: ${result.error}`);
+  }
+}
+
+async function exportCurrentSubBundle() {
+  if (bundleType !== 'hierarchical' || !currentSubBundle) {
+    alert('No sub-bundle selected');
+    return;
+  }
+  
+  const result = await ipcRenderer.invoke('export-sub-bundle', { subBundlePath: currentSubBundle });
+  if (result.success) {
+    alert(`Sub-bundle exported successfully!\n\nLocation: ${result.outputPath}`);
+  } else {
+    alert(`Export failed: ${result.error}`);
   }
 }
 
@@ -1032,7 +1097,6 @@ async function resetSession() {
 }
 
 // Edit Group Modal Functions
-let editingGroupId = null;
 
 function openEditGroupModal(groupId) {
   const group = session.groups.find(g => g.id === groupId);
@@ -1077,6 +1141,13 @@ async function saveGroupEdits() {
   const exemplarWordRef = document.getElementById('exemplarWordRefInput').value.trim() || null;
   const markReviewed = document.getElementById('markReviewedCheckbox').checked;
   
+  // Check if metadata changed (for auto-unmark)
+  const metadataChanged = 
+    group.pitchTranscription !== pitchTranscription ||
+    group.toneAbbreviation !== toneAbbreviation ||
+    group.exemplarWord !== exemplarWord ||
+    group.exemplarWordRef !== exemplarWordRef;
+  
   // Update group in session
   group.pitchTranscription = pitchTranscription;
   group.toneAbbreviation = toneAbbreviation;
@@ -1086,6 +1157,9 @@ async function saveGroupEdits() {
   if (markReviewed) {
     group.additionsSinceReview = 0;
     group.requiresReview = false;
+  } else if (metadataChanged && group.additionsSinceReview === 0) {
+    // Auto-unmark if metadata changed and group was previously reviewed
+    group.additionsSinceReview = 1;
   }
   
   // Update via IPC
@@ -1094,7 +1168,8 @@ async function saveGroupEdits() {
     toneAbbreviation,
     exemplarWord,
     exemplarWordRef,
-    ...(markReviewed ? { additionsSinceReview: 0, requiresReview: false } : {})
+    ...(markReviewed ? { additionsSinceReview: 0, requiresReview: false } : 
+        metadataChanged && group.additionsSinceReview > 0 ? { additionsSinceReview: group.additionsSinceReview } : {})
   });
   
   // Update session
@@ -1103,6 +1178,7 @@ async function saveGroupEdits() {
   // Close modal and re-render
   closeEditGroupModal();
   renderGroups();
+  updateReviewStatusDisplay();
 }
 
 // Close modal when clicking outside
@@ -1116,9 +1192,262 @@ document.addEventListener('click', (e) => {
 // Close modal with Escape key
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    const modal = document.getElementById('editGroupModal');
-    if (!modal.classList.contains('hidden')) {
+    const editModal = document.getElementById('editGroupModal');
+    if (!editModal.classList.contains('hidden')) {
       closeEditGroupModal();
+    }
+    const moveModal = document.getElementById('moveWordModal');
+    if (!moveModal.classList.contains('hidden')) {
+      closeMoveWordModal();
     }
   }
 });
+
+// Move Word Modal Functions (Hierarchical bundles only)
+
+async function openMoveWordModal(ref, record) {
+  // Only for hierarchical bundles
+  if (session.bundleType !== 'hierarchical') {
+    return;
+  }
+  
+  movingWordRef = ref;
+  selectedTargetSubBundle = null;
+  
+  // Get word display text
+  let wordText = ref;
+  if (record) {
+    const glossText = bundleSettings.glossElement && record[bundleSettings.glossElement];
+    const userSpelling = session.records[ref]?.userSpelling;
+    wordText = glossText || userSpelling || ref;
+  }
+  
+  document.getElementById('moveWordText').textContent = wordText;
+  
+  // Get hierarchy data from session or backend
+  const hierarchyData = await ipcRenderer.invoke('get-hierarchy-data');
+  if (!hierarchyData.success) {
+    alert('Failed to load hierarchy data');
+    return;
+  }
+  
+  // Render tree
+  renderMoveWordTree(hierarchyData.hierarchy, hierarchyData.subBundles);
+  
+  // Show modal
+  document.getElementById('moveWordModal').classList.remove('hidden');
+  document.getElementById('confirmMoveBtn').disabled = true;
+}
+
+function closeMoveWordModal() {
+  document.getElementById('moveWordModal').classList.add('hidden');
+  movingWordRef = null;
+  selectedTargetSubBundle = null;
+}
+
+function renderMoveWordTree(hierarchy, subBundles) {
+  const treeContainer = document.getElementById('moveWordTree');
+  treeContainer.innerHTML = '';
+  
+  function renderNode(nodes, level = 0) {
+    nodes.forEach(node => {
+      if (node.subBundles && node.subBundles.length > 0) {
+        // Category node
+        const categoryDiv = document.createElement('div');
+        categoryDiv.className = 'move-tree-category';
+        categoryDiv.style.paddingLeft = `${level * 20}px`;
+        categoryDiv.textContent = node.label || node.value;
+        treeContainer.appendChild(categoryDiv);
+        
+        // Render sub-bundles
+        node.subBundles.forEach(subBundlePath => {
+          const subBundle = subBundles.find(sb => sb.path === subBundlePath);
+          if (subBundle) {
+            const isCurrent = subBundlePath === session.currentSubBundle;
+            
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'move-tree-sub-bundle';
+            if (isCurrent) {
+              itemDiv.classList.add('current');
+            }
+            itemDiv.style.paddingLeft = `${(level + 1) * 20}px`;
+            
+            const radio = document.createElement('input');
+            radio.type = 'radio';
+            radio.name = 'targetSubBundle';
+            radio.value = subBundlePath;
+            radio.disabled = isCurrent;
+            radio.onchange = () => selectTargetSubBundle(subBundlePath);
+            
+            const label = document.createElement('span');
+            label.className = 'move-tree-sub-bundle-label';
+            label.textContent = subBundle.path.split('/').pop();
+            
+            const info = document.createElement('span');
+            info.className = 'move-tree-sub-bundle-info';
+            if (isCurrent) {
+              info.textContent = '(current)';
+            } else {
+              info.textContent = `(${subBundle.assignedCount || 0}/${subBundle.recordCount || 0} words)`;
+            }
+            
+            itemDiv.appendChild(radio);
+            itemDiv.appendChild(label);
+            itemDiv.appendChild(info);
+            
+            if (!isCurrent) {
+              itemDiv.onclick = () => {
+                if (!isCurrent) {
+                  radio.checked = true;
+                  selectTargetSubBundle(subBundlePath);
+                }
+              };
+            }
+            
+            treeContainer.appendChild(itemDiv);
+          }
+        });
+      }
+      
+      if (node.children && node.children.length > 0) {
+        renderNode(node.children, level + 1);
+      }
+    });
+  }
+  
+  renderNode(hierarchy.tree || []);
+}
+
+function selectTargetSubBundle(subBundlePath) {
+  selectedTargetSubBundle = subBundlePath;
+  
+  // Update visual selection
+  document.querySelectorAll('.move-tree-sub-bundle').forEach(item => {
+    item.classList.remove('selected');
+  });
+  
+  const selectedRadio = document.querySelector(`input[name="targetSubBundle"][value="${subBundlePath}"]`);
+  if (selectedRadio) {
+    selectedRadio.closest('.move-tree-sub-bundle').classList.add('selected');
+  }
+  
+  // Enable move button
+  document.getElementById('confirmMoveBtn').disabled = false;
+}
+
+async function confirmMoveWord() {
+  if (!movingWordRef || !selectedTargetSubBundle) {
+    return;
+  }
+  
+  // Call backend to move word
+  const result = await ipcRenderer.invoke('move-word-to-sub-bundle', {
+    ref: movingWordRef,
+    targetSubBundle: selectedTargetSubBundle
+  });
+  
+  if (result.success) {
+    // Update session
+    session = result.session;
+    
+    // Close modal
+    closeMoveWordModal();
+    
+    // Show success message
+    const targetName = selectedTargetSubBundle.split('/').pop();
+    alert(`Moved word to ${targetName}`);
+    
+    // Re-render UI
+    updateProgressIndicator();
+    renderGroups();
+    await loadCurrentWord();
+  } else {
+    alert(`Failed to move word: ${result.error}`);
+  }
+}
+
+// Close move modal when clicking outside
+document.addEventListener('click', (e) => {
+  const moveModal = document.getElementById('moveWordModal');
+  if (e.target === moveModal) {
+    closeMoveWordModal();
+  }
+});
+
+// Review Status Management
+
+function checkCompletion() {
+  // Only for hierarchical bundles when all words assigned
+  if (session.bundleType !== 'hierarchical') {
+    return;
+  }
+  
+  const totalWords = session.queue.length + getTotalAssignedWords();
+  const assignedWords = getTotalAssignedWords();
+  
+  if (assignedWords === totalWords && totalWords > 0) {
+    // All words assigned
+    const reviewedGroups = session.groups.filter(g => !g.requiresReview && g.additionsSinceReview === 0).length;
+    const totalGroups = session.groups.length;
+    
+    let detailsText = `${totalGroups} tone groups created`;
+    if (reviewedGroups < totalGroups) {
+      detailsText += `, ${reviewedGroups} reviewed`;
+    } else {
+      detailsText += `, all reviewed ✓`;
+    }
+    
+    document.getElementById('completionDetails').textContent = detailsText;
+    document.getElementById('completionMessage').classList.remove('hidden');
+    
+    // Show mark all reviewed button in header if not all reviewed
+    const markBtn = document.getElementById('markAllReviewedBtn');
+    if (markBtn && reviewedGroups < totalGroups) {
+      markBtn.style.display = 'block';
+    } else if (markBtn) {
+      markBtn.style.display = 'none';
+    }
+  } else {
+    document.getElementById('completionMessage').classList.add('hidden');
+  }
+}
+
+async function markAllGroupsReviewed() {
+  if (!session || !session.groups) {
+    return;
+  }
+  
+  // Mark all groups as reviewed
+  for (const group of session.groups) {
+    group.additionsSinceReview = 0;
+    group.requiresReview = false;
+  }
+  
+  // Update via IPC
+  await ipcRenderer.invoke('mark-all-groups-reviewed');
+  
+  // Update session
+  await ipcRenderer.invoke('update-session', { groups: session.groups });
+  
+  // Update sub-bundle reviewed status for hierarchical bundles
+  if (session.bundleType === 'hierarchical') {
+    await ipcRenderer.invoke('mark-sub-bundle-reviewed', { reviewed: true });
+  }
+  
+  // Re-render
+  renderGroups();
+  checkCompletion();
+  
+  alert('All groups marked as reviewed');
+}
+
+function updateReviewStatusDisplay() {
+  // Update mark all reviewed button visibility
+  if (session.bundleType === 'hierarchical') {
+    const markBtn = document.getElementById('markAllReviewedBtn');
+    if (markBtn) {
+      const allReviewed = session.groups.every(g => !g.requiresReview && g.additionsSinceReview === 0);
+      markBtn.style.display = allReviewed ? 'none' : 'block';
+    }
+  }
+}

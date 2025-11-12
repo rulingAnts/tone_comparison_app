@@ -16,6 +16,8 @@
   "tm_addWord_hint_needSpelling": "Please confirm spelling before adding word to group",
   "tm_addWord_hint_needGroup": "Please select or create a tone group first",
   "tm_exportResults": "Export Results",
+  "tm_exportCompleteSession": "Export Complete Session",
+  "tm_exportSubBundle": "Export Sub-Bundle",
   "tm_loadDifferentBundle": "Load Another Bundle",
   "tm_toneGroups": "Tone Groups",
   "tm_newGroup": "+ New Group",
