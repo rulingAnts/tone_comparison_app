@@ -9,6 +9,7 @@ const {
   normalizeRefString,
   sortByNumericRef,
 } = require('./utils/refUtils');
+const { changeTracker, ChangeTracker } = require('./utils/changeTracker');
 
 let mainWindow;
 let sessionData = null;
@@ -364,6 +365,9 @@ async function loadHierarchicalBundle(filePath) {
     
     console.log(`[desktop_matching] Found ${subBundles.length} sub-bundles in hierarchical bundle`);
     
+    // Load existing change history if present
+    const existingHistory = ChangeTracker.loadChangeHistory(extractedPath);
+    
     // Build bundle data structure
     bundleData = {
       settings,
@@ -405,6 +409,10 @@ async function loadHierarchicalBundle(filePath) {
       
       saveSession();
     }
+    
+    // Initialize change tracker for this bundle
+    changeTracker.initialize(extractedPath, existingHistory);
+    console.log('[desktop_matching] Change tracker initialized');
     
     return {
       success: true,
@@ -494,10 +502,26 @@ ipcMain.handle('update-session', async (event, updates) => {
 ipcMain.handle('confirm-spelling', async (event, ref, userSpelling) => {
   if (!sessionData) return null;
   
+  // Get old value for tracking
+  const oldSpelling = sessionData.records[ref]?.userSpelling || '';
+  
   if (!sessionData.records[ref]) {
     sessionData.records[ref] = {};
   }
   sessionData.records[ref].userSpelling = userSpelling;
+  
+  // Track spelling change for hierarchical bundles
+  if (bundleType === 'hierarchical' && sessionData.currentSubBundle && oldSpelling !== userSpelling) {
+    const settings = bundleData?.settings || {};
+    const fieldName = settings.userSpellingElement || 'Orthographic';
+    changeTracker.logSpellingChange(
+      sessionData.currentSubBundle,
+      ref,
+      fieldName,
+      oldSpelling,
+      userSpelling
+    );
+  }
   
   saveSession();
   return sessionData;
@@ -505,6 +529,10 @@ ipcMain.handle('confirm-spelling', async (event, ref, userSpelling) => {
 
 ipcMain.handle('add-word-to-group', async (event, ref, groupId) => {
   if (!sessionData) return null;
+  
+  // Get old group info for change tracking
+  const oldGroup = sessionData.groups.find(g => g.members?.includes(ref));
+  const oldGroupId = oldGroup?.id || '';
   
   // Remove from queue
   sessionData.queue = sessionData.queue.filter(r => r !== ref);
@@ -519,6 +547,16 @@ ipcMain.handle('add-word-to-group', async (event, ref, groupId) => {
     }
   }
   
+  // Track the assignment (for hierarchical bundles)
+  if (bundleType === 'hierarchical' && sessionData.currentSubBundle) {
+    const subBundleId = sessionData.currentSubBundle;
+    const record = bundleData.records?.find(r => normalizeRefString(r.Reference) === ref);
+    changeTracker.logToneGroupAssignment(subBundleId, ref, groupId, {
+      oldGroupId,
+      groupSize: group?.members?.length || 1
+    });
+  }
+  
   saveSession();
   return sessionData;
 });
@@ -530,6 +568,12 @@ ipcMain.handle('remove-word-from-group', async (event, ref, groupId) => {
   const group = sessionData.groups.find(g => g.id === groupId);
   if (group) {
     group.members = (group.members || []).filter(m => m !== ref);
+  }
+  
+  // Track the removal (for hierarchical bundles)
+  if (bundleType === 'hierarchical' && sessionData.currentSubBundle) {
+    const subBundleId = sessionData.currentSubBundle;
+    changeTracker.logToneGroupRemoval(subBundleId, ref, groupId);
   }
   
   // Add to front of queue
@@ -563,15 +607,45 @@ ipcMain.handle('update-group', async (event, groupId, updates) => {
   
   const group = sessionData.groups.find(g => g.id === groupId);
   if (group) {
+    // Track field changes for hierarchical bundles
+    const trackFieldChange = (field, newValue, action) => {
+      if (bundleType === 'hierarchical' && sessionData.currentSubBundle && newValue !== undefined) {
+        const oldValue = group[field];
+        if (oldValue !== newValue) {
+          // Log change for the exemplar word if it exists, otherwise log for the group
+          const ref = group.exemplarWordRef || (group.members?.[0] || 'group');
+          changeTracker.logFieldChange(
+            sessionData.currentSubBundle,
+            ref,
+            field,
+            oldValue || '',
+            newValue,
+            action
+          );
+        }
+      }
+    };
+    
     if (updates.image !== undefined) group.image = updates.image;
     if (updates.additionsSinceReview !== undefined) group.additionsSinceReview = updates.additionsSinceReview;
     if (updates.requiresReview !== undefined) group.requiresReview = updates.requiresReview;
     
-    // Enhanced group fields
-    if (updates.pitchTranscription !== undefined) group.pitchTranscription = updates.pitchTranscription;
-    if (updates.toneAbbreviation !== undefined) group.toneAbbreviation = updates.toneAbbreviation;
-    if (updates.exemplarWord !== undefined) group.exemplarWord = updates.exemplarWord;
-    if (updates.exemplarWordRef !== undefined) group.exemplarWordRef = updates.exemplarWordRef;
+    // Enhanced group fields with tracking
+    if (updates.pitchTranscription !== undefined) {
+      trackFieldChange('pitchTranscription', updates.pitchTranscription, 'added_pitch_transcription');
+      group.pitchTranscription = updates.pitchTranscription;
+    }
+    if (updates.toneAbbreviation !== undefined) {
+      trackFieldChange('toneAbbreviation', updates.toneAbbreviation, 'added_tone_abbreviation');
+      group.toneAbbreviation = updates.toneAbbreviation;
+    }
+    if (updates.exemplarWord !== undefined) {
+      trackFieldChange('exemplarWord', updates.exemplarWord, 'marked_as_exemplar');
+      group.exemplarWord = updates.exemplarWord;
+    }
+    if (updates.exemplarWordRef !== undefined) {
+      group.exemplarWordRef = updates.exemplarWordRef;
+    }
   }
   
   saveSession();
@@ -960,10 +1034,14 @@ async function exportHierarchicalBundle() {
       archive.file(hierarchyPath, { name: 'hierarchy.json' });
     }
     
-    // Add data_original.xml (unchanged)
-    const originalXmlPath = path.join(extractedPath, 'data_original.xml');
+    // Add data_original.xml (unchanged) - try both filenames for compatibility
+    let originalXmlPath = path.join(extractedPath, 'original_data.xml');
+    if (!fs.existsSync(originalXmlPath)) {
+      originalXmlPath = path.join(extractedPath, 'data_original.xml');
+    }
     if (fs.existsSync(originalXmlPath)) {
-      archive.file(originalXmlPath, { name: 'data_original.xml' });
+      const xmlName = path.basename(originalXmlPath);
+      archive.file(originalXmlPath, { name: xmlName });
     }
     
     // Add settings.json (bundle-level settings)
@@ -976,6 +1054,18 @@ async function exportHierarchicalBundle() {
     const fontsPath = path.join(extractedPath, 'fonts');
     if (fs.existsSync(fontsPath)) {
       archive.directory(fontsPath, 'fonts');
+    }
+    
+    // Save and add change_history.json
+    try {
+      const changeHistory = await changeTracker.saveChangeHistory();
+      if (changeHistory) {
+        const changeHistoryPath = path.join(extractedPath, 'change_history.json');
+        archive.file(changeHistoryPath, { name: 'change_history.json' });
+        console.log('[desktop_matching] Added change_history.json to export');
+      }
+    } catch (error) {
+      console.warn('[desktop_matching] Failed to save change history:', error.message);
     }
     
     // Process each sub-bundle
@@ -1470,6 +1560,17 @@ ipcMain.handle('move-word-to-sub-bundle', async (event, { ref, targetSubBundle }
     // This would require parsing the hierarchy and updating the record
     // For now, we'll just move the word and let the user handle field updates
     
+    // Track the sub-bundle move
+    const hierarchyFields = extractCategoryFieldsFromPath(currentSubBundle, targetSubBundle);
+    changeTracker.logSubBundleMove(
+      ref,
+      currentSubBundle,
+      targetSubBundle,
+      hierarchyFields.field || 'Category',
+      hierarchyFields.oldValue || currentSubBundle,
+      hierarchyFields.newValue || targetSubBundle
+    );
+    
     // Save session
     saveSession();
     
@@ -1487,6 +1588,49 @@ ipcMain.handle('move-word-to-sub-bundle', async (event, { ref, targetSubBundle }
   }
 });
 
+// Helper to extract category field information from hierarchy paths
+function extractCategoryFieldsFromPath(oldPath, newPath) {
+  try {
+    // Paths are like "Noun/CVCV" or "Verb/VCV/transitive"
+    // Parse the hierarchy to determine which field changed
+    const oldParts = oldPath.split('/');
+    const newParts = newPath.split('/');
+    
+    // Find the first differing part
+    let field = 'Category';
+    let oldValue = oldPath;
+    let newValue = newPath;
+    
+    // If we have hierarchy config with tree structure, use it to determine the field
+    if (hierarchyConfig && hierarchyConfig.tree) {
+      // Tree structure: walk tree to find field at depth
+      let currentNode = hierarchyConfig.tree;
+      for (let i = 0; i < Math.max(oldParts.length, newParts.length); i++) {
+        if (oldParts[i] !== newParts[i]) {
+          field = currentNode.field || 'Category';
+          oldValue = oldParts[i] || '';
+          newValue = newParts[i] || '';
+          break;
+        }
+        // Navigate to children if available
+        if (currentNode.values) {
+          const matchingValue = currentNode.values.find(v => v.value === oldParts[i]);
+          if (matchingValue && matchingValue.children && matchingValue.children.length > 0) {
+            currentNode = matchingValue.children[0]; // Assume first child for structure
+          } else {
+            break;
+          }
+        }
+      }
+    }
+    
+    return { field, oldValue, newValue };
+  } catch (error) {
+    console.warn('[extractCategoryFieldsFromPath] Error:', error.message);
+    return { field: 'Category', oldValue: oldPath, newValue: newPath };
+  }
+}
+
 // Mark all groups in current session as reviewed
 ipcMain.handle('mark-all-groups-reviewed', async () => {
   if (!sessionData || !sessionData.groups) {
@@ -1498,6 +1642,11 @@ ipcMain.handle('mark-all-groups-reviewed', async () => {
     for (const group of sessionData.groups) {
       group.additionsSinceReview = 0;
       group.requiresReview = false;
+      
+      // Track review action for hierarchical bundles
+      if (bundleType === 'hierarchical' && sessionData.currentSubBundle) {
+        changeTracker.logGroupReviewed(sessionData.currentSubBundle, group.id);
+      }
     }
     
     // If hierarchical, also update sub-bundle session
