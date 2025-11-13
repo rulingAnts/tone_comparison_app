@@ -646,6 +646,114 @@ async function createHierarchicalBundle(config, event) {
     
     filteredRecords = sortByNumericRef(filteredRecords);
     
+    // Collect all sound files needed
+    const soundFiles = new Set();
+    const audioVariantConfigs = settingsWithMeta.audioFileVariants || [];
+    
+    for (const record of filteredRecords) {
+      if (record.SoundFile) {
+        const baseSoundFile = record.SoundFile;
+        const lastDot = baseSoundFile.lastIndexOf('.');
+        const basename = lastDot !== -1 ? baseSoundFile.substring(0, lastDot) : baseSoundFile;
+        const ext = lastDot !== -1 ? baseSoundFile.substring(lastDot) : '';
+        
+        // Add base file
+        soundFiles.add(baseSoundFile);
+        
+        // Add variant files
+        for (const variant of audioVariantConfigs) {
+          if (variant.suffix) {
+            soundFiles.add(`${basename}${variant.suffix}${ext}`);
+          }
+        }
+      }
+    }
+    
+    console.log('[hierarchical] Found', soundFiles.size, 'audio files needed');
+    
+    // Optionally process audio (trim/normalize/convert)
+    const ap = settingsWithMeta.audioProcessing || {};
+    const wantsProcessing = !!ap.autoTrim || !!ap.autoNormalize || !!ap.convertToFlac;
+    const outputFormat = ap.convertToFlac ? 'flac' : 'wav16';
+    let processedDir = null;
+    const processedNameMap = new Map(); // original filename -> processed filename (may change extension)
+
+    if (wantsProcessing && liteNormalizer) {
+      try {
+        // Build list of absolute inputs we intend to include (any extension)
+        const inputAbsList = Array.from(soundFiles)
+          .map((name) => path.join(audioFolder, name))
+          .filter((abs) => fs.existsSync(abs));
+
+        console.log('[hierarchical] Processing enabled. autoTrim:', !!ap.autoTrim, 'autoNormalize:', !!ap.autoNormalize, 'convertToFlac:', !!ap.convertToFlac);
+        console.log('[hierarchical] Files to process:', inputAbsList.length, 'Output format:', outputFormat);
+
+        if (inputAbsList.length > 0) {
+          processedDir = path.join(app.getPath('userData'), 'bundler-processed-audio', String(Date.now()));
+          fs.mkdirSync(processedDir, { recursive: true });
+
+          const tStart = Date.now();
+          mainWindow?.webContents?.send('audio-processing-progress', { type: 'start', total: inputAbsList.length, startTime: tStart });
+          let completedCount = 0;
+
+          const procResult = await liteNormalizer.normalizeBatch({
+            input: audioFolder,
+            output: processedDir,
+            files: inputAbsList,
+            autoNormalize: !!ap.autoNormalize,
+            autoTrim: !!ap.autoTrim,
+            outputFormat,
+            onProgress: (info) => {
+              if (info.type === 'file-done' || info.type === 'file-error') {
+                completedCount = info.completed ?? (completedCount + 1);
+                if (info.type === 'file-error') {
+                  console.warn('[hierarchical] ffmpeg error for', info.inFile, '->', info.error);
+                }
+                mainWindow?.webContents?.send('audio-processing-progress', {
+                  type: info.type,
+                  completed: info.completed ?? completedCount,
+                  total: info.total ?? inputAbsList.length,
+                  index: info.index,
+                  inFile: info.inFile,
+                  outFile: info.outFile,
+                  error: info.error,
+                  startTime: tStart,
+                });
+              }
+            }
+          });
+
+          // Build map of expected processed names for fast lookup when packaging
+          for (const abs of inputAbsList) {
+            const rel = path.relative(audioFolder, abs);
+            const outExt = outputFormat === 'wav16' ? '.wav' : `.${outputFormat}`;
+            const outName = /\.[^\/\.]+$/.test(rel)
+              ? rel.replace(/\.[^\/\.]+$/, outExt)
+              : (rel + outExt);
+            processedNameMap.set(rel.replace(/\\/g, '/'), outName.replace(/\\/g, '/'));
+          }
+
+          mainWindow?.webContents?.send('audio-processing-progress', {
+            type: 'done',
+            total: inputAbsList.length,
+            completed: inputAbsList.length,
+            elapsedMs: Date.now() - tStart,
+          });
+          console.log('[hierarchical] Processing complete. Output dir:', processedDir);
+        }
+      } catch (procErr) {
+        console.warn('[hierarchical] Audio processing failed, falling back to originals:', procErr.message);
+        mainWindow?.webContents?.send('audio-processing-progress', { type: 'skipped' });
+        processedDir = null;
+      }
+    } else {
+      if (!liteNormalizer) {
+        console.warn('[hierarchical] Processing disabled because normalizer unavailable. enabled=', wantsProcessing);
+      } else {
+        console.log('[hierarchical] Processing disabled by user options.');
+      }
+    }
+    
     // Get hierarchy tree from settings (new tree format or legacy levels format)
     const settingsTree = settingsWithMeta.hierarchyTree;
     const hierarchyLevels = settingsWithMeta.hierarchyLevels; // Legacy support
@@ -828,8 +936,19 @@ async function createHierarchicalBundle(config, event) {
                 const suffix = variant.suffix || '';
                 const soundFile = suffix ? `${basename}${suffix}${ext}` : baseSoundFile;
                 
-                const srcPath = path.join(audioFolder, soundFile);
-                const archivePath = `sub_bundles/${subBundlePath}/audio/${soundFile}`;
+                // Check if we have a processed version
+                let srcPath;
+                let actualFileName = soundFile;
+                
+                if (processedDir && processedNameMap.has(soundFile)) {
+                  const processedName = processedNameMap.get(soundFile);
+                  srcPath = path.join(processedDir, processedName);
+                  actualFileName = processedName; // Use the processed filename (may have different extension)
+                } else {
+                  srcPath = path.join(audioFolder, soundFile);
+                }
+                
+                const archivePath = `sub_bundles/${subBundlePath}/audio/${actualFileName}`;
                 
                 if (!addedFiles.has(archivePath) && fs.existsSync(srcPath)) {
                   archive.file(srcPath, { name: archivePath });
