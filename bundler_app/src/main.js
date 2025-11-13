@@ -622,14 +622,18 @@ async function createHierarchicalBundle(config, event) {
     
     filteredRecords = sortByNumericRef(filteredRecords);
     
-    // Build hierarchy structure from settings
-    const hierarchyLevels = settingsWithMeta.hierarchyLevels || [];
-    if (hierarchyLevels.length === 0) {
-      throw new Error('Hierarchical bundle requires at least one hierarchy level');
+    // Get hierarchy tree from settings (new tree format or legacy levels format)
+    const settingsTree = settingsWithMeta.hierarchyTree;
+    const hierarchyLevels = settingsWithMeta.hierarchyLevels; // Legacy support
+    
+    if (!settingsTree && (!hierarchyLevels || hierarchyLevels.length === 0)) {
+      throw new Error('Hierarchical bundle requires hierarchy configuration');
     }
     
-    // Generate sub-bundles recursively
-    const subBundles = generateSubBundles(filteredRecords, hierarchyLevels, 0, '', settingsWithMeta);
+    // Generate sub-bundles from tree structure
+    const subBundles = settingsTree 
+      ? generateSubBundlesFromTree(filteredRecords, settingsTree, '', [])
+      : generateSubBundles(filteredRecords, hierarchyLevels, 0, '', settingsWithMeta); // Legacy fallback
     
     // Create .tnset archive
     const output = fs.createWriteStream(outputPath);
@@ -648,15 +652,12 @@ async function createHierarchicalBundle(config, event) {
     };
     archive.append(JSON.stringify(manifest, null, 2), { name: 'manifest.json' });
     
-    // Create hierarchy.json with full tree structure
-    const buildHierarchyTree = (levelIndex, records, parentPath = '') => {
-      if (levelIndex >= hierarchyLevels.length) {
-        return null;
-      }
+    // Create hierarchy.json with full tree structure populated with actual record counts
+    const buildHierarchyFromTree = (node, records) => {
+      if (!node || !node.field) return null;
       
-      const level = hierarchyLevels[levelIndex];
-      const field = level.field;
-      const includedValues = level.values.filter(v => v.included);
+      const field = node.field;
+      const includedValues = (node.values || []).filter(v => v.included);
       
       // Group records by value
       const valueGroups = new Map();
@@ -682,11 +683,11 @@ async function createHierarchicalBundle(config, event) {
           audioVariants: valueConfig.audioVariants || []
         };
         
-        // Recursively build children
-        if (levelIndex < hierarchyLevels.length - 1) {
-          const children = buildHierarchyTree(levelIndex + 1, valueRecords, value);
-          if (children && children.values && children.values.length > 0) {
-            valueNode.children = children.values;
+        // Recursively build children if they exist
+        if (valueConfig.children && valueConfig.children.field) {
+          const childTree = buildHierarchyFromTree(valueConfig.children, valueRecords);
+          if (childTree && childTree.values && childTree.values.length > 0) {
+            valueNode.children = childTree.values;
           }
         }
         
@@ -699,10 +700,12 @@ async function createHierarchicalBundle(config, event) {
       };
     };
     
-    const hierarchyTree = buildHierarchyTree(0, filteredRecords);
+    const hierarchyJsonTree = settingsTree 
+      ? buildHierarchyFromTree(settingsTree, filteredRecords)
+      : (hierarchyLevels ? buildHierarchyTree(0, filteredRecords) : null); // Legacy fallback
+    
     const hierarchy = {
-      levels: hierarchyLevels.map((level, index) => level.field),
-      tree: hierarchyTree,
+      tree: hierarchyJsonTree,
       audioVariants: settingsWithMeta.audioFileVariants || []
     };
     archive.append(JSON.stringify(hierarchy, null, 2), { name: 'hierarchy.json' });
@@ -789,6 +792,65 @@ async function createHierarchicalBundle(config, event) {
       error: error.message,
     };
   }
+}
+
+function generateSubBundlesFromTree(records, node, pathPrefix, parentAudioVariants) {
+  const subBundles = [];
+  
+  if (!node || !node.field) {
+    return subBundles;
+  }
+  
+  const field = node.field;
+  const includedValues = (node.values || []).filter(v => v.included);
+  
+  // Group records by field value
+  const groups = new Map();
+  for (const record of records) {
+    const value = record[field];
+    const valueConfig = includedValues.find(v => v.value === value);
+    if (value && valueConfig) {
+      if (!groups.has(value)) {
+        groups.set(value, { records: [], valueConfig });
+      }
+      groups.get(value).records.push(record);
+    }
+  }
+  
+  // Generate sub-bundles for each value
+  for (const [value, groupData] of groups.entries()) {
+    const { records: groupRecords, valueConfig } = groupData;
+    const safeName = value.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const newPath = pathPrefix ? `${pathPrefix}/${safeName}` : safeName;
+    
+    // Use value's audioVariants (already inherits from parent during UI config)
+    const audioVariants = Array.isArray(valueConfig.audioVariants) && valueConfig.audioVariants.length > 0
+      ? valueConfig.audioVariants
+      : (parentAudioVariants || []);
+    
+    // Check if this value has children
+    if (valueConfig.children && valueConfig.children.field) {
+      // Recurse into children
+      const childBundles = generateSubBundlesFromTree(
+        groupRecords, 
+        valueConfig.children, 
+        newPath, 
+        audioVariants
+      );
+      subBundles.push(...childBundles);
+    } else {
+      // Leaf node - create sub-bundle
+      subBundles.push({
+        path: newPath,
+        categoryPath: newPath,
+        records: groupRecords,
+        audioVariants: audioVariants,
+        label: valueConfig.label || value
+      });
+    }
+  }
+  
+  return subBundles;
 }
 
 function generateSubBundles(records, hierarchyLevels, levelIndex, pathPrefix, settings, parentAudioVariants = null) {
