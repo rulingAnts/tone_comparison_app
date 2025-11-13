@@ -1,5 +1,8 @@
 # Desktop Matching App - Hierarchical Bundle Test Plan
 
+To add further:
+The ability to type in a name for and create new elements if the user doesn't select an existing one (ask about and clarify the existing behavior on this first). Also, guid fields should always be included (we can remove these during re-import/merge into Dekereke DB again).
+
 ## Test Date
 November 12, 2025
 
