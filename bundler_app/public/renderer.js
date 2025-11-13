@@ -7,7 +7,7 @@ let outputFilePath = null;
 let persisted = null; // settings loaded from main
 let audioVariants = [];
 let bundleType = 'legacy'; // 'legacy' or 'hierarchical'
-let hierarchyLevels = []; // Array of {field, values: {value, included, count}}
+let hierarchyTree = null; // Root node: {field, values: [{value, label, count, included, audioVariants, children: [nodes]}]}
 let parsedXmlData = null; // Store full parsed XML data for hierarchy analysis
 
 window.addEventListener('DOMContentLoaded', async () => {
@@ -180,29 +180,49 @@ async function loadPersistedSettings() {
   renderAudioVariants();
   
   // Restore hierarchy levels
-  if (Array.isArray(s.hierarchyLevels) && s.hierarchyLevels.length > 0) {
-    hierarchyLevels = s.hierarchyLevels.map(level => {
-      const restoredLevel = {
-        field: level.field,
-        values: level.values || []
-      };
-      
-      // Ensure each value has audioVariants array and other required fields
-      restoredLevel.values = restoredLevel.values.map(value => ({
+  // Restore hierarchy tree (supports both old hierarchyLevels format and new hierarchyTree format)
+  if (s.hierarchyTree) {
+    hierarchyTree = restoreTreeNode(s.hierarchyTree);
+    renderHierarchyTree();
+  } else if (Array.isArray(s.hierarchyLevels) && s.hierarchyLevels.length > 0) {
+    // Migrate old format to new tree format (best effort - first level only)
+    const firstLevel = s.hierarchyLevels[0];
+    hierarchyTree = {
+      field: firstLevel.field,
+      values: (firstLevel.values || []).map(value => ({
         value: value.value,
         count: value.count || 0,
         included: value.included !== false,
         label: value.label || value.value,
         audioVariants: Array.isArray(value.audioVariants) ? value.audioVariants : audioVariants.map((_, i) => i),
-        parentAudioVariants: Array.isArray(value.parentAudioVariants) ? value.parentAudioVariants : null
-      }));
-      
-      return restoredLevel;
-    });
+        parentAudioVariants: null,
+        children: null // Can't migrate complex hierarchies automatically
+      }))
+    };
     renderHierarchyTree();
   }
 
   checkFormValid();
+}
+
+// Recursively restore tree node structure
+function restoreTreeNode(node) {
+  if (!node) return null;
+  
+  const restored = {
+    field: node.field || '',
+    values: (node.values || []).map(value => ({
+      value: value.value,
+      count: value.count || 0,
+      included: value.included !== false,
+      label: value.label || value.value,
+      audioVariants: Array.isArray(value.audioVariants) ? value.audioVariants : audioVariants.map((_, i) => i),
+      parentAudioVariants: Array.isArray(value.parentAudioVariants) ? value.parentAudioVariants : null,
+      children: value.children ? restoreTreeNode(value.children) : null
+    }))
+  };
+  
+  return restored;
 }
 
 function attachChangePersistence() {
@@ -280,7 +300,7 @@ function collectCurrentSettings() {
         ? (document.getElementById('glossElement').value || null)
         : null),
       bundleDescription: document.getElementById('bundleDescription').value.trim(),
-      hierarchyLevels: hierarchyLevels, // Save hierarchy configuration
+      hierarchyTree: hierarchyTree, // Save hierarchy tree configuration
       audioProcessing: {
         autoTrim: !!document.getElementById('autoTrim')?.checked,
         autoNormalize: !!document.getElementById('autoNormalize')?.checked,
@@ -488,107 +508,218 @@ function setupToneFieldToggles() {
 }
 
 // Hierarchy Tree Builder Functions
-function addHierarchyLevel() {
-  hierarchyLevels.push({
+// ============================================================================
+// TREE-BASED HIERARCHY FUNCTIONS
+// ============================================================================
+
+// Get node at path (array of indices)
+function getNodeAtPath(path) {
+  if (!hierarchyTree || path.length === 0) return hierarchyTree;
+  
+  let node = hierarchyTree;
+  for (let i = 0; i < path.length; i++) {
+    if (!node || !node.values || path[i] >= node.values.length) return null;
+    const value = node.values[path[i]];
+    if (i === path.length - 1) return value; // Return the value node itself
+    node = value.children; // Move to next level
+  }
+  return node;
+}
+
+// Set node at path
+function setNodeAtPath(path, newNode) {
+  if (path.length === 0) {
+    hierarchyTree = newNode;
+    return;
+  }
+  
+  let node = hierarchyTree;
+  for (let i = 0; i < path.length - 1; i++) {
+    if (!node.values[path[i]].children) {
+      node.values[path[i]].children = null;
+    }
+    node = node.values[path[i]].children;
+  }
+  node.values[path[path.length - 1]] = newNode;
+}
+
+// Initialize root level
+function initializeRootLevel() {
+  if (!hierarchyTree) {
+    hierarchyTree = {
+      field: '',
+      values: []
+    };
+  }
+  renderHierarchyTree();
+  persistSettings();
+}
+
+// Add child level to a specific value node
+function addChildLevel(path) {
+  const parentValue = getNodeAtPath(path);
+  if (!parentValue) return;
+  
+  parentValue.children = {
     field: '',
     values: []
-    // audioConfig removed - now per-value
-  });
-  renderHierarchyTree();
-  persistSettings();
-}
-
-function removeHierarchyLevel(index) {
-  hierarchyLevels.splice(index, 1);
-  renderHierarchyTree();
-  persistSettings();
-}
-
-function updateHierarchyField(index, field) {
-  hierarchyLevels[index].field = field;
-  hierarchyLevels[index].values = [];
+  };
   
-  // Auto-detect values and counts from XML data
-  if (parsedXmlData && field) {
-    const valueCounts = new Map();
+  renderHierarchyTree();
+  persistSettings();
+}
+
+// Remove child level from a value node
+function removeChildLevel(path) {
+  const parentValue = getNodeAtPath(path);
+  if (!parentValue) return;
+  
+  parentValue.children = null;
+  renderHierarchyTree();
+  persistSettings();
+}
+
+// Update field at a specific node
+function updateNodeField(path, field) {
+  const node = path.length === 0 ? hierarchyTree : getNodeAtPath(path);
+  if (!node) return;
+  
+  // If this is a value node with children, update the children's field
+  if (path.length > 0 && node.children) {
+    node.children.field = field;
+    node.children.values = [];
     
-    // Apply filters from previous levels
-    const filteredRecords = getFilteredRecords(index);
+    // Auto-detect values from filtered records
+    if (parsedXmlData && field) {
+      const filteredRecords = getRecordsForPath(path);
+      const valueCounts = new Map();
+      
+      filteredRecords.forEach(record => {
+        const value = record[field];
+        if (value) {
+          valueCounts.set(value, (valueCounts.get(value) || 0) + 1);
+        }
+      });
+      
+      // Get parent's audioVariants for inheritance
+      const parentAudioVariants = node.audioVariants || audioVariants.map((_, i) => i);
+      
+      node.children.values = Array.from(valueCounts.entries())
+        .map(([value, count]) => ({
+          value,
+          label: value,
+          included: true,
+          count,
+          audioVariants: [...parentAudioVariants], // Inherit from parent
+          parentAudioVariants: [...parentAudioVariants],
+          children: null
+        }))
+        .sort((a, b) => a.value.localeCompare(b.value));
+    }
+  } else if (path.length === 0) {
+    // Updating root field
+    node.field = field;
+    node.values = [];
     
-    filteredRecords.forEach(record => {
-      const value = record[field];
-      if (value) {
-        valueCounts.set(value, (valueCounts.get(value) || 0) + 1);
-      }
-    });
-    
-    // Convert to array and sort by value
-    hierarchyLevels[index].values = Array.from(valueCounts.entries())
-      .map(([value, count]) => ({
-        value,
-        label: value,
-        included: true, // Include by default
-        count,
-        audioVariants: audioVariants.map((_, i) => i), // Enable all variants by default
-        parentAudioVariants: null // Will be set during tree building
-      }))
-      .sort((a, b) => a.value.localeCompare(b.value));
+    if (parsedXmlData && field) {
+      const valueCounts = new Map();
+      parsedXmlData.records.forEach(record => {
+        const value = record[field];
+        if (value) {
+          valueCounts.set(value, (valueCounts.get(value) || 0) + 1);
+        }
+      });
+      
+      node.values = Array.from(valueCounts.entries())
+        .map(([value, count]) => ({
+          value,
+          label: value,
+          included: true,
+          count,
+          audioVariants: audioVariants.map((_, i) => i),
+          parentAudioVariants: null,
+          children: null
+        }))
+        .sort((a, b) => a.value.localeCompare(b.value));
+    }
   }
   
   renderHierarchyTree();
   persistSettings();
 }
 
-function getFilteredRecords(upToLevel) {
+// Get records filtered by path down the tree
+function getRecordsForPath(path) {
   if (!parsedXmlData || !parsedXmlData.records) return [];
   
   let filtered = parsedXmlData.records;
+  let currentNode = hierarchyTree;
   
-  // Apply filters from levels 0 to upToLevel-1
-  for (let i = 0; i < upToLevel && i < hierarchyLevels.length; i++) {
-    const level = hierarchyLevels[i];
-    if (!level.field) continue;
+  for (let i = 0; i < path.length; i++) {
+    if (!currentNode || !currentNode.field) break;
     
-    const includedValues = new Set(
-      level.values.filter(v => v.included).map(v => v.value)
-    );
+    const valueIndex = path[i];
+    const value = currentNode.values[valueIndex];
     
-    if (includedValues.size > 0) {
-      filtered = filtered.filter(record => 
-        includedValues.has(record[level.field])
-      );
+    if (value && value.included) {
+      // Filter by this field/value
+      filtered = filtered.filter(record => record[currentNode.field] === value.value);
     }
+    
+    // Move to next level
+    currentNode = value ? value.children : null;
   }
   
   return filtered;
 }
 
-function toggleHierarchyValue(levelIndex, valueIndex) {
-  hierarchyLevels[levelIndex].values[valueIndex].included = 
-    !hierarchyLevels[levelIndex].values[valueIndex].included;
+// Toggle value inclusion
+function toggleNodeValue(path) {
+  const value = getNodeAtPath(path);
+  if (!value) return;
   
-  // Recalculate counts for subsequent levels
-  for (let i = levelIndex + 1; i < hierarchyLevels.length; i++) {
-    if (hierarchyLevels[i].field) {
-      updateHierarchyField(i, hierarchyLevels[i].field);
-    }
-  }
+  value.included = !value.included;
+  
+  // Recalculate counts for child levels
+  recalculateChildCounts(path);
   
   renderHierarchyTree();
   persistSettings();
 }
 
-// Toggle audio configuration panel visibility
-function toggleAudioConfigPanel(levelIndex, valueIndex) {
-  const panel = document.getElementById(`audio-panel-${levelIndex}-${valueIndex}`);
-  if (panel) {
-    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-  }
+// Recalculate counts for all children of a node
+function recalculateChildCounts(path) {
+  const value = getNodeAtPath(path);
+  if (!value || !value.children || !value.children.field) return;
+  
+  const filteredRecords = getRecordsForPath(path);
+  const field = value.children.field;
+  const valueCounts = new Map();
+  
+  filteredRecords.forEach(record => {
+    const val = record[field];
+    if (val) {
+      valueCounts.set(val, (valueCounts.get(val) || 0) + 1);
+    }
+  });
+  
+  // Update counts
+  value.children.values.forEach(childValue => {
+    childValue.count = valueCounts.get(childValue.value) || 0;
+  });
+  
+  // Recursively update children's children
+  value.children.values.forEach((childValue, index) => {
+    if (childValue.children) {
+      recalculateChildCounts([...path, index]);
+    }
+  });
 }
 
 // Toggle audio variant for a specific value
-function toggleAudioVariant(levelIndex, valueIndex, variantIndex, enabled) {
-  const value = hierarchyLevels[levelIndex].values[valueIndex];
+function toggleAudioVariant(path, variantIndex, enabled) {
+  const value = getNodeAtPath(path);
+  if (!value) return;
   
   if (!value.audioVariants) {
     value.audioVariants = [];
@@ -601,172 +732,243 @@ function toggleAudioVariant(levelIndex, valueIndex, variantIndex, enabled) {
     value.audioVariants = value.audioVariants.filter(v => v !== variantIndex);
   }
   
-  // Propagate to child levels if this isn't the last level
-  if (levelIndex < hierarchyLevels.length - 1) {
-    propagateAudioVariants(levelIndex, valueIndex);
-  }
+  // Propagate to children of this value only
+  propagateAudioVariantsToChildren(path);
   
   persistSettings();
   renderHierarchyTree();
 }
 
-// Propagate audio variant changes to child values
-function propagateAudioVariants(parentLevelIndex, parentValueIndex) {
-  const parentValue = hierarchyLevels[parentLevelIndex].values[parentValueIndex];
-  const childLevelIndex = parentLevelIndex + 1;
+// Propagate audio variants to all children of a value
+function propagateAudioVariantsToChildren(path) {
+  const value = getNodeAtPath(path);
+  if (!value || !value.children || !value.children.values) return;
   
-  if (childLevelIndex >= hierarchyLevels.length) return;
+  const parentVariants = value.audioVariants || [];
   
-  const childLevel = hierarchyLevels[childLevelIndex];
-  
-  // Update all child values that should inherit from this parent
-  childLevel.values.forEach(childValue => {
-    childValue.parentAudioVariants = [...(parentValue.audioVariants || [])];
+  value.children.values.forEach((childValue, index) => {
+    childValue.parentAudioVariants = [...parentVariants];
     
     // Remove any variants from child that parent doesn't have
     if (childValue.audioVariants) {
       childValue.audioVariants = childValue.audioVariants.filter(v => 
-        parentValue.audioVariants && parentValue.audioVariants.includes(v)
+        parentVariants.includes(v)
       );
     }
+    
+    // Recursively propagate to grandchildren
+    if (childValue.children) {
+      propagateAudioVariantsToChildren([...path, index]);
+    }
   });
+}
+
+// Toggle audio configuration panel visibility
+function toggleAudioConfigPanel(pathStr) {
+  const panel = document.getElementById(`audio-panel-${pathStr}`);
+  if (panel) {
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  }
 }
 
 function renderHierarchyTree() {
   const container = document.getElementById('hierarchyTree');
   if (!container) return;
   
-  if (hierarchyLevels.length === 0) {
-    container.innerHTML = '<div style="color: #999; font-style: italic; padding: 10px;">No category levels defined. Click "Add Category Level" to start.</div>';
+  if (!hierarchyTree) {
+    container.innerHTML = `
+      <div style="color: #999; font-style: italic; padding: 10px;">
+        No hierarchy defined. Click "Add Root Level" to start.
+      </div>
+      <div class="tree-actions" style="margin-top: 10px;">
+        <button class="btn-tree add" onclick="initializeRootLevel()">Add Root Level</button>
+      </div>
+    `;
     return;
   }
   
   container.innerHTML = '';
   
-  hierarchyLevels.forEach((level, index) => {
-    const levelDiv = document.createElement('div');
-    levelDiv.className = 'tree-level';
-    
-    const nodeDiv = document.createElement('div');
-    nodeDiv.className = 'tree-node';
-    
-    // Header with field selector and remove button
-    const headerDiv = document.createElement('div');
-    headerDiv.className = 'tree-node-header';
-    
-    const fieldLabel = document.createElement('strong');
-    fieldLabel.textContent = `Level ${index + 1}:`;
-    fieldLabel.style.flex = '0 0 70px';
-    
-    const fieldDiv = document.createElement('div');
-    fieldDiv.className = 'tree-node-field';
-    
-    const fieldSelect = document.createElement('select');
-    fieldSelect.innerHTML = '<option value="">— Select field —</option>';
-    availableFields.forEach(f => {
-      const opt = document.createElement('option');
-      opt.value = f;
-      opt.textContent = f;
-      if (f === level.field) opt.selected = true;
-      fieldSelect.appendChild(opt);
-    });
-    fieldSelect.addEventListener('change', () => updateHierarchyField(index, fieldSelect.value));
-    
+  // Render root level
+  const rootDiv = renderNode(hierarchyTree, [], 0);
+  container.appendChild(rootDiv);
+}
+
+// Recursively render a node and its children
+function renderNode(node, path, depth) {
+  const nodeDiv = document.createElement('div');
+  nodeDiv.className = 'tree-node';
+  nodeDiv.style.marginLeft = `${depth * 20}px`;
+  nodeDiv.style.borderLeft = depth > 0 ? '2px solid #ccc' : 'none';
+  nodeDiv.style.paddingLeft = depth > 0 ? '15px' : '0';
+  nodeDiv.style.marginTop = depth > 0 ? '10px' : '0';
+  
+  // Node header with field selector
+  const headerDiv = document.createElement('div');
+  headerDiv.className = 'tree-node-header';
+  headerDiv.style.display = 'flex';
+  headerDiv.style.alignItems = 'center';
+  headerDiv.style.gap = '10px';
+  headerDiv.style.marginBottom = '10px';
+  
+  const fieldLabel = document.createElement('strong');
+  fieldLabel.textContent = path.length === 0 ? 'Root Level:' : `Field:`;
+  fieldLabel.style.flex = '0 0 80px';
+  
+  const fieldSelect = document.createElement('select');
+  fieldSelect.style.flex = '1';
+  fieldSelect.innerHTML = '<option value="">— Select field —</option>';
+  availableFields.forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = f;
+    opt.textContent = f;
+    if (f === node.field) opt.selected = true;
+    fieldSelect.appendChild(opt);
+  });
+  fieldSelect.addEventListener('change', () => {
+    updateNodeField(path, fieldSelect.value);
+  });
+  
+  headerDiv.appendChild(fieldLabel);
+  headerDiv.appendChild(fieldSelect);
+  
+  // Remove button (only for non-root)
+  if (path.length > 0) {
     const removeBtn = document.createElement('button');
     removeBtn.className = 'btn-tree remove';
-    removeBtn.textContent = 'Remove';
-    removeBtn.onclick = () => removeHierarchyLevel(index);
-    
-    fieldDiv.appendChild(fieldSelect);
-    headerDiv.appendChild(fieldLabel);
-    headerDiv.appendChild(fieldDiv);
+    removeBtn.textContent = 'Remove Level';
+    removeBtn.style.fontSize = '12px';
+    removeBtn.style.padding = '4px 8px';
+    removeBtn.onclick = () => {
+      const parentPath = path.slice(0, -1);
+      const parentValue = getNodeAtPath(parentPath);
+      if (parentValue) {
+        parentValue.children = null;
+        renderHierarchyTree();
+        persistSettings();
+      }
+    };
     headerDiv.appendChild(removeBtn);
+  }
+  
+  nodeDiv.appendChild(headerDiv);
+  
+  // Render values
+  if (node.field && node.values && node.values.length > 0) {
+    const valuesDiv = document.createElement('div');
+    valuesDiv.style.display = 'flex';
+    valuesDiv.style.flexDirection = 'column';
+    valuesDiv.style.gap = '10px';
+    valuesDiv.style.marginBottom = '15px';
     
-    nodeDiv.appendChild(headerDiv);
-    
-    // Values with checkboxes, counts, and per-value audio config
-    if (level.field && level.values.length > 0) {
-      const valuesDiv = document.createElement('div');
-      valuesDiv.className = 'tree-node-values';
+    node.values.forEach((valueItem, valueIndex) => {
+      const valuePath = [...path, valueIndex];
+      const pathStr = valuePath.join('-');
       
-      level.values.forEach((valueItem, valueIndex) => {
-        const valueContainer = document.createElement('div');
-        valueContainer.className = 'value-container';
-        valueContainer.style.marginBottom = '12px';
-        valueContainer.style.padding = '8px';
-        valueContainer.style.background = valueItem.included ? '#f9f9f9' : '#fafafa';
-        valueContainer.style.borderRadius = '4px';
-        valueContainer.style.border = '1px solid #e0e0e0';
+      const valueContainer = document.createElement('div');
+      valueContainer.style.background = valueItem.included ? '#f9f9f9' : '#fafafa';
+      valueContainer.style.border = '1px solid #ddd';
+      valueContainer.style.borderRadius = '6px';
+      valueContainer.style.padding = '10px';
+      
+      // Value header
+      const valueHeader = document.createElement('div');
+      valueHeader.style.display = 'flex';
+      valueHeader.style.alignItems = 'center';
+      valueHeader.style.gap = '10px';
+      valueHeader.style.marginBottom = '8px';
+      
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = valueItem.included;
+      checkbox.style.width = 'auto';
+      checkbox.addEventListener('change', () => toggleNodeValue(valuePath));
+      
+      const label = document.createElement('span');
+      label.style.flex = '1';
+      label.style.fontWeight = '600';
+      label.style.fontSize = '14px';
+      label.textContent = valueItem.value;
+      
+      const count = document.createElement('span');
+      count.style.color = '#666';
+      count.style.fontSize = '13px';
+      count.textContent = `(${valueItem.count} words)`;
+      
+      valueHeader.appendChild(checkbox);
+      valueHeader.appendChild(label);
+      valueHeader.appendChild(count);
+      
+      // Buttons row
+      const buttonsDiv = document.createElement('div');
+      buttonsDiv.style.display = 'flex';
+      buttonsDiv.style.gap = '8px';
+      buttonsDiv.style.marginTop = '8px';
+      
+      if (valueItem.included) {
+        // Audio config button
+        const audioBtn = document.createElement('button');
+        audioBtn.className = 'btn-tree';
+        audioBtn.textContent = 'Audio ▼';
+        audioBtn.style.fontSize = '12px';
+        audioBtn.style.padding = '4px 10px';
+        audioBtn.style.background = '#6c757d';
+        audioBtn.style.color = 'white';
+        audioBtn.onclick = () => toggleAudioConfigPanel(pathStr);
+        buttonsDiv.appendChild(audioBtn);
         
-        // Value header with checkbox and audio config toggle
-        const valueHeader = document.createElement('div');
-        valueHeader.style.display = 'flex';
-        valueHeader.style.alignItems = 'center';
-        valueHeader.style.gap = '8px';
-        valueHeader.style.marginBottom = '6px';
-        
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.checked = valueItem.included;
-        checkbox.style.width = 'auto';
-        checkbox.addEventListener('change', () => toggleHierarchyValue(index, valueIndex));
-        
-        const label = document.createElement('span');
-        label.style.flex = '1';
-        label.style.fontWeight = '500';
-        label.textContent = valueItem.value;
-        
-        const count = document.createElement('span');
-        count.className = 'tree-value-count';
-        count.style.color = '#666';
-        count.style.fontSize = '13px';
-        count.textContent = `(${valueItem.count} words)`;
-        
-        const audioToggle = document.createElement('button');
-        audioToggle.className = 'btn-tree';
-        audioToggle.textContent = 'Audio ▼';
-        audioToggle.style.fontSize = '12px';
-        audioToggle.style.padding = '4px 8px';
-        audioToggle.onclick = () => toggleAudioConfigPanel(index, valueIndex);
-        
-        valueHeader.appendChild(checkbox);
-        valueHeader.appendChild(label);
-        valueHeader.appendChild(count);
-        if (valueItem.included) {
-          valueHeader.appendChild(audioToggle);
+        // Add child level button
+        if (!valueItem.children) {
+          const addChildBtn = document.createElement('button');
+          addChildBtn.className = 'btn-tree add';
+          addChildBtn.textContent = '+ Add Child Level';
+          addChildBtn.style.fontSize = '12px';
+          addChildBtn.style.padding = '4px 10px';
+          addChildBtn.onclick = () => addChildLevel(valuePath);
+          buttonsDiv.appendChild(addChildBtn);
+        } else {
+          const removeChildBtn = document.createElement('button');
+          removeChildBtn.className = 'btn-tree remove';
+          removeChildBtn.textContent = '− Remove Children';
+          removeChildBtn.style.fontSize = '12px';
+          removeChildBtn.style.padding = '4px 10px';
+          removeChildBtn.onclick = () => removeChildLevel(valuePath);
+          buttonsDiv.appendChild(removeChildBtn);
         }
-        
-        valueContainer.appendChild(valueHeader);
-        
-        // Audio configuration panel (initially hidden)
+      }
+      
+      valueHeader.appendChild(buttonsDiv);
+      valueContainer.appendChild(valueHeader);
+      
+      // Audio configuration panel
+      if (valueItem.included) {
         const audioPanel = document.createElement('div');
-        audioPanel.id = `audio-panel-${index}-${valueIndex}`;
+        audioPanel.id = `audio-panel-${pathStr}`;
         audioPanel.style.display = 'none';
-        audioPanel.style.marginTop = '8px';
-        audioPanel.style.padding = '10px';
+        audioPanel.style.marginTop = '10px';
+        audioPanel.style.padding = '12px';
         audioPanel.style.background = '#fff';
         audioPanel.style.border = '1px solid #ddd';
         audioPanel.style.borderRadius = '4px';
         
         const audioTitle = document.createElement('div');
         audioTitle.style.fontWeight = 'bold';
-        audioTitle.style.marginBottom = '8px';
+        audioTitle.style.marginBottom = '10px';
         audioTitle.style.fontSize = '13px';
         audioTitle.textContent = `Audio variants for "${valueItem.value}":`;
         audioPanel.appendChild(audioTitle);
         
-        // Show audio variant checkboxes
         if (audioVariants.length > 0) {
           const variantsDiv = document.createElement('div');
           variantsDiv.style.display = 'flex';
           variantsDiv.style.flexDirection = 'column';
-          variantsDiv.style.gap = '6px';
+          variantsDiv.style.gap = '8px';
           
           audioVariants.forEach((variant, variantIndex) => {
             const variantLabel = document.createElement('label');
             variantLabel.style.display = 'flex';
             variantLabel.style.alignItems = 'center';
-            variantLabel.style.gap = '6px';
+            variantLabel.style.gap = '8px';
             variantLabel.style.cursor = 'pointer';
             
             const variantCb = document.createElement('input');
@@ -775,7 +977,8 @@ function renderHierarchyTree() {
             variantCb.style.width = 'auto';
             
             // Disable if parent has disabled this variant
-            if (valueItem.parentAudioVariants && !valueItem.parentAudioVariants.includes(variantIndex)) {
+            const isInherited = valueItem.parentAudioVariants && !valueItem.parentAudioVariants.includes(variantIndex);
+            if (isInherited) {
               variantCb.disabled = true;
               variantCb.checked = false;
               variantLabel.style.opacity = '0.5';
@@ -783,7 +986,7 @@ function renderHierarchyTree() {
             }
             
             variantCb.addEventListener('change', () => {
-              toggleAudioVariant(index, valueIndex, variantIndex, variantCb.checked);
+              toggleAudioVariant(valuePath, variantIndex, variantCb.checked);
             });
             
             const variantText = document.createElement('span');
@@ -791,6 +994,9 @@ function renderHierarchyTree() {
             variantText.textContent = `[${variantIndex}] ${variant.description}`;
             if (variant.suffix) {
               variantText.textContent += ` (${variant.suffix})`;
+            }
+            if (isInherited) {
+              variantText.textContent += ' (disabled by parent)';
             }
             
             variantLabel.appendChild(variantCb);
@@ -803,12 +1009,12 @@ function renderHierarchyTree() {
           const inheritInfo = document.createElement('div');
           inheritInfo.style.fontSize = '11px';
           inheritInfo.style.color = '#666';
-          inheritInfo.style.marginTop = '8px';
+          inheritInfo.style.marginTop = '10px';
           inheritInfo.style.fontStyle = 'italic';
-          if (index < hierarchyLevels.length - 1) {
+          if (valueItem.children) {
             inheritInfo.textContent = 'ℹ️ Child values will inherit these selections';
           } else {
-            inheritInfo.textContent = 'ℹ️ Only selected audio variants will be included in the bundle';
+            inheritInfo.textContent = 'ℹ️ Only selected audio variants will be included in this sub-bundle';
           }
           audioPanel.appendChild(inheritInfo);
         } else {
@@ -816,27 +1022,33 @@ function renderHierarchyTree() {
           noVariants.style.fontSize = '12px';
           noVariants.style.color = '#999';
           noVariants.style.fontStyle = 'italic';
-          noVariants.textContent = 'No audio variants configured. Add audio variants in the Audio Settings section.';
+          noVariants.textContent = 'No audio variants configured. Add variants in Audio Settings section.';
           audioPanel.appendChild(noVariants);
         }
         
         valueContainer.appendChild(audioPanel);
-        valuesDiv.appendChild(valueContainer);
-      });
+      }
       
-      nodeDiv.appendChild(valuesDiv);
-    } else if (level.field) {
-      const noValues = document.createElement('div');
-      noValues.style.color = '#999';
-      noValues.style.fontStyle = 'italic';
-      noValues.style.padding = '8px';
-      noValues.textContent = 'No values found for this field';
-      nodeDiv.appendChild(noValues);
-    }
+      valuesDiv.appendChild(valueContainer);
+      
+      // Recursively render children
+      if (valueItem.children && valueItem.included) {
+        const childDiv = renderNode(valueItem.children, valuePath, depth + 1);
+        valuesDiv.appendChild(childDiv);
+      }
+    });
     
-    levelDiv.appendChild(nodeDiv);
-    container.appendChild(levelDiv);
-  });
+    nodeDiv.appendChild(valuesDiv);
+  } else if (node.field) {
+    const noValues = document.createElement('div');
+    noValues.style.color = '#999';
+    noValues.style.fontStyle = 'italic';
+    noValues.style.padding = '10px';
+    noValues.textContent = 'No values found for this field';
+    nodeDiv.appendChild(noValues);
+  }
+  
+  return nodeDiv;
 }
 
 async function selectAudioFolder() {
