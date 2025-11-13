@@ -648,14 +648,62 @@ async function createHierarchicalBundle(config, event) {
     };
     archive.append(JSON.stringify(manifest, null, 2), { name: 'manifest.json' });
     
-    // Create hierarchy.json
+    // Create hierarchy.json with full tree structure
+    const buildHierarchyTree = (levelIndex, records, parentPath = '') => {
+      if (levelIndex >= hierarchyLevels.length) {
+        return null;
+      }
+      
+      const level = hierarchyLevels[levelIndex];
+      const field = level.field;
+      const includedValues = level.values.filter(v => v.included);
+      
+      // Group records by value
+      const valueGroups = new Map();
+      for (const record of records) {
+        const value = record[field];
+        const valueConfig = includedValues.find(v => v.value === value);
+        if (value && valueConfig) {
+          if (!valueGroups.has(value)) {
+            valueGroups.set(value, { records: [], valueConfig });
+          }
+          valueGroups.get(value).records.push(record);
+        }
+      }
+      
+      // Build values array with children
+      const values = [];
+      for (const [value, groupData] of valueGroups.entries()) {
+        const { records: valueRecords, valueConfig } = groupData;
+        const valueNode = {
+          value: value,
+          label: valueConfig.label || value,
+          recordCount: valueRecords.length,
+          audioVariants: valueConfig.audioVariants || []
+        };
+        
+        // Recursively build children
+        if (levelIndex < hierarchyLevels.length - 1) {
+          const children = buildHierarchyTree(levelIndex + 1, valueRecords, value);
+          if (children && children.values && children.values.length > 0) {
+            valueNode.children = children.values;
+          }
+        }
+        
+        values.push(valueNode);
+      }
+      
+      return {
+        field: field,
+        values: values
+      };
+    };
+    
+    const hierarchyTree = buildHierarchyTree(0, filteredRecords);
     const hierarchy = {
-      levels: hierarchyLevels.map((level, index) => ({
-        level: index,
-        field: level.field,
-        values: level.values.filter(v => v.included).map(v => v.value),
-        audioConfig: level.audioConfig || { includeAudio: true, suffix: '' }
-      }))
+      levels: hierarchyLevels.map((level, index) => level.field),
+      tree: hierarchyTree,
+      audioVariants: settingsWithMeta.audioFileVariants || []
     };
     archive.append(JSON.stringify(hierarchy, null, 2), { name: 'hierarchy.json' });
     
@@ -678,25 +726,40 @@ async function createHierarchicalBundle(config, event) {
         path: subBundlePath,
         categoryPath: subBundle.categoryPath,
         recordCount: subBundle.records.length,
-        audioConfig: subBundle.audioConfig,
+        audioVariants: subBundle.audioVariants,
+        label: subBundle.label
       };
       archive.append(JSON.stringify(subMeta, null, 2), { name: `sub_bundles/${subBundlePath}/metadata.json` });
       
-      // Add audio files if configured
-      if (subBundle.audioConfig.includeAudio) {
-        const audioSuffix = subBundle.audioConfig.suffix || '';
+      // Add audio files filtered by enabled variants
+      const audioVariantConfigs = settingsWithMeta.audioFileVariants || [];
+      const enabledVariantIndices = subBundle.audioVariants || [];
+      
+      if (enabledVariantIndices.length > 0 && audioVariantConfigs.length > 0) {
+        const addedFiles = new Set(); // Track files to avoid duplicates
+        
         for (const record of subBundle.records) {
           if (record.SoundFile) {
-            let soundFile = record.SoundFile;
-            if (audioSuffix) {
-              const lastDot = soundFile.lastIndexOf('.');
-              if (lastDot !== -1) {
-                soundFile = soundFile.substring(0, lastDot) + audioSuffix + soundFile.substring(lastDot);
+            const baseSoundFile = record.SoundFile;
+            const lastDot = baseSoundFile.lastIndexOf('.');
+            const basename = lastDot !== -1 ? baseSoundFile.substring(0, lastDot) : baseSoundFile;
+            const ext = lastDot !== -1 ? baseSoundFile.substring(lastDot) : '';
+            
+            // Add audio file for each enabled variant
+            for (const variantIndex of enabledVariantIndices) {
+              if (variantIndex >= 0 && variantIndex < audioVariantConfigs.length) {
+                const variant = audioVariantConfigs[variantIndex];
+                const suffix = variant.suffix || '';
+                const soundFile = suffix ? `${basename}${suffix}${ext}` : baseSoundFile;
+                
+                const srcPath = path.join(audioFolder, soundFile);
+                const archivePath = `sub_bundles/${subBundlePath}/audio/${soundFile}`;
+                
+                if (!addedFiles.has(archivePath) && fs.existsSync(srcPath)) {
+                  archive.file(srcPath, { name: archivePath });
+                  addedFiles.add(archivePath);
+                }
               }
-            }
-            const srcPath = path.join(audioFolder, soundFile);
-            if (fs.existsSync(srcPath)) {
-              archive.file(srcPath, { name: `sub_bundles/${subBundlePath}/audio/${soundFile}` });
             }
           }
         }
@@ -728,7 +791,7 @@ async function createHierarchicalBundle(config, event) {
   }
 }
 
-function generateSubBundles(records, hierarchyLevels, levelIndex, pathPrefix, settings) {
+function generateSubBundles(records, hierarchyLevels, levelIndex, pathPrefix, settings, parentAudioVariants = null) {
   const subBundles = [];
   
   if (levelIndex >= hierarchyLevels.length) {
@@ -737,30 +800,37 @@ function generateSubBundles(records, hierarchyLevels, levelIndex, pathPrefix, se
       path: pathPrefix || 'root',
       categoryPath: pathPrefix || 'root',
       records: records,
-      audioConfig: hierarchyLevels[levelIndex - 1]?.audioConfig || { includeAudio: true, suffix: '' }
+      audioVariants: parentAudioVariants || []
     }];
   }
   
   const level = hierarchyLevels[levelIndex];
   const field = level.field;
-  const includedValues = new Set(level.values.filter(v => v.included).map(v => v.value));
+  const includedValues = level.values.filter(v => v.included);
   
   // Group records by field value
   const groups = new Map();
   for (const record of records) {
     const value = record[field];
-    if (value && includedValues.has(value)) {
+    const valueConfig = includedValues.find(v => v.value === value);
+    if (value && valueConfig) {
       if (!groups.has(value)) {
-        groups.set(value, []);
+        groups.set(value, { records: [], valueConfig });
       }
-      groups.get(value).push(record);
+      groups.get(value).records.push(record);
     }
   }
   
   // Generate sub-bundles for each group
-  for (const [value, groupRecords] of groups.entries()) {
+  for (const [value, groupData] of groups.entries()) {
+    const { records: groupRecords, valueConfig } = groupData;
     const safeName = value.replace(/[^a-zA-Z0-9_-]/g, '_');
     const newPath = pathPrefix ? `${pathPrefix}/${safeName}` : safeName;
+    
+    // Determine which audio variants to use for this value
+    const audioVariants = Array.isArray(valueConfig.audioVariants) && valueConfig.audioVariants.length > 0
+      ? valueConfig.audioVariants
+      : (parentAudioVariants || []);
     
     if (levelIndex === hierarchyLevels.length - 1) {
       // This is the last level - create leaf sub-bundle
@@ -768,11 +838,12 @@ function generateSubBundles(records, hierarchyLevels, levelIndex, pathPrefix, se
         path: newPath,
         categoryPath: newPath,
         records: groupRecords,
-        audioConfig: level.audioConfig || { includeAudio: true, suffix: '' }
+        audioVariants: audioVariants,
+        label: valueConfig.label || value
       });
     } else {
       // Recurse to next level
-      const childBundles = generateSubBundles(groupRecords, hierarchyLevels, levelIndex + 1, newPath, settings);
+      const childBundles = generateSubBundles(groupRecords, hierarchyLevels, levelIndex + 1, newPath, settings, audioVariants);
       subBundles.push(...childBundles);
     }
   }

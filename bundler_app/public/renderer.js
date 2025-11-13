@@ -181,14 +181,24 @@ async function loadPersistedSettings() {
   
   // Restore hierarchy levels
   if (Array.isArray(s.hierarchyLevels) && s.hierarchyLevels.length > 0) {
-    hierarchyLevels = s.hierarchyLevels.map(level => ({
-      ...level,
-      audioConfig: level.audioConfig || {
-        includeAudio: true,
-        suffix: '',
-        applyTo: 'this'
-      }
-    }));
+    hierarchyLevels = s.hierarchyLevels.map(level => {
+      const restoredLevel = {
+        field: level.field,
+        values: level.values || []
+      };
+      
+      // Ensure each value has audioVariants array and other required fields
+      restoredLevel.values = restoredLevel.values.map(value => ({
+        value: value.value,
+        count: value.count || 0,
+        included: value.included !== false,
+        label: value.label || value.value,
+        audioVariants: Array.isArray(value.audioVariants) ? value.audioVariants : audioVariants.map((_, i) => i),
+        parentAudioVariants: Array.isArray(value.parentAudioVariants) ? value.parentAudioVariants : null
+      }));
+      
+      return restoredLevel;
+    });
     renderHierarchyTree();
   }
 
@@ -481,12 +491,8 @@ function setupToneFieldToggles() {
 function addHierarchyLevel() {
   hierarchyLevels.push({
     field: '',
-    values: [],
-    audioConfig: {
-      includeAudio: true, // Whether to include audio at all
-      suffix: '', // Audio suffix for this level (empty = use parent/default)
-      applyTo: 'this' // 'this', 'children', or 'selected'
-    }
+    values: []
+    // audioConfig removed - now per-value
   });
   renderHierarchyTree();
   persistSettings();
@@ -520,8 +526,11 @@ function updateHierarchyField(index, field) {
     hierarchyLevels[index].values = Array.from(valueCounts.entries())
       .map(([value, count]) => ({
         value,
+        label: value,
         included: true, // Include by default
-        count
+        count,
+        audioVariants: audioVariants.map((_, i) => i), // Enable all variants by default
+        parentAudioVariants: null // Will be set during tree building
       }))
       .sort((a, b) => a.value.localeCompare(b.value));
   }
@@ -569,16 +578,58 @@ function toggleHierarchyValue(levelIndex, valueIndex) {
   persistSettings();
 }
 
-function updateAudioConfig(levelIndex, field, value) {
-  if (!hierarchyLevels[levelIndex].audioConfig) {
-    hierarchyLevels[levelIndex].audioConfig = {
-      includeAudio: true,
-      suffix: '',
-      applyTo: 'this'
-    };
+// Toggle audio configuration panel visibility
+function toggleAudioConfigPanel(levelIndex, valueIndex) {
+  const panel = document.getElementById(`audio-panel-${levelIndex}-${valueIndex}`);
+  if (panel) {
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
   }
-  hierarchyLevels[levelIndex].audioConfig[field] = value;
+}
+
+// Toggle audio variant for a specific value
+function toggleAudioVariant(levelIndex, valueIndex, variantIndex, enabled) {
+  const value = hierarchyLevels[levelIndex].values[valueIndex];
+  
+  if (!value.audioVariants) {
+    value.audioVariants = [];
+  }
+  
+  if (enabled && !value.audioVariants.includes(variantIndex)) {
+    value.audioVariants.push(variantIndex);
+    value.audioVariants.sort((a, b) => a - b);
+  } else if (!enabled) {
+    value.audioVariants = value.audioVariants.filter(v => v !== variantIndex);
+  }
+  
+  // Propagate to child levels if this isn't the last level
+  if (levelIndex < hierarchyLevels.length - 1) {
+    propagateAudioVariants(levelIndex, valueIndex);
+  }
+  
   persistSettings();
+  renderHierarchyTree();
+}
+
+// Propagate audio variant changes to child values
+function propagateAudioVariants(parentLevelIndex, parentValueIndex) {
+  const parentValue = hierarchyLevels[parentLevelIndex].values[parentValueIndex];
+  const childLevelIndex = parentLevelIndex + 1;
+  
+  if (childLevelIndex >= hierarchyLevels.length) return;
+  
+  const childLevel = hierarchyLevels[childLevelIndex];
+  
+  // Update all child values that should inherit from this parent
+  childLevel.values.forEach(childValue => {
+    childValue.parentAudioVariants = [...(parentValue.audioVariants || [])];
+    
+    // Remove any variants from child that parent doesn't have
+    if (childValue.audioVariants) {
+      childValue.audioVariants = childValue.audioVariants.filter(v => 
+        parentValue.audioVariants && parentValue.audioVariants.includes(v)
+      );
+    }
+  });
 }
 
 function renderHierarchyTree() {
@@ -633,31 +684,144 @@ function renderHierarchyTree() {
     
     nodeDiv.appendChild(headerDiv);
     
-    // Values with checkboxes and counts
+    // Values with checkboxes, counts, and per-value audio config
     if (level.field && level.values.length > 0) {
       const valuesDiv = document.createElement('div');
       valuesDiv.className = 'tree-node-values';
       
       level.values.forEach((valueItem, valueIndex) => {
-        const itemDiv = document.createElement('div');
-        itemDiv.className = 'tree-value-item';
+        const valueContainer = document.createElement('div');
+        valueContainer.className = 'value-container';
+        valueContainer.style.marginBottom = '12px';
+        valueContainer.style.padding = '8px';
+        valueContainer.style.background = valueItem.included ? '#f9f9f9' : '#fafafa';
+        valueContainer.style.borderRadius = '4px';
+        valueContainer.style.border = '1px solid #e0e0e0';
+        
+        // Value header with checkbox and audio config toggle
+        const valueHeader = document.createElement('div');
+        valueHeader.style.display = 'flex';
+        valueHeader.style.alignItems = 'center';
+        valueHeader.style.gap = '8px';
+        valueHeader.style.marginBottom = '6px';
         
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.checked = valueItem.included;
+        checkbox.style.width = 'auto';
         checkbox.addEventListener('change', () => toggleHierarchyValue(index, valueIndex));
         
         const label = document.createElement('span');
+        label.style.flex = '1';
+        label.style.fontWeight = '500';
         label.textContent = valueItem.value;
         
         const count = document.createElement('span');
         count.className = 'tree-value-count';
-        count.textContent = `(${valueItem.count})`;
+        count.style.color = '#666';
+        count.style.fontSize = '13px';
+        count.textContent = `(${valueItem.count} words)`;
         
-        itemDiv.appendChild(checkbox);
-        itemDiv.appendChild(label);
-        itemDiv.appendChild(count);
-        valuesDiv.appendChild(itemDiv);
+        const audioToggle = document.createElement('button');
+        audioToggle.className = 'btn-tree';
+        audioToggle.textContent = 'Audio ▼';
+        audioToggle.style.fontSize = '12px';
+        audioToggle.style.padding = '4px 8px';
+        audioToggle.onclick = () => toggleAudioConfigPanel(index, valueIndex);
+        
+        valueHeader.appendChild(checkbox);
+        valueHeader.appendChild(label);
+        valueHeader.appendChild(count);
+        if (valueItem.included) {
+          valueHeader.appendChild(audioToggle);
+        }
+        
+        valueContainer.appendChild(valueHeader);
+        
+        // Audio configuration panel (initially hidden)
+        const audioPanel = document.createElement('div');
+        audioPanel.id = `audio-panel-${index}-${valueIndex}`;
+        audioPanel.style.display = 'none';
+        audioPanel.style.marginTop = '8px';
+        audioPanel.style.padding = '10px';
+        audioPanel.style.background = '#fff';
+        audioPanel.style.border = '1px solid #ddd';
+        audioPanel.style.borderRadius = '4px';
+        
+        const audioTitle = document.createElement('div');
+        audioTitle.style.fontWeight = 'bold';
+        audioTitle.style.marginBottom = '8px';
+        audioTitle.style.fontSize = '13px';
+        audioTitle.textContent = `Audio variants for "${valueItem.value}":`;
+        audioPanel.appendChild(audioTitle);
+        
+        // Show audio variant checkboxes
+        if (audioVariants.length > 0) {
+          const variantsDiv = document.createElement('div');
+          variantsDiv.style.display = 'flex';
+          variantsDiv.style.flexDirection = 'column';
+          variantsDiv.style.gap = '6px';
+          
+          audioVariants.forEach((variant, variantIndex) => {
+            const variantLabel = document.createElement('label');
+            variantLabel.style.display = 'flex';
+            variantLabel.style.alignItems = 'center';
+            variantLabel.style.gap = '6px';
+            variantLabel.style.cursor = 'pointer';
+            
+            const variantCb = document.createElement('input');
+            variantCb.type = 'checkbox';
+            variantCb.checked = valueItem.audioVariants && valueItem.audioVariants.includes(variantIndex);
+            variantCb.style.width = 'auto';
+            
+            // Disable if parent has disabled this variant
+            if (valueItem.parentAudioVariants && !valueItem.parentAudioVariants.includes(variantIndex)) {
+              variantCb.disabled = true;
+              variantCb.checked = false;
+              variantLabel.style.opacity = '0.5';
+              variantLabel.style.cursor = 'not-allowed';
+            }
+            
+            variantCb.addEventListener('change', () => {
+              toggleAudioVariant(index, valueIndex, variantIndex, variantCb.checked);
+            });
+            
+            const variantText = document.createElement('span');
+            variantText.style.fontSize = '13px';
+            variantText.textContent = `[${variantIndex}] ${variant.description}`;
+            if (variant.suffix) {
+              variantText.textContent += ` (${variant.suffix})`;
+            }
+            
+            variantLabel.appendChild(variantCb);
+            variantLabel.appendChild(variantText);
+            variantsDiv.appendChild(variantLabel);
+          });
+          
+          audioPanel.appendChild(variantsDiv);
+          
+          const inheritInfo = document.createElement('div');
+          inheritInfo.style.fontSize = '11px';
+          inheritInfo.style.color = '#666';
+          inheritInfo.style.marginTop = '8px';
+          inheritInfo.style.fontStyle = 'italic';
+          if (index < hierarchyLevels.length - 1) {
+            inheritInfo.textContent = 'ℹ️ Child values will inherit these selections';
+          } else {
+            inheritInfo.textContent = 'ℹ️ Only selected audio variants will be included in the bundle';
+          }
+          audioPanel.appendChild(inheritInfo);
+        } else {
+          const noVariants = document.createElement('div');
+          noVariants.style.fontSize = '12px';
+          noVariants.style.color = '#999';
+          noVariants.style.fontStyle = 'italic';
+          noVariants.textContent = 'No audio variants configured. Add audio variants in the Audio Settings section.';
+          audioPanel.appendChild(noVariants);
+        }
+        
+        valueContainer.appendChild(audioPanel);
+        valuesDiv.appendChild(valueContainer);
       });
       
       nodeDiv.appendChild(valuesDiv);
@@ -668,92 +832,6 @@ function renderHierarchyTree() {
       noValues.style.padding = '8px';
       noValues.textContent = 'No values found for this field';
       nodeDiv.appendChild(noValues);
-    }
-    
-    // Audio configuration section
-    if (level.field) {
-      const audioConfigDiv = document.createElement('div');
-      audioConfigDiv.style.marginTop = '12px';
-      audioConfigDiv.style.padding = '10px';
-      audioConfigDiv.style.background = '#f9f9f9';
-      audioConfigDiv.style.borderRadius = '4px';
-      audioConfigDiv.style.border = '1px solid #e0e0e0';
-      
-      const audioTitle = document.createElement('div');
-      audioTitle.style.fontWeight = 'bold';
-      audioTitle.style.marginBottom = '8px';
-      audioTitle.style.fontSize = '13px';
-      audioTitle.textContent = 'Audio Configuration';
-      audioConfigDiv.appendChild(audioTitle);
-      
-      // Include audio checkbox
-      const includeAudioDiv = document.createElement('div');
-      includeAudioDiv.style.marginBottom = '8px';
-      
-      const includeAudioCb = document.createElement('input');
-      includeAudioCb.type = 'checkbox';
-      includeAudioCb.checked = level.audioConfig?.includeAudio !== false;
-      includeAudioCb.style.width = 'auto';
-      includeAudioCb.style.marginRight = '6px';
-      includeAudioCb.addEventListener('change', () => {
-        updateAudioConfig(index, 'includeAudio', includeAudioCb.checked);
-        renderHierarchyTree(); // Re-render to show/hide suffix options
-      });
-      
-      const includeAudioLabel = document.createElement('label');
-      includeAudioLabel.textContent = 'Include audio in sub-bundles';
-      includeAudioLabel.style.cursor = 'pointer';
-      includeAudioLabel.onclick = () => includeAudioCb.click();
-      
-      includeAudioDiv.appendChild(includeAudioCb);
-      includeAudioDiv.appendChild(includeAudioLabel);
-      audioConfigDiv.appendChild(includeAudioDiv);
-      
-      // Audio suffix configuration (only if audio is included)
-      if (level.audioConfig?.includeAudio !== false) {
-        const suffixDiv = document.createElement('div');
-        suffixDiv.style.display = 'flex';
-        suffixDiv.style.alignItems = 'center';
-        suffixDiv.style.gap = '8px';
-        suffixDiv.style.marginTop = '8px';
-        
-        const suffixLabel = document.createElement('span');
-        suffixLabel.textContent = 'Audio suffix:';
-        suffixLabel.style.fontSize = '13px';
-        suffixLabel.style.flex = '0 0 90px';
-        
-        const suffixInput = document.createElement('input');
-        suffixInput.type = 'text';
-        suffixInput.value = level.audioConfig?.suffix || '';
-        suffixInput.placeholder = 'e.g., -slow';
-        suffixInput.style.flex = '1';
-        suffixInput.style.padding = '4px 8px';
-        suffixInput.style.fontSize = '13px';
-        suffixInput.addEventListener('change', () => {
-          updateAudioConfig(index, 'suffix', suffixInput.value.trim());
-        });
-        
-        suffixDiv.appendChild(suffixLabel);
-        suffixDiv.appendChild(suffixInput);
-        audioConfigDiv.appendChild(suffixDiv);
-        
-        const suffixInfo = document.createElement('div');
-        suffixInfo.style.fontSize = '11px';
-        suffixInfo.style.color = '#666';
-        suffixInfo.style.marginTop = '4px';
-        suffixInfo.textContent = 'Leave empty to use default audio files. Add suffix to use variant (e.g., file-slow.wav)';
-        audioConfigDiv.appendChild(suffixInfo);
-      } else {
-        const noAudioInfo = document.createElement('div');
-        noAudioInfo.style.fontSize = '12px';
-        noAudioInfo.style.color = '#666';
-        noAudioInfo.style.fontStyle = 'italic';
-        noAudioInfo.style.marginTop = '8px';
-        noAudioInfo.textContent = 'Sub-bundles will be created without audio files (text-only mode)';
-        audioConfigDiv.appendChild(noAudioInfo);
-      }
-      
-      nodeDiv.appendChild(audioConfigDiv);
     }
     
     levelDiv.appendChild(nodeDiv);
