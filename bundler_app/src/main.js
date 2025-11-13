@@ -290,10 +290,15 @@ ipcMain.handle('create-bundle', async (event, config) => {
     
     // Determine bundle type
     const bundleType = settings?.bundleType || 'legacy';
+    console.log('[create-bundle] Received bundleType:', bundleType);
+    console.log('[create-bundle] settings.bundleType:', settings?.bundleType);
+    console.log('[create-bundle] settings.hierarchyTree exists:', !!settings?.hierarchyTree);
     
     if (bundleType === 'hierarchical') {
+      console.log('[create-bundle] Creating HIERARCHICAL bundle');
       return await createHierarchicalBundle(config, event);
     } else {
+      console.log('[create-bundle] Creating LEGACY bundle');
       return await createLegacyBundle(config, event);
     }
   } catch (error) {
@@ -515,9 +520,28 @@ async function createLegacyBundle(config, event) {
       '',
     ].join('\n');
 
+    // Check if output path exists and is a directory
+    if (fs.existsSync(outputPath)) {
+      const stats = fs.statSync(outputPath);
+      if (stats.isDirectory()) {
+        throw new Error(`Output path "${outputPath}" already exists as a directory. Please delete it or choose a different filename.`);
+      }
+      // If it's a file, we'll overwrite it (normal behavior)
+      console.log('[bundler] Output file exists, will overwrite');
+    }
+
     // Create zip bundle
     const output = fs.createWriteStream(outputPath);
     const archive = archiver('zip', { zlib: { level: 9 } });
+    
+    // Error handling for archive
+    archive.on('error', (err) => {
+      throw err;
+    });
+    
+    output.on('error', (err) => {
+      throw err;
+    });
     
     archive.pipe(output);
     
@@ -626,6 +650,13 @@ async function createHierarchicalBundle(config, event) {
     const settingsTree = settingsWithMeta.hierarchyTree;
     const hierarchyLevels = settingsWithMeta.hierarchyLevels; // Legacy support
     
+    console.log('[hierarchical] settingsTree:', settingsTree ? 'EXISTS' : 'NULL');
+    console.log('[hierarchical] hierarchyLevels:', hierarchyLevels ? 'EXISTS' : 'NULL');
+    if (settingsTree) {
+      console.log('[hierarchical] settingsTree.field:', settingsTree.field);
+      console.log('[hierarchical] settingsTree.values length:', settingsTree.values?.length);
+    }
+    
     if (!settingsTree && (!hierarchyLevels || hierarchyLevels.length === 0)) {
       throw new Error('Hierarchical bundle requires hierarchy configuration');
     }
@@ -635,9 +666,35 @@ async function createHierarchicalBundle(config, event) {
       ? generateSubBundlesFromTree(filteredRecords, settingsTree, '', [])
       : generateSubBundles(filteredRecords, hierarchyLevels, 0, '', settingsWithMeta); // Legacy fallback
     
+    console.log('[hierarchical] Generated', subBundles.length, 'sub-bundles');
+    
+    if (subBundles.length === 0) {
+      throw new Error('No sub-bundles were generated. Please check your hierarchy configuration.');
+    }
+    
+    // Check if output path exists and is a directory
+    if (fs.existsSync(outputPath)) {
+      const stats = fs.statSync(outputPath);
+      if (stats.isDirectory()) {
+        throw new Error(`Output path "${outputPath}" already exists as a directory. Please delete it or choose a different filename.`);
+      }
+      // If it's a file, we'll overwrite it (normal behavior)
+      console.log('[hierarchical] Output file exists, will overwrite');
+    }
+    
     // Create .tnset archive
     const output = fs.createWriteStream(outputPath);
     const archive = archiver('zip', { zlib: { level: 9 } });
+    
+    // Error handling for archive
+    archive.on('error', (err) => {
+      throw err;
+    });
+    
+    output.on('error', (err) => {
+      throw err;
+    });
+    
     archive.pipe(output);
     
     // Create manifest.json
@@ -702,13 +759,21 @@ async function createHierarchicalBundle(config, event) {
     
     const hierarchyJsonTree = settingsTree 
       ? buildHierarchyFromTree(settingsTree, filteredRecords)
-      : (hierarchyLevels ? buildHierarchyTree(0, filteredRecords) : null); // Legacy fallback
+      : null;
+    
+    if (!hierarchyJsonTree) {
+      throw new Error('Failed to build hierarchy tree. Please ensure hierarchy is configured in the UI.');
+    }
     
     const hierarchy = {
       tree: hierarchyJsonTree,
       audioVariants: settingsWithMeta.audioFileVariants || []
     };
     archive.append(JSON.stringify(hierarchy, null, 2), { name: 'hierarchy.json' });
+    
+    // Add original XML file (UTF-16, preserves exact declaration)
+    archive.file(xmlPath, { name: 'original_data.xml' });
+    console.log('[hierarchical] Added original XML file');
     
     // Add settings.json
     archive.append(JSON.stringify(settingsWithMeta, null, 2), { name: 'settings.json' });
@@ -717,7 +782,15 @@ async function createHierarchicalBundle(config, event) {
     const tgKey = settingsWithMeta.toneGroupElement || 'SurfaceMelodyGroup';
     const tgIdKey = settingsWithMeta.toneGroupIdElement || 'SurfaceMelodyGroupId';
     
+    console.log('[hierarchical] Adding', subBundles.length, 'sub-bundles to archive...');
+    let bundleCount = 0;
+    
     for (const subBundle of subBundles) {
+      bundleCount++;
+      if (bundleCount % 10 === 0) {
+        console.log(`[hierarchical] Processing sub-bundle ${bundleCount}/${subBundles.length}...`);
+      }
+      
       const subBundlePath = subBundle.path;
       
       // Create XML for this sub-bundle
@@ -769,16 +842,20 @@ async function createHierarchicalBundle(config, event) {
       }
     }
     
-    // Add Contour6 font for pitch transcription display
-    const fontPath = path.join(__dirname, '..', '..', 'assets', 'fonts', 'CONCODR1.TTF');
-    if (fs.existsSync(fontPath)) {
-      archive.file(fontPath, { name: 'fonts/Contour6SILDoulos.ttf' });
-      console.log('[bundler] Added Contour6 font to hierarchical bundle');
-    } else {
-      console.warn('[bundler] Contour6 font not found at:', fontPath);
-    }
-    
+    console.log('[bundler] Finalizing archive...');
     await archive.finalize();
+    console.log('[bundler] Archive finalized');
+    
+    // Wait for output stream to finish
+    await new Promise((resolve, reject) => {
+      output.on('close', () => {
+        console.log('[bundler] Archive written successfully. Total bytes:', archive.pointer());
+        resolve();
+      });
+      output.on('error', reject);
+    });
+    
+    console.log('[bundler] Hierarchical bundle creation complete');
     
     return {
       success: true,
