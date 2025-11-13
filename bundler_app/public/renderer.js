@@ -1106,34 +1106,21 @@ async function createBundle() {
     showStatus('error', 'Please select at least one written form element or uncheck "Show written forms"');
     return;
   }
+  
   // Persist current state before bundling
   await persistSettings();
   
-  const settings = {
-    writtenFormElements,
-    showWrittenForm,
-    audioFileSuffix: (getAudioVariantsFromDOM()[0]?.suffix || '').trim() || null,
-    audioFileVariants: getAudioVariantsFromDOM(),
-    referenceNumbers: parseReferenceNumbers(document.getElementById('referenceNumbers').value),
-    requireUserSpelling: document.getElementById('requireUserSpelling').checked,
-    userSpellingElement: document.getElementById('userSpellingElement').value.trim(),
-    toneGroupElement: document.getElementById('toneGroupElement').value.trim(),
-    showGloss: document.getElementById('showGloss').checked,
-    glossElement: (document.getElementById('showGloss').checked
-      ? (document.getElementById('glossElement').value || null)
-      : null),
-    bundleDescription: document.getElementById('bundleDescription').value.trim(),
-    audioProcessing: {
-      autoTrim: !!document.getElementById('autoTrim')?.checked,
-      autoNormalize: !!document.getElementById('autoNormalize')?.checked,
-      convertToFlac: !!document.getElementById('convertToFlac')?.checked,
-    },
-  };
+  // Use collectCurrentSettings to get all settings including bundleType and hierarchyTree
+  const fullConfig = collectCurrentSettings();
+  const settings = fullConfig.settings;
 
   if (settings.showGloss && !settings.glossElement) {
     showStatus('error', 'Please select a gloss element, or uncheck "Include gloss".');
     return;
   }
+  
+  console.log('[createBundle] bundleType:', settings.bundleType);
+  console.log('[createBundle] hierarchyTree exists:', !!settings.hierarchyTree);
   
   const config = {
     xmlPath: xmlFilePath,
