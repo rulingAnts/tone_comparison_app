@@ -7,14 +7,79 @@ let outputFilePath = null;
 let persisted = null; // settings loaded from main
 let audioVariants = [];
 let bundleType = 'legacy'; // 'legacy' or 'hierarchical'
-let hierarchyTree = null; // Root node: {field, values: [{value, label, count, included, audioVariants, children: [nodes]}]}
+let hierarchyTree = null; // Root node: {field, values: [{value, label, count, included, audioVariants, children: [nodes], isOrganizational: bool}]}
+// isOrganizational: true means this is a virtual grouping node (not tied to XML field)
 let parsedXmlData = null; // Store full parsed XML data for hierarchy analysis
+
+// Drag and drop state for reordering values
+let draggedValueContainer = null;
+let draggedValuePath = null;
 
 window.addEventListener('DOMContentLoaded', async () => {
   await loadPersistedSettings();
   setupToneFieldToggles();
   attachChangePersistence();
+  setupModalHandlers();
 });
+
+function setupModalHandlers() {
+  // Add grouping value modal
+  const addGroupingForm = document.getElementById('addGroupingValueForm');
+  const cancelAddGroupingBtn = document.getElementById('cancelAddGroupingValueBtn');
+  
+  if (addGroupingForm) {
+    addGroupingForm.addEventListener('submit', handleAddGroupingValueSubmit);
+  }
+  
+  if (cancelAddGroupingBtn) {
+    cancelAddGroupingBtn.addEventListener('click', closeAddGroupingValueModal);
+  }
+  
+  // Close on overlay click
+  const addGroupingOverlay = document.getElementById('addGroupingValueOverlay');
+  if (addGroupingOverlay) {
+    addGroupingOverlay.addEventListener('click', (e) => {
+      if (e.target === addGroupingOverlay) {
+        closeAddGroupingValueModal();
+      }
+    });
+  }
+  
+  // Add child level modal
+  const confirmAddChildLevelBtn = document.getElementById('confirmAddChildLevelBtn');
+  const cancelAddChildLevelBtn = document.getElementById('cancelAddChildLevelBtn');
+  
+  if (confirmAddChildLevelBtn) {
+    confirmAddChildLevelBtn.addEventListener('click', handleAddChildLevelSubmit);
+  }
+  
+  if (cancelAddChildLevelBtn) {
+    cancelAddChildLevelBtn.addEventListener('click', closeAddChildLevelModal);
+  }
+  
+  // Close child level modal on overlay click
+  const addChildLevelOverlay = document.getElementById('addChildLevelOverlay');
+  if (addChildLevelOverlay) {
+    addChildLevelOverlay.addEventListener('click', (e) => {
+      if (e.target === addChildLevelOverlay) {
+        closeAddChildLevelModal();
+      }
+    });
+  }
+  
+  // Close on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (addGroupingOverlay && addGroupingOverlay.style.display === 'flex') {
+        closeAddGroupingValueModal();
+      }
+      if (addChildLevelOverlay && addChildLevelOverlay.style.display === 'flex') {
+        closeAddChildLevelModal();
+      }
+    }
+  });
+}
+
 
 function handleBundleTypeChange() {
   const selected = document.querySelector('input[name="bundleType"]:checked');
@@ -512,16 +577,31 @@ function setupToneFieldToggles() {
 // TREE-BASED HIERARCHY FUNCTIONS
 // ============================================================================
 
-// Get node at path (array of indices)
+// Get node at path (array of indices or objects for organizational groups)
 function getNodeAtPath(path) {
   if (!hierarchyTree || path.length === 0) return hierarchyTree;
   
   let node = hierarchyTree;
   for (let i = 0; i < path.length; i++) {
-    if (!node || !node.values || path[i] >= node.values.length) return null;
-    const value = node.values[path[i]];
-    if (i === path.length - 1) return value; // Return the value node itself
-    node = value.children; // Move to next level
+    const pathSegment = path[i];
+    
+    // Handle organizational group paths (objects with type: 'orgGroup')
+    if (typeof pathSegment === 'object' && pathSegment.type === 'orgGroup') {
+      // Navigate into organizational group's value
+      if (!node.children || !node.children.isOrganizational) return null;
+      const group = node.children.organizationalGroups[pathSegment.groupIndex];
+      if (!group || !group.children || !group.children.values) return null;
+      
+      const value = group.children.values[pathSegment.valueIndex];
+      if (i === path.length - 1) return value;
+      node = value.children;
+    } else {
+      // Handle regular numeric index paths
+      if (!node || !node.values || pathSegment >= node.values.length) return null;
+      const value = node.values[pathSegment];
+      if (i === path.length - 1) return value; // Return the value node itself
+      node = value.children; // Move to next level
+    }
   }
   return node;
 }
@@ -648,6 +728,405 @@ function updateNodeField(path, field) {
   persistSettings();
 }
 
+// Toggle organizational node mode
+function toggleOrganizationalNode(path, isOrganizational) {
+  const node = path.length === 0 ? hierarchyTree : getNodeAtPath(path);
+  if (!node || !node.children) return;
+  
+  const childNode = node.children;
+  childNode.isOrganizational = isOrganizational;
+  
+  if (isOrganizational) {
+    // Store the original XML field for later use
+    childNode.organizationalBaseField = childNode.field || '';
+    childNode.field = 'Virtual Grouping';
+    
+    // Collect all existing values from the non-organizational version
+    const existingValues = childNode.values || [];
+    
+    // Initialize organizational structure
+    childNode.organizationalGroups = [];
+    childNode.unassignedValues = existingValues.map(v => ({
+      value: v.value,
+      count: v.count || 0,
+      included: v.included !== false
+    }));
+    
+    // Clear the regular values array (we'll rebuild it for rendering)
+    childNode.values = [];
+  } else {
+    // Switching back to regular XML-backed mode
+    // Restore original field
+    if (childNode.organizationalBaseField) {
+      childNode.field = childNode.organizationalBaseField;
+      delete childNode.organizationalBaseField;
+    } else {
+      childNode.field = '';
+    }
+    
+    // Rebuild values from organizational groups and unassigned
+    const allValues = new Set();
+    if (childNode.organizationalGroups) {
+      childNode.organizationalGroups.forEach(group => {
+        if (group.children && group.children.values) {
+          group.children.values.forEach(v => allValues.add(v.value));
+        }
+      });
+    }
+    if (childNode.unassignedValues) {
+      childNode.unassignedValues.forEach(v => allValues.add(v.value));
+    }
+    
+    // Re-detect values from XML if we have the field
+    if (childNode.field && parsedXmlData) {
+      const filteredRecords = getRecordsForPath(path);
+      const valueCounts = new Map();
+      
+      filteredRecords.forEach(record => {
+        const val = record[childNode.field];
+        if (val) {
+          valueCounts.set(val, (valueCounts.get(val) || 0) + 1);
+        }
+      });
+      
+      const parentValue = path.length > 0 ? getNodeAtPath(path) : null;
+      const parentAudioVariants = parentValue?.audioVariants || audioVariants.map((_, i) => i);
+      
+      childNode.values = Array.from(valueCounts.entries())
+        .map(([value, count]) => ({
+          value,
+          label: value,
+          included: allValues.has(value), // Preserve included state
+          count,
+          audioVariants: [...parentAudioVariants],
+          parentAudioVariants: [...parentAudioVariants],
+          children: null
+        }))
+        .sort((a, b) => a.value.localeCompare(b.value));
+    }
+    
+    // Clean up organizational data
+    delete childNode.organizationalGroups;
+    delete childNode.unassignedValues;
+  }
+  
+  renderHierarchyTree();
+  persistSettings();
+}
+
+// Add a manual value to an organizational node
+function addOrganizationalValue(path) {
+  const node = path.length === 0 ? hierarchyTree : getNodeAtPath(path);
+  if (!node || !node.children || !node.children.isOrganizational) return;
+  
+  // Store path for use in the modal handler
+  window.pendingOrganizationalValuePath = path;
+  
+  // Show modal
+  const overlay = document.getElementById('addGroupingValueOverlay');
+  const input = document.getElementById('groupingValueInput');
+  overlay.style.display = 'flex';
+  input.value = '';
+  input.focus();
+}
+
+// Handle the add grouping value form submission
+function handleAddGroupingValueSubmit(e) {
+  e.preventDefault();
+  
+  const path = window.pendingOrganizationalValuePath;
+  if (!path) return;
+  
+  const node = path.length === 0 ? hierarchyTree : getNodeAtPath(path);
+  if (!node || !node.children || !node.children.isOrganizational) return;
+  
+  const groupName = document.getElementById('groupingValueInput').value.trim();
+  if (!groupName) return;
+  
+  const childNode = node.children;
+  
+  // Initialize organizational groups array if needed
+  if (!childNode.organizationalGroups) {
+    childNode.organizationalGroups = [];
+  }
+  
+  // Get parent's audio variants for inheritance
+  const parentValue = path.length > 0 ? getNodeAtPath(path) : null;
+  const parentAudioVariants = parentValue?.audioVariants || audioVariants.map((_, i) => i);
+  
+  // Create new organizational group
+  const newGroup = {
+    name: groupName,
+    label: groupName,
+    included: true,
+    audioVariants: [...parentAudioVariants],
+    parentAudioVariants: [...parentAudioVariants],
+    // This group will contain a child node with the base field
+    children: {
+      field: childNode.organizationalBaseField || '',
+      values: [], // Values will be moved here from unassigned
+      isOrganizational: false // The children are XML-backed
+    }
+  };
+  
+  childNode.organizationalGroups.push(newGroup);
+  
+  renderHierarchyTree();
+  persistSettings();
+  
+  // Close modal
+  closeAddGroupingValueModal();
+}
+
+function closeAddGroupingValueModal() {
+  const overlay = document.getElementById('addGroupingValueOverlay');
+  overlay.style.display = 'none';
+  window.pendingOrganizationalValuePath = null;
+}
+
+// Add a child level to an organizational group
+function addChildLevelToOrgGroup(nodePath, groupIndex) {
+  const node = nodePath.length === 0 ? hierarchyTree : getNodeAtPath(nodePath);
+  if (!node || !node.children || !node.children.isOrganizational) return;
+  
+  const orgNode = node.children;
+  const group = orgNode.organizationalGroups[groupIndex];
+  if (!group || !group.children) return;
+  
+  // Get available XML fields for child level
+  const fields = availableFields || [];
+  if (fields.length === 0) {
+    alert('No XML fields available. Please load an XML file first.');
+    return;
+  }
+  
+  // Store the path and group index for the modal handler
+  window.pendingChildLevelPath = nodePath;
+  window.pendingChildLevelGroupIndex = groupIndex;
+  
+  // Populate field dropdowns
+  const childFieldSelect = document.getElementById('childFieldSelect');
+  const orgBaseFieldSelect = document.getElementById('orgBaseFieldSelect');
+  
+  if (childFieldSelect && orgBaseFieldSelect) {
+    // Clear existing options
+    childFieldSelect.innerHTML = '<option value="">-- Select XML field --</option>';
+    orgBaseFieldSelect.innerHTML = '<option value="">-- Select XML field --</option>';
+    
+    // Add field options
+    fields.forEach(field => {
+      const option1 = document.createElement('option');
+      option1.value = field;
+      option1.textContent = field;
+      childFieldSelect.appendChild(option1);
+      
+      const option2 = document.createElement('option');
+      option2.value = field;
+      option2.textContent = field;
+      orgBaseFieldSelect.appendChild(option2);
+    });
+  }
+  
+  // Update modal title with group name
+  const groupNameDiv = document.getElementById('addChildLevelGroupName');
+  if (groupNameDiv) {
+    groupNameDiv.textContent = `Group: "${group.name}"`;
+  }
+  
+  // Show modal
+  const overlay = document.getElementById('addChildLevelOverlay');
+  if (overlay) {
+    overlay.style.display = 'flex';
+  }
+}
+
+function handleAddChildLevelSubmit() {
+  const childLevelType = document.querySelector('input[name="childLevelType"]:checked')?.value;
+  
+  if (!childLevelType) return;
+  
+  const nodePath = window.pendingChildLevelPath;
+  const groupIndex = window.pendingChildLevelGroupIndex;
+  
+  if (nodePath === undefined || groupIndex === undefined) return;
+  
+  if (childLevelType === 'xmlField') {
+    const fieldName = document.getElementById('childFieldSelect')?.value;
+    if (!fieldName) {
+      alert('Please select an XML field.');
+      return;
+    }
+    addXMLFieldToGroup(nodePath, groupIndex, fieldName);
+  } else if (childLevelType === 'organizational') {
+    const baseField = document.getElementById('orgBaseFieldSelect')?.value;
+    if (!baseField) {
+      alert('Please select an XML field to organize.');
+      return;
+    }
+    addOrganizationalLevelToGroup(nodePath, groupIndex, baseField);
+  }
+  
+  closeAddChildLevelModal();
+}
+
+function closeAddChildLevelModal() {
+  const overlay = document.getElementById('addChildLevelOverlay');
+  if (overlay) {
+    overlay.style.display = 'none';
+  }
+  window.pendingChildLevelPath = null;
+  window.pendingChildLevelGroupIndex = null;
+}
+
+// Add an organizational level as child to a group
+function addOrganizationalLevelToGroup(nodePath, groupIndex, baseField) {
+  const node = nodePath.length === 0 ? hierarchyTree : getNodeAtPath(nodePath);
+  if (!node || !node.children || !node.children.isOrganizational) return;
+  
+  const orgNode = node.children;
+  const group = orgNode.organizationalGroups[groupIndex];
+  if (!group || !group.children) return;
+  
+  if (!baseField) return;
+  
+  const fields = availableFields || [];
+  if (!fields.includes(baseField.trim())) {
+    alert(`Field "${baseField}" not found in XML. Available fields: ${fields.join(', ')}`);
+    return;
+  }
+  
+  // For each value in the group, add a child organizational node
+  if (!group.children.values) group.children.values = [];
+  
+  group.children.values.forEach(value => {
+    // Get records for this value to populate the organizational node
+    const valuePath = [...nodePath, { type: 'orgGroup', groupIndex, valueIndex: group.children.values.indexOf(value) }];
+    const filteredRecords = getRecordsForPathExtended(valuePath, group.children.field, value.value);
+    
+    // Get unique values from the base field
+    const valueCounts = new Map();
+    filteredRecords.forEach(record => {
+      const val = record[baseField.trim()];
+      if (val) {
+        valueCounts.set(val, (valueCounts.get(val) || 0) + 1);
+      }
+    });
+    
+    // Create organizational child node
+    value.children = {
+      field: 'Virtual Grouping',
+      isOrganizational: true,
+      organizationalBaseField: baseField.trim(),
+      organizationalGroups: [],
+      unassignedValues: Array.from(valueCounts.entries()).map(([val, count]) => ({
+        value: val,
+        count: count,
+        included: true
+      })),
+      values: []
+    };
+  });
+  
+  renderHierarchyTree();
+  persistSettings();
+}
+
+// Add an XML field as child to a group
+function addXMLFieldToGroup(nodePath, groupIndex, fieldName) {
+  const node = nodePath.length === 0 ? hierarchyTree : getNodeAtPath(nodePath);
+  if (!node || !node.children || !node.children.isOrganizational) return;
+  
+  const orgNode = node.children;
+  const group = orgNode.organizationalGroups[groupIndex];
+  if (!group || !group.children) return;
+  
+  // For each value in the group, add a child XML field node
+  if (!group.children.values) group.children.values = [];
+  
+  group.children.values.forEach(value => {
+    // Get records for this value
+    const valuePath = [...nodePath, { type: 'orgGroup', groupIndex, valueIndex: group.children.values.indexOf(value) }];
+    const filteredRecords = getRecordsForPathExtended(valuePath, group.children.field, value.value);
+    
+    // Get unique values from the field
+    const valueCounts = new Map();
+    filteredRecords.forEach(record => {
+      const val = record[fieldName];
+      if (val) {
+        valueCounts.set(val, (valueCounts.get(val) || 0) + 1);
+      }
+    });
+    
+    const parentAudioVariants = value.audioVariants || [];
+    
+    // Create child node with XML field
+    value.children = {
+      field: fieldName,
+      isOrganizational: false,
+      values: Array.from(valueCounts.entries()).map(([val, count]) => ({
+        value: val,
+        label: val,
+        count: count,
+        included: true,
+        audioVariants: [...parentAudioVariants],
+        parentAudioVariants: [...parentAudioVariants],
+        children: null
+      })).sort((a, b) => a.value.localeCompare(b.value))
+    };
+  });
+  
+  renderHierarchyTree();
+  persistSettings();
+}
+
+// Helper function to get records filtered by path including organizational groups
+function getRecordsForPathExtended(path, currentField, currentValue) {
+  if (!parsedXmlData || !parsedXmlData.records) return [];
+  
+  let filtered = parsedXmlData.records;
+  let currentNode = hierarchyTree;
+  
+  for (let i = 0; i < path.length; i++) {
+    const pathSegment = path[i];
+    
+    if (typeof pathSegment === 'object' && pathSegment.type === 'orgGroup') {
+      // Skip organizational group navigation for filtering
+      // Just move to the organizational node
+      if (currentNode.children && currentNode.children.isOrganizational) {
+        const group = currentNode.children.organizationalGroups[pathSegment.groupIndex];
+        if (group && group.children && group.children.values) {
+          const value = group.children.values[pathSegment.valueIndex];
+          // Filter by the actual XML field value
+          if (value && group.children.field) {
+            filtered = filtered.filter(record => record[group.children.field] === value.value);
+          }
+          currentNode = value;
+        }
+      }
+    } else {
+      // Regular numeric index
+      if (!currentNode || !currentNode.values) break;
+      const value = currentNode.values[pathSegment];
+      
+      if (value && value.included && currentNode.field) {
+        // Only filter by XML fields
+        if (!currentNode.isOrganizational) {
+          filtered = filtered.filter(record => record[currentNode.field] === value.value);
+        }
+      }
+      
+      currentNode = value ? value.children : null;
+    }
+  }
+  
+  // Apply final filter for current field/value
+  if (currentField && currentValue) {
+    filtered = filtered.filter(record => record[currentField] === currentValue);
+  }
+  
+  return filtered;
+}
+
 // Get records filtered by path down the tree
 function getRecordsForPath(path) {
   if (!parsedXmlData || !parsedXmlData.records) return [];
@@ -662,8 +1141,11 @@ function getRecordsForPath(path) {
     const value = currentNode.values[valueIndex];
     
     if (value && value.included) {
-      // Filter by this field/value
-      filtered = filtered.filter(record => record[currentNode.field] === value.value);
+      // Only filter by XML fields (skip organizational nodes)
+      if (!currentNode.isOrganizational) {
+        filtered = filtered.filter(record => record[currentNode.field] === value.value);
+      }
+      // Organizational nodes don't filter - they just group existing records
     }
     
     // Move to next level
@@ -693,20 +1175,36 @@ function recalculateChildCounts(path) {
   if (!value || !value.children || !value.children.field) return;
   
   const filteredRecords = getRecordsForPath(path);
-  const field = value.children.field;
-  const valueCounts = new Map();
   
-  filteredRecords.forEach(record => {
-    const val = record[field];
-    if (val) {
-      valueCounts.set(val, (valueCounts.get(val) || 0) + 1);
-    }
-  });
-  
-  // Update counts
-  value.children.values.forEach(childValue => {
-    childValue.count = valueCounts.get(childValue.value) || 0;
-  });
+  if (value.children.isOrganizational) {
+    // For organizational nodes, sum up counts from their children
+    value.children.values.forEach(childValue => {
+      if (childValue.children) {
+        // Sum up the counts of this organizational value's children
+        const totalCount = childValue.children.values?.reduce((sum, v) => sum + (v.count || 0), 0) || 0;
+        childValue.count = totalCount;
+      } else {
+        // Leaf organizational node - count needs to be set manually or from assignment
+        childValue.count = childValue.count || 0;
+      }
+    });
+  } else {
+    // XML-backed node - count from records
+    const field = value.children.field;
+    const valueCounts = new Map();
+    
+    filteredRecords.forEach(record => {
+      const val = record[field];
+      if (val) {
+        valueCounts.set(val, (valueCounts.get(val) || 0) + 1);
+      }
+    });
+    
+    // Update counts
+    value.children.values.forEach(childValue => {
+      childValue.count = valueCounts.get(childValue.value) || 0;
+    });
+  }
   
   // Recursively update children's children
   value.children.values.forEach((childValue, index) => {
@@ -771,6 +1269,129 @@ function toggleAudioConfigPanel(pathStr) {
   }
 }
 
+// Toggle collapse/expand for value children
+function toggleCollapseExpand(pathStr) {
+  const childrenContainer = document.getElementById(`children-${pathStr}`);
+  const toggle = document.querySelector(`.collapse-toggle[data-path-str="${pathStr}"]`);
+  
+  if (childrenContainer) {
+    childrenContainer.classList.toggle('collapsed');
+    
+    // Update toggle icon
+    if (toggle) {
+      toggle.classList.toggle('collapsed');
+    }
+  }
+}
+
+// ============================================================================
+// DRAG AND DROP HANDLERS FOR REORDERING VALUES
+// ============================================================================
+
+function handleValueDragStart(e) {
+  draggedValueContainer = e.currentTarget;
+  draggedValuePath = JSON.parse(e.currentTarget.dataset.valuePath);
+  
+  e.currentTarget.classList.add('value-item-dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/html', e.currentTarget.innerHTML);
+}
+
+function handleValueDragEnd(e) {
+  e.currentTarget.classList.remove('value-item-dragging');
+  
+  // Remove all drag-over classes
+  document.querySelectorAll('.value-item-drag-over').forEach(el => {
+    el.classList.remove('value-item-drag-over');
+  });
+  
+  draggedValueContainer = null;
+  draggedValuePath = null;
+}
+
+function handleValueDragOver(e) {
+  if (e.preventDefault) {
+    e.preventDefault();
+  }
+  
+  e.dataTransfer.dropEffect = 'move';
+  
+  const target = e.currentTarget;
+  if (target !== draggedValueContainer) {
+    target.classList.add('value-item-drag-over');
+  }
+  
+  return false;
+}
+
+function handleValueDragLeave(e) {
+  e.currentTarget.classList.remove('value-item-drag-over');
+}
+
+function handleValueDrop(e) {
+  if (e.stopPropagation) {
+    e.stopPropagation();
+  }
+  
+  e.currentTarget.classList.remove('value-item-drag-over');
+  
+  if (draggedValueContainer === e.currentTarget) {
+    return false;
+  }
+  
+  const targetPath = JSON.parse(e.currentTarget.dataset.valuePath);
+  
+  // Only allow reordering within the same parent level
+  const draggedParentPath = draggedValuePath.slice(0, -1);
+  const targetParentPath = targetPath.slice(0, -1);
+  
+  if (JSON.stringify(draggedParentPath) !== JSON.stringify(targetParentPath)) {
+    console.log('Cannot reorder items from different levels');
+    return false;
+  }
+  
+  // Get the parent node that contains the values array we need to reorder
+  let parentNode;
+  if (draggedParentPath.length === 0) {
+    // Top level - parent is the root hierarchyTree
+    parentNode = hierarchyTree;
+  } else {
+    // Child level - need to get the parent value's children node
+    const parentValuePath = draggedParentPath.slice(0, -1);
+    const parentValueIndex = draggedParentPath[draggedParentPath.length - 1];
+    
+    if (parentValuePath.length === 0) {
+      // Parent is a top-level value
+      parentNode = hierarchyTree.values[parentValueIndex].children;
+    } else {
+      // Parent is a nested value - navigate to it
+      const parentValue = getNodeAtPath(draggedParentPath);
+      parentNode = parentValue ? parentValue.children : null;
+    }
+  }
+  
+  if (!parentNode || !parentNode.values) {
+    console.log('Could not find parent node with values array');
+    return false;
+  }
+  
+  const draggedIndex = draggedValuePath[draggedValuePath.length - 1];
+  const targetIndex = targetPath[targetPath.length - 1];
+  
+  // Reorder the values array
+  const values = parentNode.values;
+  const [removed] = values.splice(draggedIndex, 1);
+  values.splice(targetIndex, 0, removed);
+  
+  // Re-render and persist
+  renderHierarchyTree();
+  persistSettings();
+  
+  return false;
+}
+
+// ============================================================================
+
 function renderHierarchyTree() {
   const container = document.getElementById('hierarchyTree');
   if (!container) return;
@@ -794,10 +1415,685 @@ function renderHierarchyTree() {
   container.appendChild(rootDiv);
 }
 
+// Render organizational node with groups and unassigned values
+function renderOrganizationalNode(node, path, depth, nodeDiv) {
+  const pathStr = path.join('-');
+  
+  // Show info about the base field being organized
+  if (node.organizationalBaseField) {
+    const infoDiv = document.createElement('div');
+    infoDiv.style.padding = '10px';
+    infoDiv.style.background = '#fff3cd';
+    infoDiv.style.border = '1px solid #ffa726';
+    infoDiv.style.borderRadius = '4px';
+    infoDiv.style.marginBottom = '15px';
+    infoDiv.style.fontSize = '13px';
+    infoDiv.innerHTML = `<strong>Organizing field:</strong> ${node.organizationalBaseField}<br>` +
+      `<em>Drag values between groups to organize them. Each value can only be in one group.</em>`;
+    nodeDiv.appendChild(infoDiv);
+  }
+  
+  // Render organizational groups
+  if (node.organizationalGroups && node.organizationalGroups.length > 0) {
+    const groupsContainer = document.createElement('div');
+    groupsContainer.style.marginBottom = '15px';
+    groupsContainer.className = 'org-groups-container';
+    
+    node.organizationalGroups.forEach((group, groupIndex) => {
+      const groupDiv = document.createElement('div');
+      groupDiv.style.background = '#f0f8ff';
+      groupDiv.style.border = '2px solid #2196f3';
+      groupDiv.style.borderRadius = '6px';
+      groupDiv.style.padding = '12px';
+      groupDiv.style.marginBottom = '10px';
+      groupDiv.style.cursor = 'grab';
+      groupDiv.draggable = true;
+      groupDiv.dataset.groupIndex = groupIndex;
+      groupDiv.dataset.nodePath = JSON.stringify(path);
+      groupDiv.className = 'org-group-container';
+      
+      // If group is excluded, gray it out
+      if (group.included === false) {
+        groupDiv.style.opacity = '0.5';
+        groupDiv.style.background = '#f9f9f9';
+      }
+      
+      // Add group drag event listeners
+      groupDiv.addEventListener('dragstart', handleGroupDragStart);
+      groupDiv.addEventListener('dragend', handleGroupDragEnd);
+      groupDiv.addEventListener('dragover', handleGroupDragOver);
+      groupDiv.addEventListener('drop', (e) => handleGroupDrop(e, path, groupIndex));
+      
+      // Group header
+      const groupHeader = document.createElement('div');
+      groupHeader.style.fontWeight = 'bold';
+      groupHeader.style.marginBottom = '8px';
+      groupHeader.style.fontSize = '14px';
+      groupHeader.style.color = '#1976d2';
+      groupHeader.style.display = 'flex';
+      groupHeader.style.alignItems = 'center';
+      groupHeader.style.gap = '8px';
+      
+      // Checkbox for group inclusion
+      const groupCheckbox = document.createElement('input');
+      groupCheckbox.type = 'checkbox';
+      groupCheckbox.checked = group.included !== false;
+      groupCheckbox.style.cursor = 'pointer';
+      groupCheckbox.style.margin = '0';
+      groupCheckbox.onclick = (e) => {
+        e.stopPropagation();
+        toggleOrgGroupInclusion(path, groupIndex);
+      };
+      // Prevent dragging when clicking checkbox
+      groupCheckbox.ondragstart = (e) => e.preventDefault();
+      groupHeader.appendChild(groupCheckbox);
+      
+      // Drag handle
+      const dragHandle = document.createElement('span');
+      dragHandle.textContent = '⋮⋮';
+      dragHandle.style.color = '#999';
+      dragHandle.style.fontSize = '12px';
+      dragHandle.style.cursor = 'grab';
+      groupHeader.appendChild(dragHandle);
+      
+      const groupLabel = document.createElement('span');
+      groupLabel.textContent = `📁 ${group.name}`;
+      groupHeader.appendChild(groupLabel);
+      
+      const groupCount = group.children?.values?.length || 0;
+      const countSpan = document.createElement('span');
+      countSpan.style.marginLeft = 'auto';
+      countSpan.style.fontWeight = 'normal';
+      countSpan.style.color = '#666';
+      countSpan.style.fontSize = '12px';
+      countSpan.textContent = `(${groupCount} values)`;
+      groupHeader.appendChild(countSpan);
+      
+      groupDiv.appendChild(groupHeader);
+      
+      // Values in this group
+      if (group.children && group.children.values && group.children.values.length > 0) {
+        const valuesContainer = document.createElement('div');
+        valuesContainer.style.display = 'flex';
+        valuesContainer.style.flexWrap = 'wrap';
+        valuesContainer.style.gap = '6px';
+        valuesContainer.style.marginTop = '8px';
+        valuesContainer.dataset.groupIndex = groupIndex;
+        valuesContainer.dataset.targetType = 'group';
+        valuesContainer.className = 'org-drop-zone';
+        
+        // Add drop zone listeners
+        valuesContainer.addEventListener('dragover', handleOrgValueDragOver);
+        valuesContainer.addEventListener('drop', (e) => handleOrgValueDrop(e, path, groupIndex));
+        valuesContainer.addEventListener('dragleave', handleOrgValueDragLeave);
+        
+        group.children.values.forEach((value, valueIndex) => {
+          const valueChip = createOrgValueChip(value, path, groupIndex, valueIndex);
+          valuesContainer.appendChild(valueChip);
+        });
+        
+        groupDiv.appendChild(valuesContainer);
+        
+        // Render child hierarchy levels for each value in this group
+        if (group.children.values.length > 0) {
+          group.children.values.forEach((value, valueIndex) => {
+            if (value.children) {
+              // Build path to this value: current path + group marker + value index
+              const valuePath = [...path, { type: 'orgGroup', groupIndex, valueIndex }];
+              
+              // Render the child node
+              const childNodeDiv = renderNode(value.children, valuePath, (path.length + 1) * 2);
+              if (childNodeDiv) {
+                childNodeDiv.style.marginLeft = '20px';
+                childNodeDiv.style.paddingLeft = '10px';
+                childNodeDiv.style.borderLeft = '2px solid #ccc';
+                groupDiv.appendChild(childNodeDiv);
+              }
+            }
+          });
+        }
+      } else {
+        const emptyMsg = document.createElement('div');
+        emptyMsg.style.color = '#999';
+        emptyMsg.style.fontStyle = 'italic';
+        emptyMsg.style.fontSize = '12px';
+        emptyMsg.style.padding = '8px';
+        emptyMsg.textContent = 'No values assigned yet. Drag from Unassigned below.';
+        emptyMsg.dataset.groupIndex = groupIndex;
+        emptyMsg.dataset.targetType = 'group';
+        emptyMsg.className = 'org-drop-zone';
+        
+        // Add drop zone listeners
+        emptyMsg.addEventListener('dragover', handleOrgValueDragOver);
+        emptyMsg.addEventListener('drop', (e) => handleOrgValueDrop(e, path, groupIndex));
+        emptyMsg.addEventListener('dragleave', handleOrgValueDragLeave);
+        
+        groupDiv.appendChild(emptyMsg);
+      }
+      
+      // TODO: Add "Add Child Level" button for nested organizational nodes (feature disabled for now)
+      // const addChildBtn = document.createElement('button');
+      // addChildBtn.textContent = '+ Add Child Level to Group';
+      // addChildBtn.style.marginTop = '8px';
+      // addChildBtn.style.fontSize = '11px';
+      // addChildBtn.style.padding = '4px 8px';
+      // addChildBtn.style.background = '#e3f2fd';
+      // addChildBtn.style.border = '1px solid #2196f3';
+      // addChildBtn.style.borderRadius = '4px';
+      // addChildBtn.style.cursor = 'pointer';
+      // addChildBtn.onclick = () => addChildLevelToOrgGroup(path, groupIndex);
+      // groupDiv.appendChild(addChildBtn);
+      
+      groupsContainer.appendChild(groupDiv);
+    });
+    
+    nodeDiv.appendChild(groupsContainer);
+  }
+  
+  // Render unassigned values section
+  const unassignedDiv = document.createElement('div');
+  unassignedDiv.style.background = '#f5f5f5';
+  unassignedDiv.style.border = '1px dashed #999';
+  unassignedDiv.style.borderRadius = '6px';
+  unassignedDiv.style.padding = '12px';
+  unassignedDiv.style.marginBottom = '15px';
+  
+  const unassignedHeader = document.createElement('div');
+  unassignedHeader.style.fontWeight = 'bold';
+  unassignedHeader.style.marginBottom = '8px';
+  unassignedHeader.style.fontSize = '14px';
+  unassignedHeader.style.color = '#666';
+  unassignedHeader.textContent = '📋 Unassigned Values';
+  
+  const unassignedCount = node.unassignedValues?.length || 0;
+  const countSpan = document.createElement('span');
+  countSpan.style.marginLeft = '8px';
+  countSpan.style.fontWeight = 'normal';
+  countSpan.style.fontSize = '12px';
+  countSpan.textContent = `(${unassignedCount})`;
+  unassignedHeader.appendChild(countSpan);
+  
+  unassignedDiv.appendChild(unassignedHeader);
+  
+  if (node.unassignedValues && node.unassignedValues.length > 0) {
+    const unassignedContainer = document.createElement('div');
+    unassignedContainer.style.display = 'flex';
+    unassignedContainer.style.flexWrap = 'wrap';
+    unassignedContainer.style.gap = '6px';
+    unassignedContainer.style.marginTop = '8px';
+    unassignedContainer.dataset.targetType = 'unassigned';
+    unassignedContainer.className = 'org-drop-zone';
+    
+    // Add drop zone listeners
+    unassignedContainer.addEventListener('dragover', handleOrgValueDragOver);
+    unassignedContainer.addEventListener('drop', (e) => handleOrgValueDrop(e, path, -1));
+    unassignedContainer.addEventListener('dragleave', handleOrgValueDragLeave);
+    
+    node.unassignedValues.forEach((value, valueIndex) => {
+      const valueChip = createOrgValueChip(value, path, -1, valueIndex);
+      unassignedContainer.appendChild(valueChip);
+    });
+    
+    unassignedDiv.appendChild(unassignedContainer);
+  } else {
+    const emptyMsg = document.createElement('div');
+    emptyMsg.style.color = '#999';
+    emptyMsg.style.fontStyle = 'italic';
+    emptyMsg.style.fontSize = '12px';
+    emptyMsg.style.padding = '8px';
+    emptyMsg.textContent = 'All values have been assigned to groups.';
+    emptyMsg.dataset.targetType = 'unassigned';
+    emptyMsg.className = 'org-drop-zone';
+    
+    // Add drop zone listeners
+    emptyMsg.addEventListener('dragover', handleOrgValueDragOver);
+    emptyMsg.addEventListener('drop', (e) => handleOrgValueDrop(e, path, -1));
+    emptyMsg.addEventListener('dragleave', handleOrgValueDragLeave);
+    
+    unassignedDiv.appendChild(emptyMsg);
+  }
+  
+  nodeDiv.appendChild(unassignedDiv);
+  
+  // Add button to create new group
+  const addGroupBtn = document.createElement('button');
+  addGroupBtn.className = 'btn-tree add';
+  addGroupBtn.textContent = '+ Add Organizational Group';
+  addGroupBtn.style.fontSize = '12px';
+  addGroupBtn.style.padding = '6px 12px';
+  addGroupBtn.style.marginTop = '10px';
+  addGroupBtn.onclick = () => addOrganizationalValue(path);
+  nodeDiv.appendChild(addGroupBtn);
+  
+  return nodeDiv;
+}
+
+// Create a draggable chip for an organizational value
+function createOrgValueChip(value, nodePath, groupIndex, valueIndex) {
+  const chip = document.createElement('div');
+  chip.style.display = 'inline-flex';
+  chip.style.alignItems = 'center';
+  chip.style.gap = '6px';
+  chip.style.padding = '6px 10px';
+  chip.style.background = 'white';
+  chip.style.border = '1px solid #ccc';
+  chip.style.borderRadius = '16px';
+  chip.style.fontSize = '12px';
+  chip.style.cursor = 'grab';
+  chip.draggable = true;
+  chip.dataset.orgValue = JSON.stringify({ value: value.value, nodePath, groupIndex, valueIndex });
+  
+  // If value is excluded, gray it out
+  if (value.included === false) {
+    chip.style.opacity = '0.5';
+    chip.style.background = '#f5f5f5';
+  }
+  
+  // Checkbox
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.checked = value.included !== false;
+  checkbox.style.cursor = 'pointer';
+  checkbox.style.margin = '0';
+  checkbox.onclick = (e) => {
+    e.stopPropagation();
+    toggleOrgValueInclusion(nodePath, groupIndex, valueIndex);
+  };
+  // Prevent dragging when clicking checkbox
+  checkbox.ondragstart = (e) => e.preventDefault();
+  chip.appendChild(checkbox);
+  
+  // Drag icon
+  const dragIcon = document.createElement('span');
+  dragIcon.textContent = '⋮⋮';
+  dragIcon.style.color = '#999';
+  dragIcon.style.fontSize = '10px';
+  chip.appendChild(dragIcon);
+  
+  // Value label
+  const label = document.createElement('span');
+  label.textContent = value.value;
+  label.style.fontWeight = '500';
+  chip.appendChild(label);
+  
+  // Count
+  if (value.count > 0) {
+    const count = document.createElement('span');
+    count.textContent = `(${value.count})`;
+    count.style.color = '#666';
+    count.style.fontSize = '11px';
+    chip.appendChild(count);
+  }
+  
+  // Drag event listeners
+  chip.addEventListener('dragstart', handleOrgValueDragStart);
+  chip.addEventListener('dragend', handleOrgValueDragEnd);
+  
+  return chip;
+}
+
+// Organizational value drag handlers
+let draggedOrgValue = null;
+
+function handleOrgValueDragStart(e) {
+  draggedOrgValue = JSON.parse(e.currentTarget.dataset.orgValue);
+  e.currentTarget.style.opacity = '0.4';
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', JSON.stringify(draggedOrgValue));
+}
+
+function handleOrgValueDragEnd(e) {
+  e.currentTarget.style.opacity = '1';
+  draggedOrgValue = null;
+  
+  // Remove all drag-over classes
+  document.querySelectorAll('.org-drop-zone-over').forEach(el => {
+    el.classList.remove('org-drop-zone-over');
+  });
+}
+
+function handleOrgValueDragOver(e) {
+  if (!draggedOrgValue) return;
+  
+  if (e.preventDefault) {
+    e.preventDefault();
+  }
+  
+  e.dataTransfer.dropEffect = 'move';
+  
+  // Check if we're hovering over another value chip (for reordering)
+  const chipElement = e.target.closest('[data-org-value]');
+  if (chipElement && chipElement !== e.currentTarget) {
+    // Hovering over a specific chip - show insertion indicator
+    const rect = chipElement.getBoundingClientRect();
+    const midpoint = rect.left + rect.width / 2;
+    
+    // Remove previous indicators
+    document.querySelectorAll('.org-insert-before, .org-insert-after').forEach(el => {
+      el.classList.remove('org-insert-before', 'org-insert-after');
+    });
+    
+    if (e.clientX < midpoint) {
+      chipElement.classList.add('org-insert-before');
+    } else {
+      chipElement.classList.add('org-insert-after');
+    }
+  } else {
+    // Hovering over the container - highlight it
+    e.currentTarget.classList.add('org-drop-zone-over');
+  }
+  
+  return false;
+}
+
+function handleOrgValueDragLeave(e) {
+  // Only remove classes if we're actually leaving the drop zone, not just moving to a child
+  if (!e.currentTarget.contains(e.relatedTarget)) {
+    e.currentTarget.classList.remove('org-drop-zone-over');
+  }
+  
+  // Remove insertion indicators
+  document.querySelectorAll('.org-insert-before, .org-insert-after').forEach(el => {
+    el.classList.remove('org-insert-before', 'org-insert-after');
+  });
+}
+
+function handleOrgValueDrop(e, nodePath, targetGroupIndex) {
+  if (e.stopPropagation) {
+    e.stopPropagation();
+  }
+  if (e.preventDefault) {
+    e.preventDefault();
+  }
+  
+  e.currentTarget.classList.remove('org-drop-zone-over');
+  
+  // Remove insertion indicators
+  document.querySelectorAll('.org-insert-before, .org-insert-after').forEach(el => {
+    el.classList.remove('org-insert-before', 'org-insert-after');
+  });
+  
+  if (!draggedOrgValue) return false;
+  
+  const sourceGroupIndex = draggedOrgValue.groupIndex;
+  const sourceValueIndex = draggedOrgValue.valueIndex;
+  const valueData = draggedOrgValue.value;
+  
+  // Get the organizational node
+  const node = nodePath.length === 0 ? hierarchyTree : getNodeAtPath(nodePath);
+  if (!node || !node.children || !node.children.isOrganizational) return false;
+  
+  const orgNode = node.children;
+  
+  // Check if we're dropping on a specific chip (for reordering within same group)
+  const targetChipElement = e.target.closest('[data-org-value]');
+  let targetValueIndex = null;
+  let insertBefore = true;
+  
+  if (targetChipElement && sourceGroupIndex === targetGroupIndex) {
+    // We're reordering within the same group
+    const targetChipData = JSON.parse(targetChipElement.dataset.orgValue);
+    targetValueIndex = targetChipData.valueIndex;
+    
+    // Determine if we should insert before or after
+    const rect = targetChipElement.getBoundingClientRect();
+    const midpoint = rect.left + rect.width / 2;
+    insertBefore = e.clientX < midpoint;
+    
+    // Don't do anything if dropping in the exact same spot
+    if (sourceValueIndex === targetValueIndex || 
+        (insertBefore && sourceValueIndex === targetValueIndex - 1) ||
+        (!insertBefore && sourceValueIndex === targetValueIndex + 1)) {
+      return false;
+    }
+  } else if (sourceGroupIndex === targetGroupIndex && !targetChipElement) {
+    // Dropping in same group but not on a specific chip - treat as append
+    // This is effectively no-op for reordering
+    return false;
+  }
+  
+  // Remove from source
+  let removedValue;
+  if (sourceGroupIndex === -1) {
+    // Remove from unassigned
+    removedValue = orgNode.unassignedValues.splice(sourceValueIndex, 1)[0];
+  } else {
+    // Remove from source group
+    removedValue = orgNode.organizationalGroups[sourceGroupIndex].children.values.splice(sourceValueIndex, 1)[0];
+  }
+  
+  // Add to target
+  if (targetGroupIndex === -1) {
+    // Add to unassigned
+    if (!orgNode.unassignedValues) {
+      orgNode.unassignedValues = [];
+    }
+    
+    if (targetValueIndex !== null && sourceGroupIndex === -1) {
+      // Reordering within unassigned
+      let adjustedIndex = targetValueIndex;
+      if (sourceValueIndex < targetValueIndex) {
+        adjustedIndex--; // Adjust for the removal
+      }
+      if (!insertBefore) {
+        adjustedIndex++;
+      }
+      orgNode.unassignedValues.splice(adjustedIndex, 0, removedValue);
+    } else {
+      // Moving from a group to unassigned - append
+      orgNode.unassignedValues.push(removedValue);
+    }
+  } else {
+    // Add to target group
+    const targetGroup = orgNode.organizationalGroups[targetGroupIndex];
+    if (!targetGroup.children) {
+      targetGroup.children = {
+        field: orgNode.organizationalBaseField || '',
+        values: []
+      };
+    }
+    if (!targetGroup.children.values) {
+      targetGroup.children.values = [];
+    }
+    
+    if (targetValueIndex !== null && sourceGroupIndex === targetGroupIndex) {
+      // Reordering within the same group
+      let adjustedIndex = targetValueIndex;
+      if (sourceValueIndex < targetValueIndex) {
+        adjustedIndex--; // Adjust for the removal
+      }
+      if (!insertBefore) {
+        adjustedIndex++;
+      }
+      targetGroup.children.values.splice(adjustedIndex, 0, removedValue);
+    } else {
+      // Moving from another group/unassigned - append
+      targetGroup.children.values.push(removedValue);
+    }
+  }
+  
+  renderHierarchyTree();
+  persistSettings();
+  
+  return false;
+}
+
+// Organizational group drag handlers
+let draggedGroup = null;
+
+function handleGroupDragStart(e) {
+  const groupDiv = e.currentTarget;
+  draggedGroup = {
+    groupIndex: parseInt(groupDiv.dataset.groupIndex),
+    nodePath: JSON.parse(groupDiv.dataset.nodePath)
+  };
+  
+  e.currentTarget.style.opacity = '0.4';
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', JSON.stringify(draggedGroup));
+  
+  // Prevent dragging values while dragging the group
+  e.stopPropagation();
+}
+
+function handleGroupDragEnd(e) {
+  e.currentTarget.style.opacity = '1';
+  draggedGroup = null;
+  
+  // Remove all drag-over classes
+  document.querySelectorAll('.org-group-drag-over-before, .org-group-drag-over-after').forEach(el => {
+    el.classList.remove('org-group-drag-over-before', 'org-group-drag-over-after');
+  });
+}
+
+function handleGroupDragOver(e) {
+  if (!draggedGroup) return;
+  
+  // Only handle group dragging, not value dragging
+  if (draggedOrgValue) return;
+  
+  if (e.preventDefault) {
+    e.preventDefault();
+  }
+  
+  e.dataTransfer.dropEffect = 'move';
+  e.stopPropagation();
+  
+  const targetGroupDiv = e.currentTarget;
+  const rect = targetGroupDiv.getBoundingClientRect();
+  const midpoint = rect.top + rect.height / 2;
+  
+  // Remove previous indicators
+  document.querySelectorAll('.org-group-drag-over-before, .org-group-drag-over-after').forEach(el => {
+    el.classList.remove('org-group-drag-over-before', 'org-group-drag-over-after');
+  });
+  
+  if (e.clientY < midpoint) {
+    targetGroupDiv.classList.add('org-group-drag-over-before');
+  } else {
+    targetGroupDiv.classList.add('org-group-drag-over-after');
+  }
+  
+  return false;
+}
+
+function handleGroupDrop(e, nodePath, targetGroupIndex) {
+  if (e.stopPropagation) {
+    e.stopPropagation();
+  }
+  if (e.preventDefault) {
+    e.preventDefault();
+  }
+  
+  // Remove indicators
+  document.querySelectorAll('.org-group-drag-over-before, .org-group-drag-over-after').forEach(el => {
+    el.classList.remove('org-group-drag-over-before', 'org-group-drag-over-after');
+  });
+  
+  if (!draggedGroup) return false;
+  
+  const sourceGroupIndex = draggedGroup.groupIndex;
+  
+  // Don't do anything if dropping in same location
+  if (sourceGroupIndex === targetGroupIndex) {
+    return false;
+  }
+  
+  // Get the organizational node
+  const node = nodePath.length === 0 ? hierarchyTree : getNodeAtPath(nodePath);
+  if (!node || !node.children || !node.children.isOrganizational) return false;
+  
+  const orgNode = node.children;
+  
+  // Determine insertion position
+  const targetGroupDiv = e.currentTarget;
+  const rect = targetGroupDiv.getBoundingClientRect();
+  const midpoint = rect.top + rect.height / 2;
+  const insertBefore = e.clientY < midpoint;
+  
+  // Calculate final position
+  let finalIndex = targetGroupIndex;
+  if (!insertBefore) {
+    finalIndex++;
+  }
+  
+  // Adjust if dragging from earlier position
+  if (sourceGroupIndex < finalIndex) {
+    finalIndex--;
+  }
+  
+  // Don't do anything if dropping in same location
+  if (sourceGroupIndex === finalIndex) {
+    return false;
+  }
+  
+  // Remove from source position
+  const [movedGroup] = orgNode.organizationalGroups.splice(sourceGroupIndex, 1);
+  
+  // Insert at target position
+  orgNode.organizationalGroups.splice(finalIndex, 0, movedGroup);
+  
+  renderHierarchyTree();
+  persistSettings();
+  
+  return false;
+}
+
+// Toggle inclusion of an organizational group (and all its values)
+function toggleOrgGroupInclusion(nodePath, groupIndex) {
+  const node = nodePath.length === 0 ? hierarchyTree : getNodeAtPath(nodePath);
+  if (!node || !node.children || !node.children.isOrganizational) return;
+  
+  const orgNode = node.children;
+  const group = orgNode.organizationalGroups[groupIndex];
+  
+  // Toggle the group's inclusion state
+  const newState = group.included === false ? true : false;
+  group.included = newState;
+  
+  // Also toggle all values in the group
+  if (group.children && group.children.values) {
+    group.children.values.forEach(value => {
+      value.included = newState;
+    });
+  }
+  
+  renderHierarchyTree();
+  persistSettings();
+}
+
+// Toggle inclusion of a single organizational value
+function toggleOrgValueInclusion(nodePath, groupIndex, valueIndex) {
+  const node = nodePath.length === 0 ? hierarchyTree : getNodeAtPath(nodePath);
+  if (!node || !node.children || !node.children.isOrganizational) return;
+  
+  const orgNode = node.children;
+  
+  let value;
+  if (groupIndex === -1) {
+    // Value in unassigned
+    value = orgNode.unassignedValues[valueIndex];
+  } else {
+    // Value in a group
+    const group = orgNode.organizationalGroups[groupIndex];
+    if (!group.children || !group.children.values) return;
+    value = group.children.values[valueIndex];
+  }
+  
+  // Toggle the value's inclusion state
+  value.included = value.included === false ? true : false;
+  
+  renderHierarchyTree();
+  persistSettings();
+}
+
 // Recursively render a node and its children
 function renderNode(node, path, depth) {
   const nodeDiv = document.createElement('div');
   nodeDiv.className = 'tree-node';
+  if (node.isOrganizational) {
+    nodeDiv.classList.add('organizational');
+  }
   nodeDiv.style.marginLeft = `${depth * 20}px`;
   nodeDiv.style.borderLeft = depth > 0 ? '2px solid #ccc' : 'none';
   nodeDiv.style.paddingLeft = depth > 0 ? '15px' : '0';
@@ -815,16 +2111,51 @@ function renderNode(node, path, depth) {
   fieldLabel.textContent = path.length === 0 ? 'Root Level:' : `Field:`;
   fieldLabel.style.flex = '0 0 80px';
   
+  // Organizational node checkbox (only for child nodes)
+  if (path.length > 0) {
+    const orgCheckbox = document.createElement('input');
+    orgCheckbox.type = 'checkbox';
+    orgCheckbox.id = `org-${path.join('-')}`;
+    orgCheckbox.checked = node.isOrganizational || false;
+    orgCheckbox.style.width = 'auto';
+    orgCheckbox.style.marginRight = '5px';
+    
+    const orgLabel = document.createElement('label');
+    orgLabel.htmlFor = `org-${path.join('-')}`;
+    orgLabel.textContent = 'Organizational (virtual grouping)';
+    orgLabel.style.fontSize = '12px';
+    orgLabel.style.color = '#666';
+    orgLabel.style.cursor = 'pointer';
+    orgLabel.style.display = 'flex';
+    orgLabel.style.alignItems = 'center';
+    orgLabel.style.gap = '5px';
+    orgLabel.style.marginBottom = '8px';
+    orgLabel.insertBefore(orgCheckbox, orgLabel.firstChild);
+    
+    orgCheckbox.addEventListener('change', () => {
+      toggleOrganizationalNode(path, orgCheckbox.checked);
+    });
+    
+    nodeDiv.appendChild(orgLabel);
+  }
+  
   const fieldSelect = document.createElement('select');
   fieldSelect.style.flex = '1';
-  fieldSelect.innerHTML = '<option value="">— Select field —</option>';
-  availableFields.forEach(f => {
-    const opt = document.createElement('option');
-    opt.value = f;
-    opt.textContent = f;
-    if (f === node.field) opt.selected = true;
-    fieldSelect.appendChild(opt);
-  });
+  fieldSelect.disabled = node.isOrganizational || false;
+  
+  if (node.isOrganizational) {
+    fieldSelect.innerHTML = '<option value="">— Organizational Node (no XML field) —</option>';
+  } else {
+    fieldSelect.innerHTML = '<option value="">— Select field —</option>';
+    availableFields.forEach(f => {
+      const opt = document.createElement('option');
+      opt.value = f;
+      opt.textContent = f;
+      if (f === node.field) opt.selected = true;
+      fieldSelect.appendChild(opt);
+    });
+  }
+  
   fieldSelect.addEventListener('change', () => {
     updateNodeField(path, fieldSelect.value);
   });
@@ -840,10 +2171,11 @@ function renderNode(node, path, depth) {
     removeBtn.style.fontSize = '12px';
     removeBtn.style.padding = '4px 8px';
     removeBtn.onclick = () => {
-      const parentPath = path.slice(0, -1);
-      const parentValue = getNodeAtPath(parentPath);
-      if (parentValue) {
-        parentValue.children = null;
+      // The path represents the value that owns this node as its child
+      // So we need to get that value and set its children to null
+      const ownerValue = getNodeAtPath(path);
+      if (ownerValue) {
+        ownerValue.children = null;
         renderHierarchyTree();
         persistSettings();
       }
@@ -852,6 +2184,11 @@ function renderNode(node, path, depth) {
   }
   
   nodeDiv.appendChild(headerDiv);
+  
+  // Special rendering for organizational nodes
+  if (node.isOrganizational && node.organizationalGroups !== undefined) {
+    return renderOrganizationalNode(node, path, depth, nodeDiv);
+  }
   
   // Render values
   if (node.field && node.values && node.values.length > 0) {
@@ -870,6 +2207,16 @@ function renderNode(node, path, depth) {
       valueContainer.style.border = '1px solid #ddd';
       valueContainer.style.borderRadius = '6px';
       valueContainer.style.padding = '10px';
+      valueContainer.draggable = true;
+      valueContainer.dataset.valuePath = JSON.stringify(valuePath);
+      valueContainer.dataset.valueIndex = valueIndex;
+      
+      // Add drag event listeners
+      valueContainer.addEventListener('dragstart', handleValueDragStart);
+      valueContainer.addEventListener('dragend', handleValueDragEnd);
+      valueContainer.addEventListener('dragover', handleValueDragOver);
+      valueContainer.addEventListener('drop', handleValueDrop);
+      valueContainer.addEventListener('dragleave', handleValueDragLeave);
       
       // Value header
       const valueHeader = document.createElement('div');
@@ -877,6 +2224,29 @@ function renderNode(node, path, depth) {
       valueHeader.style.alignItems = 'center';
       valueHeader.style.gap = '10px';
       valueHeader.style.marginBottom = '8px';
+      
+      // Collapse/expand toggle (only if has children)
+      if (valueItem.children && valueItem.included) {
+        const collapseToggle = document.createElement('span');
+        collapseToggle.className = 'collapse-toggle';
+        collapseToggle.textContent = '▼';
+        collapseToggle.title = 'Collapse/expand children';
+        collapseToggle.dataset.pathStr = pathStr;
+        collapseToggle.addEventListener('click', () => toggleCollapseExpand(pathStr));
+        valueHeader.appendChild(collapseToggle);
+      } else {
+        // Spacer to maintain alignment
+        const spacer = document.createElement('span');
+        spacer.style.width = '20px';
+        spacer.style.display = 'inline-block';
+        valueHeader.appendChild(spacer);
+      }
+      
+      // Drag handle
+      const dragHandle = document.createElement('span');
+      dragHandle.className = 'value-drag-handle';
+      dragHandle.textContent = '⋮⋮';
+      dragHandle.title = 'Drag to reorder';
       
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
@@ -890,11 +2260,27 @@ function renderNode(node, path, depth) {
       label.style.fontSize = '14px';
       label.textContent = valueItem.value;
       
+      // Add organizational badge if this is a virtual grouping
+      if (valueItem.isOrganizational) {
+        const badge = document.createElement('span');
+        badge.style.marginLeft = '8px';
+        badge.style.padding = '2px 6px';
+        badge.style.background = '#ffa726';
+        badge.style.color = 'white';
+        badge.style.fontSize = '10px';
+        badge.style.borderRadius = '3px';
+        badge.style.fontWeight = 'bold';
+        badge.textContent = 'VIRTUAL';
+        badge.title = 'This is an organizational grouping (not tied to XML field)';
+        label.appendChild(badge);
+      }
+      
       const count = document.createElement('span');
       count.style.color = '#666';
       count.style.fontSize = '13px';
       count.textContent = `(${valueItem.count} words)`;
       
+      valueHeader.appendChild(dragHandle);
       valueHeader.appendChild(checkbox);
       valueHeader.appendChild(label);
       valueHeader.appendChild(count);
@@ -1031,21 +2417,52 @@ function renderNode(node, path, depth) {
       
       valuesDiv.appendChild(valueContainer);
       
-      // Recursively render children
+      // Recursively render children (wrapped in collapsible container)
       if (valueItem.children && valueItem.included) {
+        const childrenContainer = document.createElement('div');
+        childrenContainer.className = 'value-children-container';
+        childrenContainer.id = `children-${pathStr}`;
+        
         const childDiv = renderNode(valueItem.children, valuePath, depth + 1);
-        valuesDiv.appendChild(childDiv);
+        childrenContainer.appendChild(childDiv);
+        valuesDiv.appendChild(childrenContainer);
       }
     });
     
     nodeDiv.appendChild(valuesDiv);
+    
+    // Add button for organizational nodes to manually add values
+    if (node.isOrganizational) {
+      const addValueBtn = document.createElement('button');
+      addValueBtn.className = 'btn-tree add';
+      addValueBtn.textContent = '+ Add Grouping Value';
+      addValueBtn.style.fontSize = '12px';
+      addValueBtn.style.padding = '6px 12px';
+      addValueBtn.style.marginTop = '10px';
+      addValueBtn.onclick = () => addOrganizationalValue(path);
+      nodeDiv.appendChild(addValueBtn);
+    }
   } else if (node.field) {
     const noValues = document.createElement('div');
     noValues.style.color = '#999';
     noValues.style.fontStyle = 'italic';
     noValues.style.padding = '10px';
-    noValues.textContent = 'No values found for this field';
+    noValues.textContent = node.isOrganizational 
+      ? 'No grouping values defined. Click "+ Add Grouping Value" to create one.'
+      : 'No values found for this field';
     nodeDiv.appendChild(noValues);
+    
+    // Add button for empty organizational nodes
+    if (node.isOrganizational) {
+      const addValueBtn = document.createElement('button');
+      addValueBtn.className = 'btn-tree add';
+      addValueBtn.textContent = '+ Add Grouping Value';
+      addValueBtn.style.fontSize = '12px';
+      addValueBtn.style.padding = '6px 12px';
+      addValueBtn.style.marginTop = '10px';
+      addValueBtn.onclick = () => addOrganizationalValue(path);
+      nodeDiv.appendChild(addValueBtn);
+    }
   }
   
   return nodeDiv;

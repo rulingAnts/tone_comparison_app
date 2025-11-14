@@ -14,6 +14,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { normalizeRefString } = require('./utils/refUtils');
 
 function insertSuffix(fileName, suffix) {
   if (!suffix) return fileName;
@@ -89,4 +90,42 @@ async function validateBundleAudio({ records, audioFolder, processedDir, process
   return { missing, checked };
 }
 
-module.exports = { validateBundleAudio };
+/**
+ * Check for duplicate Reference values in an array of data_form records.
+ * Returns array of duplicate References (with leading zeros preserved).
+ * 
+ * @param {Array} records - Array of data_form objects
+ * @returns {Array<string>} - Array of duplicate Reference values
+ */
+function checkDuplicateReferences(records) {
+  const refCounts = new Map();
+  const duplicates = [];
+  
+  for (const record of records) {
+    if (!record || record.Reference == null) continue;
+    
+    // Preserve the exact Reference string (with leading zeros)
+    const refStr = normalizeRefString(record.Reference);
+    if (!refStr) continue;
+    
+    const count = refCounts.get(refStr) || 0;
+    refCounts.set(refStr, count + 1);
+    
+    // Add to duplicates list when we encounter it the second time
+    if (count === 1) {
+      duplicates.push(refStr);
+    }
+  }
+  
+  return duplicates.sort((a, b) => {
+    // Sort numerically if possible, otherwise alphabetically
+    const numA = parseInt(a, 10);
+    const numB = parseInt(b, 10);
+    if (!isNaN(numA) && !isNaN(numB)) {
+      return numA - numB;
+    }
+    return a.localeCompare(b);
+  });
+}
+
+module.exports = { validateBundleAudio, checkDuplicateReferences };

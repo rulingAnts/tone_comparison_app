@@ -2,13 +2,13 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const archiver = require('archiver');
-const { XMLParser } = require('fast-xml-parser');
+const { XMLParser, XMLBuilder } = require('fast-xml-parser');
 const {
   normalizeRefString,
   toNumericRef,
   sortByNumericRef,
 } = require('./utils/refUtils');
-const { validateBundleAudio } = require('./validator');
+const { validateBundleAudio, checkDuplicateReferences } = require('./validator');
 const pathResolve = (...p) => path.resolve(...p);
 
 // Prefer embedded normalizer to avoid brittle path resolution
@@ -618,8 +618,11 @@ async function createHierarchicalBundle(config, event) {
     if (!settingsWithMeta.bundleId) settingsWithMeta.bundleId = generateUuid();
     if (settingsWithMeta.bundleDescription == null) settingsWithMeta.bundleDescription = '';
     
+    // Read original XML file (preserve exact encoding and format)
+    const xmlBuffer = fs.readFileSync(xmlPath);
+    const xmlData = xmlBuffer.toString('utf16le');
+    
     // Parse XML
-    const xmlData = fs.readFileSync(xmlPath, 'utf16le');
     const parser = new XMLParser({
       ignoreAttributes: false,
       attributeNamePrefix: '@_',
@@ -633,6 +636,12 @@ async function createHierarchicalBundle(config, event) {
     const dataForms = Array.isArray(phonData.data_form) 
       ? phonData.data_form 
       : [phonData.data_form];
+    
+    // Check for duplicate References
+    const duplicates = checkDuplicateReferences(dataForms);
+    if (duplicates.length > 0) {
+      throw new Error(`Duplicate Reference values found: ${duplicates.join(', ')}. Please fix the source XML before creating bundle.`);
+    }
     
     // Filter records by reference numbers
     const referenceNumbers = (settingsWithMeta.referenceNumbers || []).map((r) => normalizeRefString(r));
@@ -769,7 +778,7 @@ async function createHierarchicalBundle(config, event) {
       throw new Error('Hierarchical bundle requires hierarchy configuration');
     }
     
-    // Generate sub-bundles from tree structure
+    // Generate sub-bundles from tree structure (temporary - will be replaced with hierarchy.json approach)
     const subBundles = settingsTree 
       ? generateSubBundlesFromTree(filteredRecords, settingsTree, '', [])
       : generateSubBundles(filteredRecords, hierarchyLevels, 0, '', settingsWithMeta); // Legacy fallback
@@ -786,7 +795,6 @@ async function createHierarchicalBundle(config, event) {
       if (stats.isDirectory()) {
         throw new Error(`Output path "${outputPath}" already exists as a directory. Please delete it or choose a different filename.`);
       }
-      // If it's a file, we'll overwrite it (normal behavior)
       console.log('[hierarchical] Output file exists, will overwrite');
     }
     
@@ -794,7 +802,6 @@ async function createHierarchicalBundle(config, event) {
     const output = fs.createWriteStream(outputPath);
     const archive = archiver('zip', { zlib: { level: 9 } });
     
-    // Error handling for archive
     archive.on('error', (err) => {
       throw err;
     });
@@ -805,22 +812,135 @@ async function createHierarchicalBundle(config, event) {
     
     archive.pipe(output);
     
-    // Create manifest.json
-    const manifest = {
-      version: '1.0',
-      bundleType: 'hierarchical',
-      bundleId: settingsWithMeta.bundleId,
-      bundleDescription: settingsWithMeta.bundleDescription || '',
-      createdAt: new Date().toISOString(),
-      totalRecords: filteredRecords.length,
-      subBundleCount: subBundles.length,
-    };
-    archive.append(JSON.stringify(manifest, null, 2), { name: 'manifest.json' });
+    // Add original_data.xml to xml/ folder (preserve exact format and encoding)
+    archive.file(xmlPath, { name: 'xml/original_data.xml' });
     
-    // Create hierarchy.json with full tree structure populated with actual record counts
+    // Create working_data.xml (copy of original for now - will be updated by desktop app later)
+    archive.file(xmlPath, { name: 'xml/working_data.xml' });
+    
+    console.log('[hierarchical] Added XML files to xml/ folder');
+    
+    // Add all audio files to audio/ folder (flat structure)
+    
+    for (const record of filteredRecords) {
+      if (record.SoundFile) {
+        const baseSoundFile = record.SoundFile;
+        const lastDot = baseSoundFile.lastIndexOf('.');
+        const basename = lastDot !== -1 ? baseSoundFile.substring(0, lastDot) : baseSoundFile;
+        const ext = lastDot !== -1 ? baseSoundFile.substring(lastDot) : '';
+        
+        // Add base file
+        const addAudioFile = (soundFile) => {
+          let srcPath;
+          let actualFileName = soundFile;
+          
+          if (processedDir && processedNameMap.has(soundFile)) {
+            const processedName = processedNameMap.get(soundFile);
+            srcPath = path.join(processedDir, processedName);
+            actualFileName = processedName;
+          } else {
+            srcPath = path.join(audioFolder, soundFile);
+          }
+          
+          if (fs.existsSync(srcPath)) {
+            archive.file(srcPath, { name: `audio/${actualFileName}` });
+          }
+        };
+        
+        addAudioFile(baseSoundFile);
+        
+        // Add variant files
+        for (const variant of audioVariantConfigs) {
+          if (variant.suffix) {
+            addAudioFile(`${basename}${variant.suffix}${ext}`);
+          }
+        }
+      }
+    }
+    
+    console.log('[hierarchical] Added audio files to audio/ folder');
+    
+    // Build hierarchy.json with complete structure
     const buildHierarchyFromTree = (node, records) => {
       if (!node || !node.field) return null;
       
+      // Handle organizational nodes
+      if (node.isOrganizational && node.organizationalGroups) {
+        const field = node.organizationalBaseField || '';
+        const allValues = [];
+        
+        // Process organizational groups
+        for (const group of node.organizationalGroups) {
+          // Skip excluded groups
+          if (group.included === false) continue;
+          
+          if (group.children && group.children.values) {
+            // Add values from this group (only if they're included)
+            const includedGroupValues = group.children.values.filter(v => v.included !== false);
+            allValues.push(...includedGroupValues.map(v => ({
+              ...v,
+              organizationalGroup: group.name  // Track which group it came from
+            })));
+          }
+        }
+        
+        // Process unassigned values (only if they're included)
+        if (node.unassignedValues) {
+          const includedUnassigned = node.unassignedValues.filter(v => v.included !== false);
+          allValues.push(...includedUnassigned);
+        }
+        
+        // Group records by value using the base field
+        const valueGroups = new Map();
+        for (const record of records) {
+          const value = record[field];
+          const valueConfig = allValues.find(v => v.value === value);
+          if (value && valueConfig) {
+            if (!valueGroups.has(value)) {
+              valueGroups.set(value, { records: [], valueConfig });
+            }
+            valueGroups.get(value).records.push(record);
+          }
+        }
+        
+        // Build values array
+        const values = [];
+        for (const [value, groupData] of valueGroups.entries()) {
+          const { records: valueRecords, valueConfig } = groupData;
+          const valueNode = {
+            value: value,
+            label: value,
+            recordCount: valueRecords.length,
+            audioVariants: valueConfig.audioVariants || [],
+            references: valueRecords.map(r => normalizeRefString(r.Reference)).filter(ref => ref)
+          };
+          
+          // Add organizational group info if present
+          if (valueConfig.organizationalGroup) {
+            valueNode.organizationalGroup = valueConfig.organizationalGroup;
+          }
+          
+          // Recursively build children if they exist (organizational values can have children too)
+          if (valueConfig.children && valueConfig.children.field) {
+            const childTree = buildHierarchyFromTree(valueConfig.children, valueRecords);
+            if (childTree && childTree.values && childTree.values.length > 0) {
+              valueNode.children = childTree.values;
+              // For non-leaf nodes, don't include references at this level
+              delete valueNode.references;
+            }
+          }
+          
+          values.push(valueNode);
+        }
+        
+        return {
+          field: field,
+          isOrganizational: true,
+          values: values
+        };
+      }
+      
+      // Regular (non-organizational) node handling
       const field = node.field;
       const includedValues = (node.values || []).filter(v => v.included);
       
@@ -837,7 +957,7 @@ async function createHierarchicalBundle(config, event) {
         }
       }
       
-      // Build values array with children
+      // Build values array with children and Reference lists
       const values = [];
       for (const [value, groupData] of valueGroups.entries()) {
         const { records: valueRecords, valueConfig } = groupData;
@@ -845,7 +965,9 @@ async function createHierarchicalBundle(config, event) {
           value: value,
           label: valueConfig.label || value,
           recordCount: valueRecords.length,
-          audioVariants: valueConfig.audioVariants || []
+          audioVariants: valueConfig.audioVariants || [],
+          // Add Reference list (preserving leading zeros)
+          references: valueRecords.map(r => normalizeRefString(r.Reference)).filter(ref => ref)
         };
         
         // Recursively build children if they exist
@@ -853,6 +975,8 @@ async function createHierarchicalBundle(config, event) {
           const childTree = buildHierarchyFromTree(valueConfig.children, valueRecords);
           if (childTree && childTree.values && childTree.values.length > 0) {
             valueNode.children = childTree.values;
+            // For non-leaf nodes, don't include references at this level
+            delete valueNode.references;
           }
         }
         
@@ -879,87 +1003,10 @@ async function createHierarchicalBundle(config, event) {
     };
     archive.append(JSON.stringify(hierarchy, null, 2), { name: 'hierarchy.json' });
     
-    // Add original XML file (UTF-16, preserves exact declaration)
-    archive.file(xmlPath, { name: 'original_data.xml' });
-    console.log('[hierarchical] Added original XML file');
+    console.log('[hierarchical] Generated hierarchy.json with Reference lists');
     
     // Add settings.json
     archive.append(JSON.stringify(settingsWithMeta, null, 2), { name: 'settings.json' });
-    
-    // Add each sub-bundle
-    const tgKey = settingsWithMeta.toneGroupElement || 'SurfaceMelodyGroup';
-    const tgIdKey = settingsWithMeta.toneGroupIdElement || 'SurfaceMelodyGroupId';
-    
-    console.log('[hierarchical] Adding', subBundles.length, 'sub-bundles to archive...');
-    let bundleCount = 0;
-    
-    for (const subBundle of subBundles) {
-      bundleCount++;
-      if (bundleCount % 10 === 0) {
-        console.log(`[hierarchical] Processing sub-bundle ${bundleCount}/${subBundles.length}...`);
-      }
-      
-      const subBundlePath = subBundle.path;
-      
-      // Create XML for this sub-bundle
-      const subXml = createSubBundleXml(subBundle.records, tgKey, tgIdKey);
-      archive.append(subXml, { name: `sub_bundles/${subBundlePath}/data.xml` });
-      
-      // Create metadata for this sub-bundle
-      const subMeta = {
-        path: subBundlePath,
-        categoryPath: subBundle.categoryPath,
-        recordCount: subBundle.records.length,
-        audioVariants: subBundle.audioVariants,
-        label: subBundle.label
-      };
-      archive.append(JSON.stringify(subMeta, null, 2), { name: `sub_bundles/${subBundlePath}/metadata.json` });
-      
-      // Add audio files filtered by enabled variants
-      const audioVariantConfigs = settingsWithMeta.audioFileVariants || [];
-      const enabledVariantIndices = subBundle.audioVariants || [];
-      
-      if (enabledVariantIndices.length > 0 && audioVariantConfigs.length > 0) {
-        const addedFiles = new Set(); // Track files to avoid duplicates
-        
-        for (const record of subBundle.records) {
-          if (record.SoundFile) {
-            const baseSoundFile = record.SoundFile;
-            const lastDot = baseSoundFile.lastIndexOf('.');
-            const basename = lastDot !== -1 ? baseSoundFile.substring(0, lastDot) : baseSoundFile;
-            const ext = lastDot !== -1 ? baseSoundFile.substring(lastDot) : '';
-            
-            // Add audio file for each enabled variant
-            for (const variantIndex of enabledVariantIndices) {
-              if (variantIndex >= 0 && variantIndex < audioVariantConfigs.length) {
-                const variant = audioVariantConfigs[variantIndex];
-                const suffix = variant.suffix || '';
-                const soundFile = suffix ? `${basename}${suffix}${ext}` : baseSoundFile;
-                
-                // Check if we have a processed version
-                let srcPath;
-                let actualFileName = soundFile;
-                
-                if (processedDir && processedNameMap.has(soundFile)) {
-                  const processedName = processedNameMap.get(soundFile);
-                  srcPath = path.join(processedDir, processedName);
-                  actualFileName = processedName; // Use the processed filename (may have different extension)
-                } else {
-                  srcPath = path.join(audioFolder, soundFile);
-                }
-                
-                const archivePath = `sub_bundles/${subBundlePath}/audio/${actualFileName}`;
-                
-                if (!addedFiles.has(archivePath) && fs.existsSync(srcPath)) {
-                  archive.file(srcPath, { name: archivePath });
-                  addedFiles.add(archivePath);
-                }
-              }
-            }
-          }
-        }
-      }
-    }
     
     console.log('[bundler] Finalizing archive...');
     await archive.finalize();
@@ -997,6 +1044,77 @@ function generateSubBundlesFromTree(records, node, pathPrefix, parentAudioVarian
     return subBundles;
   }
   
+  // Handle organizational nodes
+  if (node.isOrganizational && node.organizationalGroups) {
+    const field = node.organizationalBaseField || '';
+    const allValues = [];
+    
+    // Collect values from included organizational groups
+    for (const group of node.organizationalGroups) {
+      // Skip excluded groups
+      if (group.included === false) continue;
+      
+      if (group.children && group.children.values) {
+        const includedGroupValues = group.children.values.filter(v => v.included !== false);
+        allValues.push(...includedGroupValues);
+      }
+    }
+    
+    // Add included unassigned values
+    if (node.unassignedValues) {
+      const includedUnassigned = node.unassignedValues.filter(v => v.included !== false);
+      allValues.push(...includedUnassigned);
+    }
+    
+    // Group records by field value
+    const groups = new Map();
+    for (const record of records) {
+      const value = record[field];
+      const valueConfig = allValues.find(v => v.value === value);
+      if (value && valueConfig) {
+        if (!groups.has(value)) {
+          groups.set(value, { records: [], valueConfig });
+        }
+        groups.get(value).records.push(record);
+      }
+    }
+    
+    // Generate sub-bundles for each included value
+    for (const [value, groupData] of groups.entries()) {
+      const { records: groupRecords, valueConfig } = groupData;
+      const safeName = value.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const newPath = pathPrefix ? `${pathPrefix}/${safeName}` : safeName;
+      
+      const audioVariants = Array.isArray(valueConfig.audioVariants) && valueConfig.audioVariants.length > 0
+        ? valueConfig.audioVariants
+        : (parentAudioVariants || []);
+      
+      // Check if organizational value has children
+      if (valueConfig.children && valueConfig.children.field) {
+        // Recurse into children (can be more organizational nodes or regular nodes)
+        const childBundles = generateSubBundlesFromTree(
+          groupRecords,
+          valueConfig.children,
+          newPath,
+          audioVariants
+        );
+        subBundles.push(...childBundles);
+      } else {
+        // Leaf node - create sub-bundle
+        subBundles.push({
+          path: newPath,
+          categoryPath: newPath,
+          records: groupRecords,
+          audioVariants: audioVariants,
+          label: value
+        });
+      }
+    }
+    
+    return subBundles;
+  }
+  
+  // Regular (non-organizational) node handling
   const field = node.field;
   const includedValues = (node.values || []).filter(v => v.included);
   
