@@ -932,12 +932,19 @@
           <!-- Add Word Section -->
           <div class="add-word-section">
             <button id="addWordBtn" onclick="addWordToCurrentGroup()" disabled data-i18n="tm_addWordToCurrentGroup">Add Word to Current Group</button>
+            <button id="moveWordBtn" class="danger" onclick="initiateWordMove()" disabled style="margin-left: 10px; display: none;" data-i18n="tm_moveToCategory">Move to Different Category</button>
             <div id="addWordHint" class="helper-hint hidden" data-i18n="tm_addWord_hint_needSpelling">Please confirm spelling before adding word to group</div>
           </div>
         </div>
 
         <!-- Export Section -->
         <div class="export-section">
+          <!-- Undo/Redo buttons -->
+          <div style="margin-bottom: 10px;">
+            <button id="undoBtn" onclick="undo()" disabled data-i18n="tm_undo">Undo</button>
+            <button id="redoBtn" onclick="redo()" disabled style="margin-left: 10px;" data-i18n="tm_redo">Redo</button>
+          </div>
+          
           <!-- Hierarchical bundle exports -->
           <div id="hierarchicalExportSection" class="hidden">
             <button onclick="exportHierarchicalBundle()" data-i18n="tm_exportCompleteSession">Export Complete Session</button>

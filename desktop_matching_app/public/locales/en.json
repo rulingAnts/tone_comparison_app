@@ -13,6 +13,9 @@
   "tm_enterSpelling_placeholder": "Enter spelling...",
   "tm_confirmSpelling": "Confirm",
   "tm_addWordToCurrentGroup": "Add Word to Current Group",
+  "tm_moveToCategory": "Move to Different Category",
+  "tm_wordMustBeUnassigned": "Word must be removed from all tone groups before moving to a different category",
+  "tm_mustSelectTarget": "You must select a target category to proceed",
   "tm_addWord_hint_needSpelling": "Please confirm spelling before adding word to group",
   "tm_addWord_hint_needGroup": "Please select or create a tone group first",
   "tm_exportResults": "Export Results",
@@ -42,6 +45,8 @@
   "tm_languageLabel": "Language",
   "tm_showReferences": "Show References",
   "tm_resetSession": "Reset Session",
+  "tm_undo": "Undo",
+  "tm_redo": "Redo",
   "tm_reset_success": "Session has been reset",
   "tm_reset_failed": "Failed to reset session: {error}",
   "tm_reimport_success": "Re-imported {count} tone groups from previous export. You can continue reviewing and editing."
