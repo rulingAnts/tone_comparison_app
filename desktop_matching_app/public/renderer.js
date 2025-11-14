@@ -65,6 +65,63 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  // Check if bundle was restored from previous session
+  try {
+    const restored = await ipcRenderer.invoke('check-restored-bundle');
+    if (restored.restored) {
+      console.log('[desktop_matching] Restoring previous session');
+      bundleSettings = restored.settings;
+      session = restored.session;
+      bundleType = restored.bundleType;
+      
+      if (bundleType === 'hierarchical') {
+        // Hierarchical bundle restored
+        if (restored.requiresNavigation) {
+          // Show navigation screen
+          document.getElementById('welcomeScreen').classList.add('hidden');
+          document.getElementById('navigationScreen').classList.remove('hidden');
+          document.getElementById('workArea').classList.add('hidden');
+          renderHierarchyTree(restored.hierarchy, restored.session.subBundles);
+        } else {
+          // Resume work in current sub-bundle
+          document.getElementById('welcomeScreen').classList.add('hidden');
+          document.getElementById('navigationScreen').classList.add('hidden');
+          document.getElementById('workArea').classList.remove('hidden');
+          
+          // Show sub-bundle indicator
+          document.getElementById('subBundleIndicator').classList.remove('hidden');
+          document.getElementById('subBundlePath').textContent = session.currentSubBundle;
+          document.getElementById('backToNavBtn').classList.remove('hidden');
+          
+          // Initialize UI
+          initializeAudioVariants();
+          updateProgressIndicator();
+          initializeReferenceToggle();
+          
+          // Load current word and groups
+          await loadCurrentWord();
+          renderGroups();
+        }
+      } else {
+        // Legacy bundle restored
+        document.getElementById('welcomeScreen').classList.add('hidden');
+        document.getElementById('navigationScreen').classList.add('hidden');
+        document.getElementById('workArea').classList.remove('hidden');
+        
+        // Initialize UI
+        initializeAudioVariants();
+        updateProgressIndicator();
+        initializeReferenceToggle();
+        
+        // Load current word and groups
+        await loadCurrentWord();
+        renderGroups();
+      }
+    }
+  } catch (error) {
+    console.warn('[desktop_matching] Failed to restore bundle:', error.message);
+  }
+
   // Show references toggle listener
   const showReferencesCheckbox = document.getElementById('showReferencesCheckbox');
   if (showReferencesCheckbox) {
@@ -168,6 +225,7 @@ async function loadBundle() {
     // Load current word and groups
     await loadCurrentWord();
     renderGroups();
+    updateUndoRedoButtons();
     
   } catch (error) {
     alert(window.i18n.t('tm_error_loading_bundle', { error: error.message }));
@@ -315,9 +373,9 @@ async function selectSubBundle(subBundlePath) {
       return;
     }
     
-    // Update session and settings
+    // Update session (but keep bundleSettings from initial bundle load)
     session = result.session;
-    bundleSettings = result.subBundle.audioConfig || bundleSettings;
+    // Note: bundleSettings remains from the initial bundle load
     
     // Notify if re-import
     if (result.isReimport && result.importedGroups > 0) {
@@ -490,6 +548,9 @@ async function loadCurrentWord() {
   
   // Update Add Word button state
   updateAddWordButton();
+  
+  // Update Move Word button state (hierarchical bundles only)
+  updateMoveWordButton();
 }
 
 function showSpellingInput() {
@@ -570,6 +631,60 @@ function updateAddWordButton() {
   }
 }
 
+function updateMoveWordButton() {
+  const moveWordBtn = document.getElementById('moveWordBtn');
+  
+  if (!moveWordBtn) return;
+  
+  console.log('[updateMoveWordButton] session.bundleType:', session?.bundleType);
+  console.log('[updateMoveWordButton] currentWord:', currentWord?.Reference);
+  
+  // Only show for hierarchical bundles
+  if (session.bundleType !== 'hierarchical') {
+    moveWordBtn.style.display = 'none';
+    return;
+  }
+  
+  moveWordBtn.style.display = 'inline-block';
+  
+  // Check if current word is in any group
+  const ref = currentWord?.Reference;
+  if (!ref) {
+    moveWordBtn.disabled = true;
+    return;
+  }
+  
+  const isInGroup = session.groups.some(group => 
+    group.members && group.members.includes(ref)
+  );
+  
+  console.log('[updateMoveWordButton] isInGroup:', isInGroup, 'will disable:', isInGroup);
+  moveWordBtn.disabled = isInGroup;
+}
+
+async function initiateWordMove() {
+  console.log('[initiateWordMove] Called, currentWord:', currentWord?.Reference);
+  if (!currentWord) return;
+  
+  const ref = currentWord.Reference;
+  
+  // Check if word is in any group
+  const isInGroup = session.groups.some(group => 
+    group.members && group.members.includes(ref)
+  );
+  
+  console.log('[initiateWordMove] isInGroup:', isInGroup);
+  
+  if (isInGroup) {
+    alert(window.i18n.t('tm_wordMustBeUnassigned'));
+    return;
+  }
+  
+  console.log('[initiateWordMove] Opening modal...');
+  // Open the move modal
+  await openMoveWordModal(ref, currentWord);
+}
+
 async function playAudio() {
   if (!currentWord || !currentWord.SoundFile) {
     console.log('No audio file for current word');
@@ -636,6 +751,9 @@ async function addWordToCurrentGroup() {
   updateProgressIndicator();
   renderGroups();
   await loadCurrentWord();
+  
+  // Update move button state since word was added to group
+  updateMoveWordButton();
 }
 
 async function removeWordFromGroup(ref, groupId) {
@@ -660,6 +778,9 @@ async function removeWordFromGroup(ref, groupId) {
   updateProgressIndicator();
   renderGroups();
   await loadCurrentWord();
+  
+  // Update move button state since word was removed from group
+  updateMoveWordButton();
 }
 
 async function getCachedRecord(ref) {
@@ -990,19 +1111,6 @@ async function renderGroups() {
         };
         actions.appendChild(playBtn);
         
-        // Add move button only for hierarchical bundles
-        if (session.bundleType === 'hierarchical') {
-          const moveBtn = document.createElement('button');
-          moveBtn.className = 'icon-button';
-          moveBtn.textContent = '↗';
-          moveBtn.title = 'Move to different sub-bundle';
-          moveBtn.onclick = (e) => {
-            e.stopPropagation();
-            openMoveWordModal(ref, record);
-          };
-          actions.appendChild(moveBtn);
-        }
-        
         const removeBtn = document.createElement('button');
         removeBtn.className = 'icon-button danger';
         removeBtn.textContent = '✕';
@@ -1094,6 +1202,40 @@ async function resetSession() {
   await loadCurrentWord();
   
   alert(window.i18n.t('tm_reset_success', 'Session has been reset'));
+}
+
+// Undo/Redo Functions
+
+async function undo() {
+  const result = await ipcRenderer.invoke('undo');
+  if (result.success) {
+    // Refresh UI
+    await loadCurrentWord();
+    renderGroups();
+    updateProgressIndicator();
+    updateUndoRedoButtons();
+  } else {
+    alert(`Undo failed: ${result.error}`);
+  }
+}
+
+async function redo() {
+  const result = await ipcRenderer.invoke('redo');
+  if (result.success) {
+    // Refresh UI
+    await loadCurrentWord();
+    renderGroups();
+    updateProgressIndicator();
+    updateUndoRedoButtons();
+  } else {
+    alert(`Redo failed: ${result.error}`);
+  }
+}
+
+async function updateUndoRedoButtons() {
+  const state = await ipcRenderer.invoke('get-undo-redo-state');
+  document.getElementById('undoBtn').disabled = !state.canUndo;
+  document.getElementById('redoBtn').disabled = !state.canRedo;
 }
 
 // Edit Group Modal Functions
@@ -1240,6 +1382,7 @@ async function openMoveWordModal(ref, record) {
 }
 
 function closeMoveWordModal() {
+  // Allow closing - user is canceling the move operation
   document.getElementById('moveWordModal').classList.add('hidden');
   movingWordRef = null;
   selectedTargetSubBundle = null;
@@ -1247,78 +1390,108 @@ function closeMoveWordModal() {
 
 function renderMoveWordTree(hierarchy, subBundles) {
   const treeContainer = document.getElementById('moveWordTree');
+  if (!treeContainer) {
+    console.error('[renderMoveWordTree] moveWordTree element not found');
+    return;
+  }
+  
   treeContainer.innerHTML = '';
   
+  console.log('[renderMoveWordTree] hierarchy:', hierarchy);
+  console.log('[renderMoveWordTree] subBundles:', subBundles);
+  
   function renderNode(nodes, level = 0) {
+    if (!Array.isArray(nodes)) {
+      console.error('[renderNode] nodes is not an array:', nodes);
+      return;
+    }
+    
     nodes.forEach(node => {
-      if (node.subBundles && node.subBundles.length > 0) {
-        // Category node
+      const hasChildren = node.children && node.children.length > 0;
+      
+      if (hasChildren) {
+        // Category node - render as non-selectable header
         const categoryDiv = document.createElement('div');
         categoryDiv.className = 'move-tree-category';
         categoryDiv.style.paddingLeft = `${level * 20}px`;
         categoryDiv.textContent = node.label || node.value;
         treeContainer.appendChild(categoryDiv);
         
-        // Render sub-bundles
-        node.subBundles.forEach(subBundlePath => {
-          const subBundle = subBundles.find(sb => sb.path === subBundlePath);
-          if (subBundle) {
-            const isCurrent = subBundlePath === session.currentSubBundle;
-            
-            const itemDiv = document.createElement('div');
-            itemDiv.className = 'move-tree-sub-bundle';
-            if (isCurrent) {
-              itemDiv.classList.add('current');
-            }
-            itemDiv.style.paddingLeft = `${(level + 1) * 20}px`;
-            
-            const radio = document.createElement('input');
-            radio.type = 'radio';
-            radio.name = 'targetSubBundle';
-            radio.value = subBundlePath;
-            radio.disabled = isCurrent;
-            radio.onchange = () => selectTargetSubBundle(subBundlePath);
-            
-            const label = document.createElement('span');
-            label.className = 'move-tree-sub-bundle-label';
-            label.textContent = subBundle.path.split('/').pop();
-            
-            const info = document.createElement('span');
-            info.className = 'move-tree-sub-bundle-info';
-            if (isCurrent) {
-              info.textContent = '(current)';
-            } else {
-              info.textContent = `(${subBundle.assignedCount || 0}/${subBundle.recordCount || 0} words)`;
-            }
-            
-            itemDiv.appendChild(radio);
-            itemDiv.appendChild(label);
-            itemDiv.appendChild(info);
-            
-            if (!isCurrent) {
-              itemDiv.onclick = () => {
-                if (!isCurrent) {
-                  radio.checked = true;
-                  selectTargetSubBundle(subBundlePath);
-                }
-              };
-            }
-            
-            treeContainer.appendChild(itemDiv);
-          }
-        });
-      }
-      
-      if (node.children && node.children.length > 0) {
+        // Recursively render children
         renderNode(node.children, level + 1);
+      } else {
+        // Bottom-level node - render as selectable sub-bundle
+        const subBundlePath = node.value;
+        const subBundle = subBundles.find(sb => sb.path === subBundlePath);
+        
+        if (subBundle) {
+          const isCurrent = subBundlePath === session.currentSubBundle;
+          
+          const itemDiv = document.createElement('div');
+          itemDiv.className = 'move-tree-sub-bundle';
+          if (isCurrent) {
+            itemDiv.classList.add('current');
+          }
+          itemDiv.style.paddingLeft = `${level * 20}px`;
+          
+          const radio = document.createElement('input');
+          radio.type = 'radio';
+          radio.name = 'targetSubBundle';
+          radio.value = subBundlePath;
+          radio.disabled = isCurrent;
+          radio.onchange = () => selectTargetSubBundle(subBundlePath);
+          
+          const label = document.createElement('span');
+          label.className = 'move-tree-sub-bundle-label';
+          label.textContent = node.label || subBundle.path.split('/').pop();
+          
+          const info = document.createElement('span');
+          info.className = 'move-tree-sub-bundle-info';
+          if (isCurrent) {
+            info.textContent = '(current)';
+          } else {
+            info.textContent = `(${subBundle.assignedCount || 0}/${subBundle.recordCount || 0} words)`;
+          }
+          
+          itemDiv.appendChild(radio);
+          itemDiv.appendChild(label);
+          itemDiv.appendChild(info);
+          
+          if (!isCurrent) {
+            itemDiv.onclick = () => {
+              radio.checked = true;
+              selectTargetSubBundle(subBundlePath);
+            };
+          }
+          
+          treeContainer.appendChild(itemDiv);
+        }
       }
     });
   }
   
-  renderNode(hierarchy.tree || []);
+  // Handle new tree structure: {tree: {field, values: [...]}, audioVariants}
+  let treeData;
+  if (hierarchy.tree && hierarchy.tree.values) {
+    // New hierarchical structure
+    treeData = hierarchy.tree.values;
+  } else if (hierarchy.tree && Array.isArray(hierarchy.tree)) {
+    // Legacy structure with tree as array
+    treeData = hierarchy.tree;
+  } else if (Array.isArray(hierarchy)) {
+    // Direct array
+    treeData = hierarchy;
+  } else {
+    console.error('[renderMoveWordTree] Invalid hierarchy structure:', hierarchy);
+    treeData = [];
+  }
+  
+  console.log('[renderMoveWordTree] Using treeData:', treeData);
+  renderNode(treeData);
 }
 
 function selectTargetSubBundle(subBundlePath) {
+  console.log('[selectTargetSubBundle] Selected:', subBundlePath);
   selectedTargetSubBundle = subBundlePath;
   
   // Update visual selection
@@ -1336,17 +1509,29 @@ function selectTargetSubBundle(subBundlePath) {
 }
 
 async function confirmMoveWord() {
+  console.log('[confirmMoveWord] movingWordRef:', movingWordRef, 'selectedTargetSubBundle:', selectedTargetSubBundle);
+  
   if (!movingWordRef || !selectedTargetSubBundle) {
+    alert('Please select a target sub-bundle');
     return;
   }
+  
+  // Save the current sub-bundle to return to after move
+  const originalSubBundle = session.currentSubBundle;
   
   // Call backend to move word
   const result = await ipcRenderer.invoke('move-word-to-sub-bundle', {
     ref: movingWordRef,
-    targetSubBundle: selectedTargetSubBundle
+    targetSubBundle: selectedTargetSubBundle,
+    returnToOriginal: true
   });
   
   if (result.success) {
+    // Save target name before closing modal (which clears selectedTargetSubBundle)
+    const targetName = selectedTargetSubBundle.includes('/') 
+      ? selectedTargetSubBundle.split('/').pop() 
+      : selectedTargetSubBundle;
+    
     // Update session
     session = result.session;
     
@@ -1354,10 +1539,9 @@ async function confirmMoveWord() {
     closeMoveWordModal();
     
     // Show success message
-    const targetName = selectedTargetSubBundle.split('/').pop();
-    alert(`Moved word to ${targetName}`);
+    alert(`Moved word to ${targetName}. You can return to this word later.`);
     
-    // Re-render UI
+    // Re-render UI - should still be in original sub-bundle
     updateProgressIndicator();
     renderGroups();
     await loadCurrentWord();
@@ -1365,14 +1549,6 @@ async function confirmMoveWord() {
     alert(`Failed to move word: ${result.error}`);
   }
 }
-
-// Close move modal when clicking outside
-document.addEventListener('click', (e) => {
-  const moveModal = document.getElementById('moveWordModal');
-  if (e.target === moveModal) {
-    closeMoveWordModal();
-  }
-});
 
 // Review Status Management
 

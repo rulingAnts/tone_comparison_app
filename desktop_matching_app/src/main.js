@@ -72,7 +72,203 @@ function createWindow() {
 app.whenReady().then(() => {
   loadSession();
   createWindow();
+  
+  // Auto-restore bundle if session exists
+  if (sessionData && sessionData.bundleId) {
+    restoreBundleFromSession();
+  }
 });
+
+async function restoreBundleFromSession() {
+  try {
+    // Check if extracted bundle still exists
+    extractedPath = getExtractedBundlePath();
+    if (!fs.existsSync(extractedPath)) {
+      console.log('[desktop_matching] No extracted bundle found, cannot restore');
+      return;
+    }
+    
+    // Determine bundle type from session
+    bundleType = sessionData.bundleType || 'legacy';
+    
+    if (bundleType === 'hierarchical') {
+      // Restore hierarchical bundle
+      const manifestPath = path.join(extractedPath, 'manifest.json');
+      const hierarchyPath = path.join(extractedPath, 'hierarchy.json');
+      const settingsPath = path.join(extractedPath, 'settings.json');
+      
+      if (!fs.existsSync(manifestPath) || !fs.existsSync(hierarchyPath) || !fs.existsSync(settingsPath)) {
+        console.log('[desktop_matching] Missing bundle files, cannot restore');
+        return;
+      }
+      
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      hierarchyConfig = JSON.parse(fs.readFileSync(hierarchyPath, 'utf8'));
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      
+      // Verify bundle ID matches
+      if (manifest.bundleId !== sessionData.bundleId && settings.bundleId !== sessionData.bundleId) {
+        console.log('[desktop_matching] Bundle ID mismatch, cannot restore');
+        return;
+      }
+      
+      // Build sub-bundle list
+      const subBundlesDir = path.join(extractedPath, 'sub_bundles');
+      const subBundles = [];
+      
+      if (fs.existsSync(subBundlesDir)) {
+        const scanSubBundles = (dir, pathPrefix = '') => {
+          const entries = fs.readdirSync(dir, { withFileTypes: true });
+          for (const entry of entries) {
+            if (entry.isDirectory()) {
+              const subPath = pathPrefix ? `${pathPrefix}/${entry.name}` : entry.name;
+              const subDir = path.join(dir, entry.name);
+              const metadataPath = path.join(subDir, 'metadata.json');
+              
+              if (fs.existsSync(metadataPath)) {
+                const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+                subBundles.push({
+                  path: subPath,
+                  categoryPath: metadata.categoryPath || subPath,
+                  recordCount: metadata.recordCount || 0,
+                  audioConfig: metadata.audioConfig || { includeAudio: true, suffix: '' },
+                  fullPath: subDir,
+                });
+              } else {
+                scanSubBundles(subDir, subPath);
+              }
+            }
+          }
+        };
+        
+        scanSubBundles(subBundlesDir);
+      }
+      
+      bundleData = {
+        settings,
+        manifest,
+        hierarchy: hierarchyConfig,
+        subBundles,
+        extractedPath,
+        bundleId: settings.bundleId || manifest.bundleId || null,
+        bundleType: 'hierarchical',
+      };
+      
+      // Load existing change history
+      const existingHistory = ChangeTracker.loadChangeHistory(extractedPath);
+      changeTracker.initialize(extractedPath, existingHistory);
+      
+      // If currently in a sub-bundle, restore its records
+      if (sessionData.currentSubBundle) {
+        const subBundle = bundleData.subBundles.find(sb => sb.path === sessionData.currentSubBundle);
+        if (subBundle) {
+          let xmlPath = path.join(subBundle.fullPath, 'data_updated.xml');
+          if (!fs.existsSync(xmlPath)) {
+            xmlPath = path.join(subBundle.fullPath, 'data.xml');
+          }
+          if (fs.existsSync(xmlPath)) {
+            const xmlBuffer = fs.readFileSync(xmlPath);
+            const probe = xmlBuffer.slice(0, 200).toString('utf8');
+            const declMatch = probe.match(/encoding\s*=\s*"([^"]+)"/i);
+            const declared = declMatch ? declMatch[1].toLowerCase() : null;
+            let xmlData;
+            if ((declared && declared.includes('utf-16')) || probe.includes('\u0000')) {
+              xmlData = xmlBuffer.toString('utf16le');
+            } else {
+              xmlData = xmlBuffer.toString('utf8');
+            }
+            
+            const parser = new XMLParser({
+              ignoreAttributes: false,
+              attributeNamePrefix: '@_',
+              trimValues: true,
+              parseAttributeValue: false,
+              parseTagValue: false,
+            });
+            const xmlResult = parser.parse(xmlData);
+            const phonData = xmlResult.phon_data;
+            const dataForms = Array.isArray(phonData.data_form) 
+              ? phonData.data_form 
+              : [phonData.data_form];
+            
+            bundleData.records = dataForms;
+            bundleData.currentSubBundlePath = sessionData.currentSubBundle;
+            currentSubBundlePath = sessionData.currentSubBundle;
+          }
+        }
+      }
+      
+      console.log('[desktop_matching] Restored hierarchical bundle:', bundleData.bundleId);
+      
+    } else {
+      // Restore legacy bundle
+      const settingsPath = path.join(extractedPath, 'settings.json');
+      if (!fs.existsSync(settingsPath)) {
+        console.log('[desktop_matching] Missing settings.json, cannot restore');
+        return;
+      }
+      
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      
+      // Verify bundle ID matches
+      if (settings.bundleId !== sessionData.bundleId) {
+        console.log('[desktop_matching] Bundle ID mismatch, cannot restore');
+        return;
+      }
+      
+      // Find XML file
+      let xmlPath = path.join(extractedPath, 'data_updated.xml');
+      if (!fs.existsSync(xmlPath)) {
+        xmlPath = path.join(extractedPath, 'data.xml');
+      }
+      if (!fs.existsSync(xmlPath)) {
+        console.log('[desktop_matching] Missing XML file, cannot restore');
+        return;
+      }
+      
+      const xmlBuffer = fs.readFileSync(xmlPath);
+      const probe = xmlBuffer.slice(0, 200).toString('utf8');
+      const declMatch = probe.match(/encoding\s*=\s*"([^"]+)"/i);
+      const declared = declMatch ? declMatch[1].toLowerCase() : null;
+      let xmlData;
+      if ((declared && declared.includes('utf-16')) || probe.includes('\u0000')) {
+        xmlData = xmlBuffer.toString('utf16le');
+      } else {
+        xmlData = xmlBuffer.toString('utf8');
+      }
+      
+      const parser = new XMLParser({
+        ignoreAttributes: false,
+        attributeNamePrefix: '@_',
+        trimValues: true,
+        parseAttributeValue: false,
+        parseTagValue: false,
+      });
+      const xmlResult = parser.parse(xmlData);
+      const phonData = xmlResult.phon_data;
+      const dataForms = Array.isArray(phonData.data_form) 
+        ? phonData.data_form 
+        : [phonData.data_form];
+      
+      bundleData = {
+        settings,
+        records: dataForms,
+        extractedPath,
+        bundleId: settings.bundleId || null,
+        isReimport: fs.existsSync(path.join(extractedPath, 'data_updated.xml')),
+      };
+      
+      console.log('[desktop_matching] Restored legacy bundle:', bundleData.bundleId);
+    }
+    
+  } catch (error) {
+    console.warn('[desktop_matching] Failed to restore bundle:', error.message);
+    // Clear session if restoration failed
+    sessionData = null;
+    bundleData = null;
+    extractedPath = null;
+  }
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -459,6 +655,31 @@ ipcMain.handle('get-session', async () => {
   return sessionData;
 });
 
+ipcMain.handle('check-restored-bundle', async () => {
+  // Check if bundle was restored on startup
+  if (!bundleData || !sessionData) {
+    return { restored: false };
+  }
+  
+  const result = {
+    restored: true,
+    bundleType: bundleType,
+    settings: bundleData.settings,
+    session: sessionData,
+  };
+  
+  if (bundleType === 'hierarchical') {
+    result.hierarchy = bundleData.hierarchy;
+    result.manifest = bundleData.manifest;
+    result.subBundleCount = bundleData.subBundles?.length || 0;
+    result.requiresNavigation = !sessionData.currentSubBundle; // Show navigation if not in a sub-bundle
+  } else {
+    result.recordCount = bundleData.records?.length || 0;
+  }
+  
+  return result;
+});
+
 ipcMain.handle('update-session', async (event, updates) => {
   if (!sessionData) return null;
   
@@ -666,7 +887,16 @@ ipcMain.handle('select-image-file', async () => {
 ipcMain.handle('get-audio-path', async (event, soundFile, suffix) => {
   if (!extractedPath) return null;
   
-  const audioDir = path.join(extractedPath, 'audio');
+  // Determine audio directory based on bundle type
+  let audioDir;
+  if (bundleType === 'hierarchical' && currentSubBundlePath) {
+    // For hierarchical bundles, audio is in sub_bundles/{path}/audio/
+    audioDir = path.join(extractedPath, 'sub_bundles', currentSubBundlePath, 'audio');
+  } else {
+    // For legacy bundles, audio is in audio/
+    audioDir = path.join(extractedPath, 'audio');
+  }
+  
   if (!fs.existsSync(audioDir)) return null;
   
   // Try with suffix first
@@ -821,9 +1051,16 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
     const xmlResult = parser.parse(xmlData);
     
     const phonData = xmlResult.phon_data;
-    const dataForms = Array.isArray(phonData.data_form) 
-      ? phonData.data_form 
-      : [phonData.data_form];
+    
+    // Handle data_form which can be undefined, empty array, single object, or array of objects
+    let dataForms;
+    if (!phonData.data_form || (Array.isArray(phonData.data_form) && phonData.data_form.length === 0)) {
+      dataForms = [];
+    } else if (Array.isArray(phonData.data_form)) {
+      dataForms = phonData.data_form;
+    } else {
+      dataForms = [phonData.data_form];
+    }
     
     // Update bundleData with current sub-bundle records
     bundleData.records = dataForms;
@@ -1488,7 +1725,7 @@ ipcMain.handle('get-hierarchy-data', async () => {
 });
 
 // Move word to different sub-bundle
-ipcMain.handle('move-word-to-sub-bundle', async (event, { ref, targetSubBundle }) => {
+ipcMain.handle('move-word-to-sub-bundle', async (event, { ref, targetSubBundle, returnToOriginal }) => {
   if (bundleType !== 'hierarchical' || !sessionData) {
     return { success: false, error: 'Not a hierarchical bundle' };
   }
@@ -1504,26 +1741,159 @@ ipcMain.handle('move-word-to-sub-bundle', async (event, { ref, targetSubBundle }
       return { success: false, error: 'Cannot move to same sub-bundle' };
     }
     
+    // Find current and target sub-bundle data
+    const currentSubBundleData = bundleData.subBundles.find(sb => sb.path === currentSubBundle);
+    const targetSubBundleData = bundleData.subBundles.find(sb => sb.path === targetSubBundle);
+    
+    if (!currentSubBundleData || !targetSubBundleData) {
+      return { success: false, error: 'Sub-bundle data not found' };
+    }
+    
     // Find current and target sub-bundle sessions
     const currentSession = sessionData.subBundles.find(sb => sb.path === currentSubBundle);
     const targetSession = sessionData.subBundles.find(sb => sb.path === targetSubBundle);
     
     if (!currentSession || !targetSession) {
-      return { success: false, error: 'Sub-bundle not found' };
+      return { success: false, error: 'Sub-bundle session not found' };
     }
     
-    // Remove word from current sub-bundle
-    // 1. Remove from queue if present
+    // Read current sub-bundle XML
+    const currentXmlPath = path.join(currentSubBundleData.fullPath, 'data.xml');
+    if (!fs.existsSync(currentXmlPath)) {
+      return { success: false, error: 'Current sub-bundle data.xml not found' };
+    }
+    
+    const currentXmlBuffer = fs.readFileSync(currentXmlPath);
+    const currentXmlData = currentXmlBuffer.toString('utf8');
+    
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: '@_',
+      trimValues: true,
+      parseAttributeValue: false,
+      parseTagValue: false,
+    });
+    
+    const currentXmlResult = parser.parse(currentXmlData);
+    const currentPhonData = currentXmlResult.phon_data;
+    let currentDataForms = Array.isArray(currentPhonData.data_form) 
+      ? currentPhonData.data_form 
+      : [currentPhonData.data_form];
+    
+    // Find the record to move
+    const recordIndex = currentDataForms.findIndex(df => normalizeRefString(df.Reference) === ref);
+    if (recordIndex === -1) {
+      return { success: false, error: 'Record not found in current sub-bundle' };
+    }
+    
+    const record = currentDataForms[recordIndex];
+    
+    // Update category fields to match target sub-bundle
+    const categoryUpdates = getCategoryUpdatesForPath(targetSubBundle, bundleData.hierarchy);
+    Object.entries(categoryUpdates).forEach(([field, value]) => {
+      record[field] = value;
+    });
+    
+    // Copy audio files to target sub-bundle
+    if (record.SoundFile) {
+      const currentAudioDir = path.join(currentSubBundleData.fullPath, 'audio');
+      const targetAudioDir = path.join(targetSubBundleData.fullPath, 'audio');
+      
+      // Ensure target audio directory exists
+      if (!fs.existsSync(targetAudioDir)) {
+        fs.mkdirSync(targetAudioDir, { recursive: true });
+      }
+      
+      // Move all audio variants
+      const baseFilename = path.parse(record.SoundFile).name;
+      const audioVariants = bundleData.settings.audioFileVariants || [{ suffix: '' }];
+      
+      for (const variant of audioVariants) {
+        const suffix = variant.suffix || '';
+        const sourceFile = path.join(currentAudioDir, `${baseFilename}${suffix}.flac`);
+        const targetFile = path.join(targetAudioDir, `${baseFilename}${suffix}.flac`);
+        
+        if (fs.existsSync(sourceFile)) {
+          fs.copyFileSync(sourceFile, targetFile);
+          fs.unlinkSync(sourceFile); // Delete source file after copying
+        } else {
+          // Try with .wav extension
+          const sourceWav = path.join(currentAudioDir, `${baseFilename}${suffix}.wav`);
+          if (fs.existsSync(sourceWav)) {
+            const targetWav = path.join(targetAudioDir, `${baseFilename}${suffix}.wav`);
+            fs.copyFileSync(sourceWav, targetWav);
+            fs.unlinkSync(sourceWav); // Delete source file after copying
+          }
+        }
+      }
+    }
+    
+    // Remove record from current sub-bundle XML
+    currentDataForms.splice(recordIndex, 1);
+    
+    // Update current sub-bundle XML
+    if (currentDataForms.length === 0) {
+      // Don't leave empty data.xml, keep at least an empty structure
+      currentPhonData.data_form = [];
+    } else if (currentDataForms.length === 1) {
+      currentPhonData.data_form = currentDataForms[0];
+    } else {
+      currentPhonData.data_form = currentDataForms;
+    }
+    
+    const builder = new XMLBuilder({
+      ignoreAttributes: false,
+      attributeNamePrefix: '@_',
+      format: true,
+      indentBy: '  ',
+    });
+    
+    const updatedCurrentXml = builder.build(currentXmlResult);
+    fs.writeFileSync(currentXmlPath, updatedCurrentXml, 'utf8');
+    
+    // Read or create target sub-bundle XML
+    const targetXmlPath = path.join(targetSubBundleData.fullPath, 'data.xml');
+    let targetXmlResult;
+    
+    if (fs.existsSync(targetXmlPath)) {
+      const targetXmlBuffer = fs.readFileSync(targetXmlPath);
+      const targetXmlData = targetXmlBuffer.toString('utf8');
+      targetXmlResult = parser.parse(targetXmlData);
+    } else {
+      // Create new structure
+      targetXmlResult = {
+        phon_data: {
+          data_form: []
+        }
+      };
+    }
+    
+    const targetPhonData = targetXmlResult.phon_data;
+    let targetDataForms = Array.isArray(targetPhonData.data_form) 
+      ? targetPhonData.data_form 
+      : (targetPhonData.data_form ? [targetPhonData.data_form] : []);
+    
+    // Add record to target sub-bundle
+    targetDataForms.push(record);
+    
+    if (targetDataForms.length === 1) {
+      targetPhonData.data_form = targetDataForms[0];
+    } else {
+      targetPhonData.data_form = targetDataForms;
+    }
+    
+    const updatedTargetXml = builder.build(targetXmlResult);
+    fs.writeFileSync(targetXmlPath, updatedTargetXml, 'utf8');
+    
+    // Update session data
+    // Remove from current sub-bundle
     currentSession.queue = currentSession.queue.filter(r => r !== ref);
     sessionData.queue = sessionData.queue.filter(r => r !== ref);
     
-    // 2. Remove from groups if present
-    let removedFromGroup = false;
+    // Remove from groups if present
     for (const group of currentSession.groups) {
       if (group.members && group.members.includes(ref)) {
         group.members = group.members.filter(m => m !== ref);
-        removedFromGroup = true;
-        // Mark group as needing review if it had been reviewed
         if (group.additionsSinceReview !== undefined) {
           group.additionsSinceReview++;
         }
@@ -1531,7 +1901,6 @@ ipcMain.handle('move-word-to-sub-bundle', async (event, { ref, targetSubBundle }
       }
     }
     
-    // Also remove from session.groups (current working groups)
     for (const group of sessionData.groups) {
       if (group.members && group.members.includes(ref)) {
         group.members = group.members.filter(m => m !== ref);
@@ -1542,33 +1911,26 @@ ipcMain.handle('move-word-to-sub-bundle', async (event, { ref, targetSubBundle }
       }
     }
     
-    // Update current sub-bundle assigned count
     currentSession.assignedCount = Math.max(0, (currentSession.assignedCount || 0) - 1);
+    currentSession.recordCount = currentDataForms.length;
     
-    // Add word to target sub-bundle queue
+    // Add to target sub-bundle
     if (!targetSession.queue.includes(ref)) {
       targetSession.queue.push(ref);
     }
+    targetSession.recordCount = targetDataForms.length;
     
-    // Update target sub-bundle record count if needed
-    if (!targetSession.recordCount) {
-      targetSession.recordCount = 0;
-    }
-    targetSession.recordCount++;
-    
-    // Update word's field values to match target sub-bundle category
-    // This would require parsing the hierarchy and updating the record
-    // For now, we'll just move the word and let the user handle field updates
+    console.log(`[move-word-to-sub-bundle] Moved ${ref} from ${currentSubBundle} to ${targetSubBundle}`);
+    console.log(`[move-word-to-sub-bundle] Updated category fields:`, categoryUpdates);
     
     // Track the sub-bundle move
-    const hierarchyFields = extractCategoryFieldsFromPath(currentSubBundle, targetSubBundle);
     changeTracker.logSubBundleMove(
       ref,
       currentSubBundle,
       targetSubBundle,
-      hierarchyFields.field || 'Category',
-      hierarchyFields.oldValue || currentSubBundle,
-      hierarchyFields.newValue || targetSubBundle
+      Object.keys(categoryUpdates).join(', '),
+      currentSubBundle,
+      targetSubBundle
     );
     
     // Save session
@@ -1584,9 +1946,45 @@ ipcMain.handle('move-word-to-sub-bundle', async (event, { ref, targetSubBundle }
       },
     };
   } catch (error) {
+    console.error('[move-word-to-sub-bundle] Error:', error);
     return { success: false, error: error.message };
   }
 });
+
+// Helper to get category field updates based on target path
+function getCategoryUpdatesForPath(targetPath, hierarchy) {
+  const updates = {};
+  
+  // Parse the hierarchy tree to determine which fields to update
+  const pathParts = targetPath.split('/');
+  
+  if (!hierarchy || !hierarchy.tree) {
+    return updates;
+  }
+  
+  // Navigate through the tree to find field assignments
+  let currentLevel = hierarchy.tree.values || [];
+  let currentField = hierarchy.tree.field || 'Category';
+  
+  pathParts.forEach((part, index) => {
+    // Set the field for this level
+    updates[currentField] = part;
+    
+    // Find the node for this part
+    const node = currentLevel.find(n => n.value === part);
+    if (node && node.children && node.children.length > 0) {
+      // If there are children, get the field name for the next level
+      // This should be stored in the hierarchy structure
+      currentLevel = node.children;
+      // For now, assume standard field progression
+      if (index === 0 && part === 'Noun') {
+        currentField = 'SyllableProfile'; // Or whatever the second-level field is
+      }
+    }
+  });
+  
+  return updates;
+}
 
 // Helper to extract category field information from hierarchy paths
 function extractCategoryFieldsFromPath(oldPath, newPath) {
@@ -1688,4 +2086,43 @@ ipcMain.handle('mark-sub-bundle-reviewed', async (event, { reviewed }) => {
   } catch (error) {
     return { success: false, error: error.message };
   }
+});
+
+// Undo last change
+ipcMain.handle('undo', async () => {
+  try {
+    // TODO: Implement actual undo functionality
+    // This would require storing state snapshots before each change
+    return { 
+      success: false, 
+      error: 'Undo functionality not yet implemented',
+      canUndo: false,
+      canRedo: false
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Redo last undone change
+ipcMain.handle('redo', async () => {
+  try {
+    // TODO: Implement actual redo functionality  
+    return { 
+      success: false, 
+      error: 'Redo functionality not yet implemented',
+      canUndo: false,
+      canRedo: false
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Get undo/redo state
+ipcMain.handle('get-undo-redo-state', async () => {
+  return {
+    canUndo: false,
+    canRedo: false
+  };
 });
