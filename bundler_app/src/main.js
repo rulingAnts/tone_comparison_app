@@ -864,6 +864,83 @@ async function createHierarchicalBundle(config, event) {
     const buildHierarchyFromTree = (node, records) => {
       if (!node || !node.field) return null;
       
+      // Handle organizational nodes
+      if (node.isOrganizational && node.organizationalGroups) {
+        const field = node.organizationalBaseField || '';
+        const allValues = [];
+        
+        // Process organizational groups
+        for (const group of node.organizationalGroups) {
+          // Skip excluded groups
+          if (group.included === false) continue;
+          
+          if (group.children && group.children.values) {
+            // Add values from this group (only if they're included)
+            const includedGroupValues = group.children.values.filter(v => v.included !== false);
+            allValues.push(...includedGroupValues.map(v => ({
+              ...v,
+              organizationalGroup: group.name  // Track which group it came from
+            })));
+          }
+        }
+        
+        // Process unassigned values (only if they're included)
+        if (node.unassignedValues) {
+          const includedUnassigned = node.unassignedValues.filter(v => v.included !== false);
+          allValues.push(...includedUnassigned);
+        }
+        
+        // Group records by value using the base field
+        const valueGroups = new Map();
+        for (const record of records) {
+          const value = record[field];
+          const valueConfig = allValues.find(v => v.value === value);
+          if (value && valueConfig) {
+            if (!valueGroups.has(value)) {
+              valueGroups.set(value, { records: [], valueConfig });
+            }
+            valueGroups.get(value).records.push(record);
+          }
+        }
+        
+        // Build values array
+        const values = [];
+        for (const [value, groupData] of valueGroups.entries()) {
+          const { records: valueRecords, valueConfig } = groupData;
+          const valueNode = {
+            value: value,
+            label: value,
+            recordCount: valueRecords.length,
+            audioVariants: valueConfig.audioVariants || [],
+            references: valueRecords.map(r => normalizeRefString(r.Reference)).filter(ref => ref)
+          };
+          
+          // Add organizational group info if present
+          if (valueConfig.organizationalGroup) {
+            valueNode.organizationalGroup = valueConfig.organizationalGroup;
+          }
+          
+          // Recursively build children if they exist (organizational values can have children too)
+          if (valueConfig.children && valueConfig.children.field) {
+            const childTree = buildHierarchyFromTree(valueConfig.children, valueRecords);
+            if (childTree && childTree.values && childTree.values.length > 0) {
+              valueNode.children = childTree.values;
+              // For non-leaf nodes, don't include references at this level
+              delete valueNode.references;
+            }
+          }
+          
+          values.push(valueNode);
+        }
+        
+        return {
+          field: field,
+          isOrganizational: true,
+          values: values
+        };
+      }
+      
+      // Regular (non-organizational) node handling
       const field = node.field;
       const includedValues = (node.values || []).filter(v => v.included);
       
@@ -967,6 +1044,77 @@ function generateSubBundlesFromTree(records, node, pathPrefix, parentAudioVarian
     return subBundles;
   }
   
+  // Handle organizational nodes
+  if (node.isOrganizational && node.organizationalGroups) {
+    const field = node.organizationalBaseField || '';
+    const allValues = [];
+    
+    // Collect values from included organizational groups
+    for (const group of node.organizationalGroups) {
+      // Skip excluded groups
+      if (group.included === false) continue;
+      
+      if (group.children && group.children.values) {
+        const includedGroupValues = group.children.values.filter(v => v.included !== false);
+        allValues.push(...includedGroupValues);
+      }
+    }
+    
+    // Add included unassigned values
+    if (node.unassignedValues) {
+      const includedUnassigned = node.unassignedValues.filter(v => v.included !== false);
+      allValues.push(...includedUnassigned);
+    }
+    
+    // Group records by field value
+    const groups = new Map();
+    for (const record of records) {
+      const value = record[field];
+      const valueConfig = allValues.find(v => v.value === value);
+      if (value && valueConfig) {
+        if (!groups.has(value)) {
+          groups.set(value, { records: [], valueConfig });
+        }
+        groups.get(value).records.push(record);
+      }
+    }
+    
+    // Generate sub-bundles for each included value
+    for (const [value, groupData] of groups.entries()) {
+      const { records: groupRecords, valueConfig } = groupData;
+      const safeName = value.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const newPath = pathPrefix ? `${pathPrefix}/${safeName}` : safeName;
+      
+      const audioVariants = Array.isArray(valueConfig.audioVariants) && valueConfig.audioVariants.length > 0
+        ? valueConfig.audioVariants
+        : (parentAudioVariants || []);
+      
+      // Check if organizational value has children
+      if (valueConfig.children && valueConfig.children.field) {
+        // Recurse into children (can be more organizational nodes or regular nodes)
+        const childBundles = generateSubBundlesFromTree(
+          groupRecords,
+          valueConfig.children,
+          newPath,
+          audioVariants
+        );
+        subBundles.push(...childBundles);
+      } else {
+        // Leaf node - create sub-bundle
+        subBundles.push({
+          path: newPath,
+          categoryPath: newPath,
+          records: groupRecords,
+          audioVariants: audioVariants,
+          label: value
+        });
+      }
+    }
+    
+    return subBundles;
+  }
+  
+  // Regular (non-organizational) node handling
   const field = node.field;
   const includedValues = (node.values || []).filter(v => v.included);
   
