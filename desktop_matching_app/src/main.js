@@ -1901,7 +1901,6 @@ ipcMain.handle('move-word-to-sub-bundle', async (event, { ref, targetSubBundle, 
   }
   
   try {
-    // Get current sub-bundle
     const currentSubBundle = sessionData.currentSubBundle;
     if (!currentSubBundle) {
       return { success: false, error: 'No current sub-bundle' };
@@ -1911,249 +1910,522 @@ ipcMain.handle('move-word-to-sub-bundle', async (event, { ref, targetSubBundle, 
       return { success: false, error: 'Cannot move to same sub-bundle' };
     }
     
-    // Find current and target sub-bundle data
+    // Find sub-bundle data and sessions
     const currentSubBundleData = bundleData.subBundles.find(sb => sb.path === currentSubBundle);
     const targetSubBundleData = bundleData.subBundles.find(sb => sb.path === targetSubBundle);
-    
-    if (!currentSubBundleData || !targetSubBundleData) {
-      return { success: false, error: 'Sub-bundle data not found' };
-    }
-    
-    // Find current and target sub-bundle sessions
     const currentSession = sessionData.subBundles.find(sb => sb.path === currentSubBundle);
     const targetSession = sessionData.subBundles.find(sb => sb.path === targetSubBundle);
     
-    if (!currentSession || !targetSession) {
-      return { success: false, error: 'Sub-bundle session not found' };
+    if (!currentSubBundleData || !targetSubBundleData || !currentSession || !targetSession) {
+      return { success: false, error: 'Sub-bundle not found' };
     }
     
-    // Read current sub-bundle XML
-    const currentXmlPath = path.join(currentSubBundleData.fullPath, 'data.xml');
-    if (!fs.existsSync(currentXmlPath)) {
-      return { success: false, error: 'Current sub-bundle data.xml not found' };
-    }
-    
-    const currentXmlBuffer = fs.readFileSync(currentXmlPath);
-    const currentXmlData = currentXmlBuffer.toString('utf8');
-    
-    const parser = new XMLParser({
-      ignoreAttributes: false,
-      attributeNamePrefix: '@_',
-      trimValues: true,
-      parseAttributeValue: false,
-      parseTagValue: false,
-    });
-    
-    const currentXmlResult = parser.parse(currentXmlData);
-    const currentPhonData = currentXmlResult.phon_data;
-    let currentDataForms = Array.isArray(currentPhonData.data_form) 
-      ? currentPhonData.data_form 
-      : [currentPhonData.data_form];
-    
-    // Find the record to move
-    const recordIndex = currentDataForms.findIndex(df => normalizeRefString(df.Reference) === ref);
-    if (recordIndex === -1) {
-      return { success: false, error: 'Record not found in current sub-bundle' };
-    }
-    
-    const record = currentDataForms[recordIndex];
-    
-    // Update category fields to match target sub-bundle
-    const categoryUpdates = getCategoryUpdatesForPath(targetSubBundle, bundleData.hierarchy);
-    Object.entries(categoryUpdates).forEach(([field, value]) => {
-      record[field] = value;
-    });
-    
-    // Copy audio files to target sub-bundle
-    if (record.SoundFile) {
-      const currentAudioDir = path.join(currentSubBundleData.fullPath, 'audio');
-      const targetAudioDir = path.join(targetSubBundleData.fullPath, 'audio');
+    // Check if using new structure
+    if (bundleData.usesNewStructure) {
+      console.log('[move-word] Using new structure - updating hierarchy.json and working_data.xml');
       
-      // Ensure target audio directory exists
-      if (!fs.existsSync(targetAudioDir)) {
-        fs.mkdirSync(targetAudioDir, { recursive: true });
+      // 1. Update hierarchy.json
+      const hierarchyPath = path.join(extractedPath, 'hierarchy.json');
+      updateHierarchyJsonReferences(hierarchyPath, currentSubBundle, targetSubBundle, ref);
+      
+      // Also update in-memory references
+      if (currentSubBundleData.references) {
+        const idx = currentSubBundleData.references.findIndex(r => normalizeRefString(r) === ref);
+        if (idx !== -1) {
+          currentSubBundleData.references.splice(idx, 1);
+        }
+      }
+      if (!targetSubBundleData.references) {
+        targetSubBundleData.references = [];
+      }
+      if (!targetSubBundleData.references.some(r => normalizeRefString(r) === ref)) {
+        targetSubBundleData.references.push(ref);
       }
       
-      // Move all audio variants
-      const baseFilename = path.parse(record.SoundFile).name;
-      const audioVariants = bundleData.settings.audioFileVariants || [{ suffix: '' }];
+      // 2. Update working_data.xml with category field changes
+      const workingXmlPath = path.join(extractedPath, 'xml', 'working_data.xml');
+      const categoryUpdates = getCategoryUpdatesForPath(targetSubBundle, bundleData.hierarchy);
+      updateWorkingDataXmlFields(workingXmlPath, ref, categoryUpdates);
       
-      for (const variant of audioVariants) {
-        const suffix = variant.suffix || '';
-        const sourceFile = path.join(currentAudioDir, `${baseFilename}${suffix}.flac`);
-        const targetFile = path.join(targetAudioDir, `${baseFilename}${suffix}.flac`);
+      console.log(`[move-word] Updated ${ref}: ${Object.entries(categoryUpdates).map(([k,v]) => `${k}=${v}`).join(', ')}`);
+      
+      // 3. Update session data (NO audio file copying!)
+      currentSession.queue = currentSession.queue.filter(r => r !== ref);
+      sessionData.queue = sessionData.queue.filter(r => r !== ref);
+      
+      // Remove from groups if present
+      for (const group of currentSession.groups) {
+        if (group.members && group.members.includes(ref)) {
+          group.members = group.members.filter(m => m !== ref);
+          if (group.additionsSinceReview !== undefined) {
+            group.additionsSinceReview++;
+          }
+          break;
+        }
+      }
+      
+      for (const group of sessionData.groups) {
+        if (group.members && group.members.includes(ref)) {
+          group.members = group.members.filter(m => m !== ref);
+          if (group.additionsSinceReview !== undefined) {
+            group.additionsSinceReview++;
+          }
+          break;
+        }
+      }
+      
+      currentSession.assignedCount = Math.max(0, (currentSession.assignedCount || 0) - 1);
+      currentSession.recordCount = (currentSession.recordCount || 0) - 1;
+      
+      // Add to target sub-bundle
+      if (!targetSession.queue.includes(ref)) {
+        targetSession.queue.push(ref);
+      }
+      targetSession.recordCount = (targetSession.recordCount || 0) + 1;
+      
+      // Track the move
+      changeTracker.logSubBundleMove(
+        ref,
+        currentSubBundle,
+        targetSubBundle,
+        Object.keys(categoryUpdates).join(', '),
+        currentSubBundle,
+        targetSubBundle
+      );
+      
+      saveSession();
+      
+      return {
+        success: true,
+        session: {
+          ...sessionData,
+          queue: [...sessionData.queue],
+          groups: sessionData.groups.map(g => ({ ...g })),
+        },
+      };
+      
+    } else {
+      // OLD STRUCTURE: Use existing implementation with audio file copying
+      console.log('[move-word] Using old structure - copying files between sub_bundles/');
+      
+      // Read current sub-bundle XML
+      const currentXmlPath = path.join(currentSubBundleData.fullPath, 'data.xml');
+      if (!fs.existsSync(currentXmlPath)) {
+        return { success: false, error: 'Current sub-bundle data.xml not found' };
+      }
+      
+      const currentXmlBuffer = fs.readFileSync(currentXmlPath);
+      const currentXmlData = currentXmlBuffer.toString('utf8');
+      
+      const parser = new XMLParser({
+        ignoreAttributes: false,
+        attributeNamePrefix: '@_',
+        trimValues: true,
+        parseAttributeValue: false,
+        parseTagValue: false,
+      });
+      
+      const currentXmlResult = parser.parse(currentXmlData);
+      const currentPhonData = currentXmlResult.phon_data;
+      let currentDataForms = Array.isArray(currentPhonData.data_form) 
+        ? currentPhonData.data_form 
+        : [currentPhonData.data_form];
+      
+      // Find the record to move
+      const recordIndex = currentDataForms.findIndex(df => normalizeRefString(df.Reference) === ref);
+      if (recordIndex === -1) {
+        return { success: false, error: 'Record not found in current sub-bundle' };
+      }
+      
+      const record = currentDataForms[recordIndex];
+      
+      // Update category fields to match target sub-bundle
+      const categoryUpdates = getCategoryUpdatesForPath(targetSubBundle, bundleData.hierarchy);
+      Object.entries(categoryUpdates).forEach(([field, value]) => {
+        record[field] = value;
+      });
+      
+      // Copy audio files to target sub-bundle
+      if (record.SoundFile) {
+        const currentAudioDir = path.join(currentSubBundleData.fullPath, 'audio');
+        const targetAudioDir = path.join(targetSubBundleData.fullPath, 'audio');
         
-        if (fs.existsSync(sourceFile)) {
-          fs.copyFileSync(sourceFile, targetFile);
-          fs.unlinkSync(sourceFile); // Delete source file after copying
-        } else {
-          // Try with .wav extension
-          const sourceWav = path.join(currentAudioDir, `${baseFilename}${suffix}.wav`);
-          if (fs.existsSync(sourceWav)) {
-            const targetWav = path.join(targetAudioDir, `${baseFilename}${suffix}.wav`);
-            fs.copyFileSync(sourceWav, targetWav);
-            fs.unlinkSync(sourceWav); // Delete source file after copying
+        // Ensure target audio directory exists
+        if (!fs.existsSync(targetAudioDir)) {
+          fs.mkdirSync(targetAudioDir, { recursive: true });
+        }
+        
+        // Move all audio variants
+        const baseFilename = path.parse(record.SoundFile).name;
+        const audioVariants = bundleData.settings.audioFileVariants || [{ suffix: '' }];
+        
+        for (const variant of audioVariants) {
+          const suffix = variant.suffix || '';
+          const sourceFile = path.join(currentAudioDir, `${baseFilename}${suffix}.flac`);
+          const targetFile = path.join(targetAudioDir, `${baseFilename}${suffix}.flac`);
+          
+          if (fs.existsSync(sourceFile)) {
+            fs.copyFileSync(sourceFile, targetFile);
+            fs.unlinkSync(sourceFile); // Delete source file after copying
+          } else {
+            // Try with .wav extension
+            const sourceWav = path.join(currentAudioDir, `${baseFilename}${suffix}.wav`);
+            if (fs.existsSync(sourceWav)) {
+              const targetWav = path.join(targetAudioDir, `${baseFilename}${suffix}.wav`);
+              fs.copyFileSync(sourceWav, targetWav);
+              fs.unlinkSync(sourceWav); // Delete source file after copying
+            }
           }
         }
       }
-    }
-    
-    // Remove record from current sub-bundle XML
-    currentDataForms.splice(recordIndex, 1);
-    
-    // Update current sub-bundle XML
-    if (currentDataForms.length === 0) {
-      // Don't leave empty data.xml, keep at least an empty structure
-      currentPhonData.data_form = [];
-    } else if (currentDataForms.length === 1) {
-      currentPhonData.data_form = currentDataForms[0];
-    } else {
-      currentPhonData.data_form = currentDataForms;
-    }
-    
-    const builder = new XMLBuilder({
-      ignoreAttributes: false,
-      attributeNamePrefix: '@_',
-      format: true,
-      indentBy: '  ',
-    });
-    
-    const updatedCurrentXml = builder.build(currentXmlResult);
-    fs.writeFileSync(currentXmlPath, updatedCurrentXml, 'utf8');
-    
-    // Read or create target sub-bundle XML
-    const targetXmlPath = path.join(targetSubBundleData.fullPath, 'data.xml');
-    let targetXmlResult;
-    
-    if (fs.existsSync(targetXmlPath)) {
-      const targetXmlBuffer = fs.readFileSync(targetXmlPath);
-      const targetXmlData = targetXmlBuffer.toString('utf8');
-      targetXmlResult = parser.parse(targetXmlData);
-    } else {
-      // Create new structure
-      targetXmlResult = {
-        phon_data: {
-          data_form: []
+      
+      // Remove record from current sub-bundle XML
+      currentDataForms.splice(recordIndex, 1);
+      
+      // Update current sub-bundle XML
+      if (currentDataForms.length === 0) {
+        // Don't leave empty data.xml, keep at least an empty structure
+        currentPhonData.data_form = [];
+      } else if (currentDataForms.length === 1) {
+        currentPhonData.data_form = currentDataForms[0];
+      } else {
+        currentPhonData.data_form = currentDataForms;
+      }
+      
+      const builder = new XMLBuilder({
+        ignoreAttributes: false,
+        attributeNamePrefix: '@_',
+        format: true,
+        indentBy: '  ',
+      });
+      
+      const updatedCurrentXml = builder.build(currentXmlResult);
+      fs.writeFileSync(currentXmlPath, updatedCurrentXml, 'utf8');
+      
+      // Read or create target sub-bundle XML
+      const targetXmlPath = path.join(targetSubBundleData.fullPath, 'data.xml');
+      let targetXmlResult;
+      
+      if (fs.existsSync(targetXmlPath)) {
+        const targetXmlBuffer = fs.readFileSync(targetXmlPath);
+        const targetXmlData = targetXmlBuffer.toString('utf8');
+        targetXmlResult = parser.parse(targetXmlData);
+      } else {
+        // Create new structure
+        targetXmlResult = {
+          phon_data: {
+            data_form: []
+          }
+        };
+      }
+      
+      const targetPhonData = targetXmlResult.phon_data;
+      let targetDataForms = Array.isArray(targetPhonData.data_form) 
+        ? targetPhonData.data_form 
+        : (targetPhonData.data_form ? [targetPhonData.data_form] : []);
+      
+      // Add record to target sub-bundle
+      targetDataForms.push(record);
+      
+      if (targetDataForms.length === 1) {
+        targetPhonData.data_form = targetDataForms[0];
+      } else {
+        targetPhonData.data_form = targetDataForms;
+      }
+      
+      const updatedTargetXml = builder.build(targetXmlResult);
+      fs.writeFileSync(targetXmlPath, updatedTargetXml, 'utf8');
+      
+      // Update session data
+      // Remove from current sub-bundle
+      currentSession.queue = currentSession.queue.filter(r => r !== ref);
+      sessionData.queue = sessionData.queue.filter(r => r !== ref);
+      
+      // Remove from groups if present
+      for (const group of currentSession.groups) {
+        if (group.members && group.members.includes(ref)) {
+          group.members = group.members.filter(m => m !== ref);
+          if (group.additionsSinceReview !== undefined) {
+            group.additionsSinceReview++;
+          }
+          break;
         }
+      }
+      
+      for (const group of sessionData.groups) {
+        if (group.members && group.members.includes(ref)) {
+          group.members = group.members.filter(m => m !== ref);
+          if (group.additionsSinceReview !== undefined) {
+            group.additionsSinceReview++;
+          }
+          break;
+        }
+      }
+      
+      currentSession.assignedCount = Math.max(0, (currentSession.assignedCount || 0) - 1);
+      currentSession.recordCount = currentDataForms.length;
+      
+      // Add to target sub-bundle
+      if (!targetSession.queue.includes(ref)) {
+        targetSession.queue.push(ref);
+      }
+      targetSession.recordCount = targetDataForms.length;
+      
+      console.log(`[move-word-to-sub-bundle] Moved ${ref} from ${currentSubBundle} to ${targetSubBundle}`);
+      console.log(`[move-word-to-sub-bundle] Updated category fields:`, categoryUpdates);
+      
+      // Track the sub-bundle move
+      changeTracker.logSubBundleMove(
+        ref,
+        currentSubBundle,
+        targetSubBundle,
+        Object.keys(categoryUpdates).join(', '),
+        currentSubBundle,
+        targetSubBundle
+      );
+      
+      // Save session
+      saveSession();
+      
+      // Return updated session
+      return {
+        success: true,
+        session: {
+          ...sessionData,
+          queue: [...sessionData.queue],
+          groups: sessionData.groups.map(g => ({ ...g })),
+        },
       };
     }
     
-    const targetPhonData = targetXmlResult.phon_data;
-    let targetDataForms = Array.isArray(targetPhonData.data_form) 
-      ? targetPhonData.data_form 
-      : (targetPhonData.data_form ? [targetPhonData.data_form] : []);
-    
-    // Add record to target sub-bundle
-    targetDataForms.push(record);
-    
-    if (targetDataForms.length === 1) {
-      targetPhonData.data_form = targetDataForms[0];
-    } else {
-      targetPhonData.data_form = targetDataForms;
-    }
-    
-    const updatedTargetXml = builder.build(targetXmlResult);
-    fs.writeFileSync(targetXmlPath, updatedTargetXml, 'utf8');
-    
-    // Update session data
-    // Remove from current sub-bundle
-    currentSession.queue = currentSession.queue.filter(r => r !== ref);
-    sessionData.queue = sessionData.queue.filter(r => r !== ref);
-    
-    // Remove from groups if present
-    for (const group of currentSession.groups) {
-      if (group.members && group.members.includes(ref)) {
-        group.members = group.members.filter(m => m !== ref);
-        if (group.additionsSinceReview !== undefined) {
-          group.additionsSinceReview++;
-        }
-        break;
-      }
-    }
-    
-    for (const group of sessionData.groups) {
-      if (group.members && group.members.includes(ref)) {
-        group.members = group.members.filter(m => m !== ref);
-        if (group.additionsSinceReview !== undefined) {
-          group.additionsSinceReview++;
-        }
-        break;
-      }
-    }
-    
-    currentSession.assignedCount = Math.max(0, (currentSession.assignedCount || 0) - 1);
-    currentSession.recordCount = currentDataForms.length;
-    
-    // Add to target sub-bundle
-    if (!targetSession.queue.includes(ref)) {
-      targetSession.queue.push(ref);
-    }
-    targetSession.recordCount = targetDataForms.length;
-    
-    console.log(`[move-word-to-sub-bundle] Moved ${ref} from ${currentSubBundle} to ${targetSubBundle}`);
-    console.log(`[move-word-to-sub-bundle] Updated category fields:`, categoryUpdates);
-    
-    // Track the sub-bundle move
-    changeTracker.logSubBundleMove(
-      ref,
-      currentSubBundle,
-      targetSubBundle,
-      Object.keys(categoryUpdates).join(', '),
-      currentSubBundle,
-      targetSubBundle
-    );
-    
-    // Save session
-    saveSession();
-    
-    // Return updated session
-    return {
-      success: true,
-      session: {
-        ...sessionData,
-        queue: [...sessionData.queue],
-        groups: sessionData.groups.map(g => ({ ...g })),
-      },
-    };
   } catch (error) {
     console.error('[move-word-to-sub-bundle] Error:', error);
     return { success: false, error: error.message };
   }
 });
 
-// Helper to get category field updates based on target path
+// ============================================================================
+// XML Export handler
+// ============================================================================
+ipcMain.handle('export-bundle-xml', async (event, options) => {
+  try {
+    if (!bundleData || bundleType !== 'hierarchical') {
+      return { success: false, error: 'No hierarchical bundle loaded' };
+    }
+    
+    if (bundleData.usesNewStructure) {
+      // NEW STRUCTURE: Export working_data.xml
+      const workingXmlPath = path.join(extractedPath, 'xml', 'working_data.xml');
+      
+      if (!fs.existsSync(workingXmlPath)) {
+        return { success: false, error: 'working_data.xml not found' };
+      }
+      
+      // Choose output path
+      const result = await dialog.showSaveDialog(mainWindow, {
+        title: 'Export Updated XML',
+        defaultPath: 'updated_data.xml',
+        filters: [
+          { name: 'XML Files', extensions: ['xml'] },
+          { name: 'All Files', extensions: ['*'] }
+        ]
+      });
+      
+      if (result.canceled) {
+        return { success: false, error: 'Export canceled' };
+      }
+      
+      // Copy working_data.xml to export location
+      fs.copyFileSync(workingXmlPath, result.filePath);
+      
+      // Generate change report
+      const changes = changeTracker.generateReport();
+      const reportPath = result.filePath.replace('.xml', '_changes.json');
+      fs.writeFileSync(reportPath, JSON.stringify(changes, null, 2), 'utf8');
+      
+      console.log('[export-bundle-xml] Exported to:', result.filePath);
+      
+      return {
+        success: true,
+        xmlPath: result.filePath,
+        reportPath: reportPath,
+        recordCount: bundleData.allDataForms ? bundleData.allDataForms.length : 0,
+      };
+      
+    } else {
+      // OLD STRUCTURE: Use existing export method (if any)
+      return { success: false, error: 'Export for old structure bundles not yet implemented' };
+    }
+    
+  } catch (error) {
+    console.error('[export-bundle-xml] Error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// ============================================================================
+// Helper function: Get category field updates from hierarchy path
+// ============================================================================
 function getCategoryUpdatesForPath(targetPath, hierarchy) {
   const updates = {};
-  
-  // Parse the hierarchy tree to determine which fields to update
-  const pathParts = targetPath.split('/');
   
   if (!hierarchy || !hierarchy.tree) {
     return updates;
   }
   
-  // Navigate through the tree to find field assignments
-  let currentLevel = hierarchy.tree.values || [];
-  let currentField = hierarchy.tree.field || 'Category';
+  // Split path like "Noun/CVCV" into parts
+  const pathParts = targetPath.split('/');
   
-  pathParts.forEach((part, index) => {
-    // Set the field for this level
-    updates[currentField] = part;
+  // Walk the tree to find field assignments at each level
+  let currentLevel = hierarchy.tree;
+  
+  for (let i = 0; i < pathParts.length; i++) {
+    const part = pathParts[i];
+    const field = currentLevel.field;
     
-    // Find the node for this part
-    const node = currentLevel.find(n => n.value === part);
-    if (node && node.children && node.children.length > 0) {
-      // If there are children, get the field name for the next level
-      // This should be stored in the hierarchy structure
-      currentLevel = node.children;
-      // For now, assume standard field progression
-      if (index === 0 && part === 'Noun') {
-        currentField = 'SyllableProfile'; // Or whatever the second-level field is
-      }
+    // Assign the field value for this level
+    if (field) {
+      updates[field] = part;
     }
-  });
+    
+    // Find the matching value node
+    const values = currentLevel.values || [];
+    const matchingValue = values.find(v => v.value === part);
+    
+    if (matchingValue && matchingValue.children && matchingValue.children.length > 0) {
+      // Get the field name from first child (they all share same field)
+      const firstChild = matchingValue.children[0];
+      if (typeof firstChild.field === 'string') {
+        currentLevel = { field: firstChild.field, values: matchingValue.children };
+      } else {
+        // Children array contains values, not a new level object
+        break;
+      }
+    } else {
+      break;
+    }
+  }
   
   return updates;
+}
+
+// ============================================================================
+// Helper function: Update hierarchy.json with Reference movement
+// ============================================================================
+function updateHierarchyJsonReferences(hierarchyPath, currentPath, targetPath, ref) {
+  // Read hierarchy.json
+  const hierarchy = JSON.parse(fs.readFileSync(hierarchyPath, 'utf8'));
+  const normalizedRef = normalizeRefString(ref);
+  
+  // Recursive function to find and update nodes
+  function updateNode(node, pathToFind, isRemove) {
+    if (!node || !node.values) return false;
+    
+    for (const valueNode of node.values) {
+      // Build full path for this node
+      let nodePath = valueNode.value;
+      
+      // Check if we found the target path
+      if (pathToFind === nodePath) {
+        if (valueNode.references) {
+          if (isRemove) {
+            // Remove reference
+            const idx = valueNode.references.findIndex(r => normalizeRefString(r) === normalizedRef);
+            if (idx !== -1) {
+              valueNode.references.splice(idx, 1);
+              valueNode.recordCount = valueNode.references.length;
+              return true;
+            }
+          } else {
+            // Add reference
+            if (!valueNode.references.some(r => normalizeRefString(r) === normalizedRef)) {
+              valueNode.references.push(ref);
+              valueNode.recordCount = valueNode.references.length;
+              return true;
+            }
+          }
+        }
+      } else if (pathToFind.startsWith(nodePath + '/') && valueNode.children) {
+        // Recurse into children
+        const childField = valueNode.children[0]?.field;
+        if (updateNode({ field: childField, values: valueNode.children }, pathToFind, isRemove)) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  }
+  
+  // Remove from current path
+  updateNode(hierarchy.tree, currentPath, true);
+  
+  // Add to target path
+  updateNode(hierarchy.tree, targetPath, false);
+  
+  // Write back to disk
+  fs.writeFileSync(hierarchyPath, JSON.stringify(hierarchy, null, 2), 'utf8');
+}
+
+// ============================================================================
+// Helper function: Update working_data.xml with field changes
+// ============================================================================
+function updateWorkingDataXmlFields(xmlPath, ref, fieldUpdates) {
+  // Read XML with UTF-16 encoding
+  const xmlBuffer = fs.readFileSync(xmlPath);
+  const xmlData = xmlBuffer.toString('utf16le');
+  
+  // Parse XML
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    trimValues: true,
+    parseAttributeValue: false,
+    parseTagValue: false,
+  });
+  
+  const xmlResult = parser.parse(xmlData);
+  const phonData = xmlResult.phon_data;
+  let dataForms = Array.isArray(phonData.data_form) 
+    ? phonData.data_form 
+    : [phonData.data_form];
+  
+  // Find the record to update
+  const normalizedRef = normalizeRefString(ref);
+  const record = dataForms.find(df => normalizeRefString(df.Reference) === normalizedRef);
+  
+  if (!record) {
+    throw new Error(`Record ${ref} not found in working_data.xml`);
+  }
+  
+  // Update fields
+  Object.entries(fieldUpdates).forEach(([field, value]) => {
+    record[field] = value;
+  });
+  
+  // Build XML
+  const builder = new XMLBuilder({
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    format: true,
+    indentBy: '  ',
+  });
+  
+  let updatedXml = builder.build(xmlResult);
+  
+  // Ensure XML declaration with UTF-16
+  if (!updatedXml.startsWith('<?xml')) {
+    updatedXml = '<?xml version="1.0" encoding="utf-16"?>\n' + updatedXml;
+  } else {
+    // Replace existing declaration to ensure UTF-16
+    updatedXml = updatedXml.replace(
+      /<\?xml[^?]*\?>/,
+      '<?xml version="1.0" encoding="utf-16"?>'
+    );
+  }
+  
+  // Write with UTF-16 encoding
+  fs.writeFileSync(xmlPath, updatedXml, 'utf16le');
 }
 
 // Helper to extract category field information from hierarchy paths
