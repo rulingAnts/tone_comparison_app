@@ -825,6 +825,7 @@
     <h1 data-i18n="tm_appTitle">Tone Matching Desktop</h1>
     <div style="display:flex; gap:20px; align-items:center; margin-top:8px;">
       <div class="progress-indicator" id="progressIndicator" data-i18n="tm_noBundleLoaded">No bundle loaded</div>
+      <button id="newBundleBtn" class="secondary hidden" onclick="clearBundleAndReload()" style="padding: 6px 12px; font-size: 12px;" data-i18n="tm_newBundle">New Bundle</button>
       <div style="display:flex; align-items:center; gap:8px;">
         <label for="localeSelect" data-i18n="tm_languageLabel">Language</label>
         <select id="localeSelect">
@@ -861,6 +862,7 @@
         <h2 data-i18n="tm_welcomeTitle">Welcome to Tone Matching Desktop</h2>
         <p style="margin-bottom: 20px;" data-i18n="tm_welcomeMessage">Load a .tncmp bundle to begin tone group assignment</p>
         <button onclick="loadBundle()" data-i18n="tm_loadBundle">Load Bundle</button>
+        <button onclick="clearBundle()" class="secondary" style="margin-left: 10px;" data-i18n="tm_clearCache">Clear Cache</button>
       </div>
 
       <!-- Navigation Screen for Hierarchical Bundles -->

@@ -338,6 +338,42 @@ ipcMain.handle('load-bundle', async (event, filePath) => {
   }
 });
 
+ipcMain.handle('clear-bundle', async () => {
+  try {
+    // Clear extracted bundle
+    extractedPath = getExtractedBundlePath();
+    if (fs.existsSync(extractedPath)) {
+      fs.rmSync(extractedPath, { recursive: true, force: true });
+      console.log('[desktop_matching] Cleared extracted bundle');
+    }
+    
+    // Clear session
+    sessionData = null;
+    bundleData = null;
+    bundleType = null;
+    currentSubBundlePath = null;
+    hierarchyConfig = null;
+    
+    // Delete session file
+    const sessionPath = getSessionPath();
+    if (fs.existsSync(sessionPath)) {
+      fs.unlinkSync(sessionPath);
+      console.log('[desktop_matching] Cleared session file');
+    }
+    
+    // Clear change tracker
+    changeTracker.clear();
+    
+    return { success: true };
+  } catch (error) {
+    console.error('[desktop_matching] Error clearing bundle:', error);
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+});
+
 async function loadLegacyBundle(filePath) {
   try {
     const zip = new AdmZip(filePath);
