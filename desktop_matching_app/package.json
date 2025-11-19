@@ -1,7 +1,7 @@
 {
   "name": "desktop-matching-app",
   "version": "1.0.0",
-  "description": "Desktop app for tone group assignment and review - Electron Edition",
+  "description": "Desktop app for tone group assignment and review",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
@@ -16,20 +16,15 @@
     "phonology",
     "tone",
     "linguistics",
-    "matching",
-    "electron",
-    "desktop"
+    "matching"
   ],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "adm-zip": "^0.5.10",
     "archiver": "^6.0.1",
-    "express": "^4.21.2",
     "fast-xml-parser": "^4.3.2",
-    "multer": "^2.0.2",
-    "node-machine-id": "^1.1.12",
-    "uuid": "^9.0.1"
+    "node-machine-id": "^1.1.12"
   },
   "devDependencies": {
     "electron": "^39.0.0",
@@ -50,9 +45,7 @@
       "target": [
         {
           "target": "nsis",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         }
       ]
     },
@@ -61,9 +54,7 @@
       "target": [
         {
           "target": "dmg",
-          "arch": [
-            "universal"
-          ]
+          "arch": ["universal"]
         }
       ]
     },

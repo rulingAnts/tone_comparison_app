@@ -1,4 +1,5 @@
-// ipcRenderer is now provided by api-client.js
+const { ipcRenderer } = require('electron');
+
 // State
 let bundleSettings = null;
 let session = null;
