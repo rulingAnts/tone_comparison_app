@@ -93,21 +93,19 @@ async function restoreBundleFromSession() {
     
     if (bundleType === 'hierarchical') {
       // Restore hierarchical bundle
-      const manifestPath = path.join(extractedPath, 'manifest.json');
       const hierarchyPath = path.join(extractedPath, 'hierarchy.json');
       const settingsPath = path.join(extractedPath, 'settings.json');
       
-      if (!fs.existsSync(manifestPath) || !fs.existsSync(hierarchyPath) || !fs.existsSync(settingsPath)) {
+      if (!fs.existsSync(hierarchyPath) || !fs.existsSync(settingsPath)) {
         console.log('[desktop_matching] Missing bundle files, cannot restore');
         return;
       }
       
-      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
       hierarchyConfig = JSON.parse(fs.readFileSync(hierarchyPath, 'utf8'));
       const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
       
       // Verify bundle ID matches
-      if (manifest.bundleId !== sessionData.bundleId && settings.bundleId !== sessionData.bundleId) {
+      if (settings.bundleId !== sessionData.bundleId) {
         console.log('[desktop_matching] Bundle ID mismatch, cannot restore');
         return;
       }
@@ -146,11 +144,10 @@ async function restoreBundleFromSession() {
       
       bundleData = {
         settings,
-        manifest,
         hierarchy: hierarchyConfig,
         subBundles,
         extractedPath,
-        bundleId: settings.bundleId || manifest.bundleId || null,
+        bundleId: settings.bundleId || null,
         bundleType: 'hierarchical',
       };
       
@@ -499,17 +496,8 @@ async function loadHierarchicalBundle(filePath) {
     
     zip.extractAllTo(extractedPath, true);
     
-    // Load manifest.json
-    const manifestPath = path.join(extractedPath, 'manifest.json');
-    if (!fs.existsSync(manifestPath)) {
-      throw new Error('Hierarchical bundle missing manifest.json');
-    }
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-    
-    // Verify it's a hierarchical bundle
-    if (manifest.bundleType !== 'hierarchical') {
-      throw new Error('Invalid bundle type in manifest');
-    }
+    // Manifest is not required in new bundle structure
+    // Bundle ID comes from settings.json
     
     // Load hierarchy.json
     const hierarchyPath = path.join(extractedPath, 'hierarchy.json');
@@ -567,11 +555,10 @@ async function loadHierarchicalBundle(filePath) {
     // Build bundle data structure
     bundleData = {
       settings,
-      manifest,
       hierarchy: hierarchyConfig,
       subBundles,
       extractedPath,
-      bundleId: settings.bundleId || manifest.bundleId || null,
+      bundleId: settings.bundleId || null,
       bundleType: 'hierarchical',
     };
     
@@ -614,7 +601,6 @@ async function loadHierarchicalBundle(filePath) {
       success: true,
       bundleType: 'hierarchical',
       settings: bundleData.settings,
-      manifest: manifest,
       hierarchy: hierarchyConfig,
       subBundleCount: subBundles.length,
       session: sessionData,
@@ -670,7 +656,6 @@ ipcMain.handle('check-restored-bundle', async () => {
   
   if (bundleType === 'hierarchical') {
     result.hierarchy = bundleData.hierarchy;
-    result.manifest = bundleData.manifest;
     result.subBundleCount = bundleData.subBundles?.length || 0;
     result.requiresNavigation = !sessionData.currentSubBundle; // Show navigation if not in a sub-bundle
   } else {
@@ -1256,14 +1241,7 @@ async function exportHierarchicalBundle() {
     
     archive.pipe(output);
     
-    // Add manifest.json (from original bundle)
-    const manifestPath = path.join(extractedPath, 'manifest.json');
-    if (fs.existsSync(manifestPath)) {
-      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-      // Update export timestamp
-      manifest.exportedAt = new Date().toISOString();
-      archive.append(JSON.stringify(manifest, null, 2), { name: 'manifest.json' });
-    }
+    // Manifest.json no longer used in new bundle structure
     
     // Add hierarchy.json (from original bundle)
     const hierarchyPath = path.join(extractedPath, 'hierarchy.json');
