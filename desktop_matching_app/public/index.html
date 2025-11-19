@@ -1,8 +1,21 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Tone matching and assignment application for linguistic data - Desktop Only">
+  <meta name="theme-color" content="#2196F3">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Tone Match">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192x192.png">
+  <link rel="apple-touch-icon" href="./icons/icon-192x192.png">
   <title>Tone Matching Desktop</title>
+  
+  <!-- CRITICAL: Load compatibility checker FIRST before any other scripts -->
+  <script src="./compatibility.js"></script>
+  
   <style>
     * {
       margin: 0;
@@ -1070,7 +1083,116 @@
     </div>
   </div>
 
-  <script src="localization.js"></script>
-  <script src="renderer.js"></script>
+  <!-- External Libraries (CDN) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" 
+          integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" 
+          crossorigin="anonymous" 
+          referrerpolicy="no-referrer"></script>
+  
+  <!-- Client-side PWA Scripts -->
+  <script src="./xml-handler.js"></script>
+  <script src="./storage.js"></script>
+  <script src="./bundle-processor.js"></script>
+  <script src="./localization.js"></script>
+  <script src="./api-client.js"></script>
+  <script src="./renderer.js"></script>
+  
+  <!-- Service Worker Registration -->
+  <script>
+    // Register service worker for PWA functionality
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./service-worker.js')
+          .then(registration => {
+            console.log('[PWA] Service Worker registered:', registration.scope);
+            
+            // Force immediate update check
+            registration.update();
+            
+            // Check for updates every 10 seconds (aggressive for development)
+            setInterval(() => {
+              registration.update();
+            }, 10000);
+            
+            // Check for updates on visibility change (user returns to tab)
+            document.addEventListener('visibilitychange', () => {
+              if (!document.hidden) {
+                registration.update();
+              }
+            });
+            
+            // Handle updates
+            registration.addEventListener('updatefound', () => {
+              const newWorker = registration.installing;
+              console.log('[PWA] Update found, installing...');
+              
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed') {
+                  if (navigator.serviceWorker.controller) {
+                    // New version available - auto-reload
+                    console.log('[PWA] New version installed, activating and reloading...');
+                    newWorker.postMessage({ type: 'SKIP_WAITING' });
+                  } else {
+                    // First install
+                    console.log('[PWA] App ready for offline use');
+                  }
+                }
+              });
+            });
+          })
+          .catch(error => {
+            console.error('[PWA] Service Worker registration failed:', error);
+          });
+        
+        // Handle service worker controller change - auto-reload
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (!refreshing) {
+            refreshing = true;
+            console.log('[PWA] New service worker activated, reloading page...');
+            window.location.reload();
+          }
+        });
+      });
+    } else {
+      console.warn('[PWA] Service Workers not supported in this browser');
+    }
+    
+    // Handle install prompt
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      console.log('[PWA] Install prompt available');
+      
+      // Show install button if you have one
+      const installBtn = document.getElementById('installBtn');
+      if (installBtn) {
+        installBtn.style.display = 'block';
+        installBtn.addEventListener('click', () => {
+          deferredPrompt.prompt();
+          deferredPrompt.userChoice.then((choiceResult) => {
+            if (choiceResult.outcome === 'accepted') {
+              console.log('[PWA] User accepted the install prompt');
+            }
+            deferredPrompt = null;
+          });
+        });
+      }
+    });
+    
+    // Track if app is installed
+    window.addEventListener('appinstalled', () => {
+      console.log('[PWA] App installed successfully');
+      deferredPrompt = null;
+    });
+    
+    // Log PWA display mode
+    window.addEventListener('DOMContentLoaded', () => {
+      const displayMode = window.matchMedia('(display-mode: standalone)').matches ? 'standalone' : 'browser';
+      console.log('[PWA] Display mode:', displayMode);
+    });
+  </script>
 </body>
 </html>
+

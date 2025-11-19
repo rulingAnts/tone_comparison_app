@@ -170,6 +170,13 @@
       background: #007bff;
       transition: width 0.2s ease;
     }
+    
+    @keyframes progress-animation {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    
     .proc-meta { font-size: 12px; color: #666; margin-top: 6px; }
 
     .status.success {
