@@ -534,6 +534,22 @@ async function createLegacyBundle(config, event) {
     const output = fs.createWriteStream(outputPath);
     const archive = archiver('zip', { zlib: { level: 9 } });
     
+    // Track archive progress for UI feedback
+    let lastProgressPercent = 0;
+    archive.on('progress', (progress) => {
+      const percent = Math.round((progress.fs.processedBytes / progress.fs.totalBytes) * 100);
+      // Only send updates when percentage changes to avoid flooding
+      if (percent !== lastProgressPercent && percent >= 0 && percent <= 100) {
+        lastProgressPercent = percent;
+        mainWindow?.webContents?.send('archive-progress', {
+          type: 'progress',
+          percent: percent,
+          processedBytes: progress.fs.processedBytes,
+          totalBytes: progress.fs.totalBytes
+        });
+      }
+    });
+    
     // Error handling for archive
     archive.on('error', (err) => {
       throw err;
@@ -573,7 +589,33 @@ async function createLegacyBundle(config, event) {
       archive.file(addPath, { name: addName });
     }
     
-    await archive.finalize();
+    mainWindow?.webContents?.send('archive-progress', { type: 'start' });
+    
+    // Monitor finalization progress with polling since archiver doesn't emit progress during finalize
+    let finalizeDone = false;
+    const progressInterval = setInterval(() => {
+      if (!finalizeDone) {
+        const currentBytes = archive.pointer();
+        mainWindow?.webContents?.send('archive-progress', {
+          type: 'finalizing',
+          bytesWritten: currentBytes
+        });
+      }
+    }, 500); // Update every 500ms
+    
+    try {
+      await archive.finalize();
+      finalizeDone = true;
+      clearInterval(progressInterval);
+      mainWindow?.webContents?.send('archive-progress', { 
+        type: 'done',
+        totalBytes: archive.pointer() 
+      });
+    } catch (error) {
+      finalizeDone = true;
+      clearInterval(progressInterval);
+      throw error;
+    }
     
     // Post-build validation with extension fallbacks & variants
     let finalMissing = missingSoundFiles;
@@ -655,30 +697,58 @@ async function createHierarchicalBundle(config, event) {
     
     filteredRecords = sortByNumericRef(filteredRecords);
     
-    // Collect all sound files needed
+    // Get hierarchy tree from settings (new tree format or legacy levels format)
+    const settingsTree = settingsWithMeta.hierarchyTree;
+    const hierarchyLevels = settingsWithMeta.hierarchyLevels; // Legacy support
+    
+    console.log('[hierarchical] settingsTree:', settingsTree ? 'EXISTS' : 'NULL');
+    console.log('[hierarchical] hierarchyLevels:', hierarchyLevels ? 'EXISTS' : 'NULL');
+    if (settingsTree) {
+      console.log('[hierarchical] settingsTree.field:', settingsTree.field);
+      console.log('[hierarchical] settingsTree.values length:', settingsTree.values?.length);
+    }
+    
+    if (!settingsTree && (!hierarchyLevels || hierarchyLevels.length === 0)) {
+      throw new Error('Hierarchical bundle requires hierarchy configuration');
+    }
+    
+    // Generate sub-bundles from tree structure (temporary - will be replaced with hierarchy.json approach)
+    const subBundles = settingsTree 
+      ? generateSubBundlesFromTree(filteredRecords, settingsTree, '', [])
+      : generateSubBundles(filteredRecords, hierarchyLevels, 0, '', settingsWithMeta); // Legacy fallback
+    
+    console.log('[hierarchical] Generated', subBundles.length, 'sub-bundles');
+    
+    if (subBundles.length === 0) {
+      throw new Error('No sub-bundles were generated. Please check your hierarchy configuration.');
+    }
+    
+    // Collect sound files ONLY from records in sub-bundles (after hierarchy filtering)
     const soundFiles = new Set();
     const audioVariantConfigs = settingsWithMeta.audioFileVariants || [];
     
-    for (const record of filteredRecords) {
-      if (record.SoundFile) {
-        const baseSoundFile = record.SoundFile;
-        const lastDot = baseSoundFile.lastIndexOf('.');
-        const basename = lastDot !== -1 ? baseSoundFile.substring(0, lastDot) : baseSoundFile;
-        const ext = lastDot !== -1 ? baseSoundFile.substring(lastDot) : '';
-        
-        // Add base file
-        soundFiles.add(baseSoundFile);
-        
-        // Add variant files
-        for (const variant of audioVariantConfigs) {
-          if (variant.suffix) {
-            soundFiles.add(`${basename}${variant.suffix}${ext}`);
+    for (const subBundle of subBundles) {
+      for (const record of subBundle.records) {
+        if (record.SoundFile) {
+          const baseSoundFile = record.SoundFile;
+          const lastDot = baseSoundFile.lastIndexOf('.');
+          const basename = lastDot !== -1 ? baseSoundFile.substring(0, lastDot) : baseSoundFile;
+          const ext = lastDot !== -1 ? baseSoundFile.substring(lastDot) : '';
+          
+          // Add base file
+          soundFiles.add(baseSoundFile);
+          
+          // Add variant files
+          for (const variant of audioVariantConfigs) {
+            if (variant.suffix) {
+              soundFiles.add(`${basename}${variant.suffix}${ext}`);
+            }
           }
         }
       }
     }
     
-    console.log('[hierarchical] Found', soundFiles.size, 'audio files needed');
+    console.log('[hierarchical] Found', soundFiles.size, 'audio files needed for', subBundles.length, 'sub-bundles');
     
     // Optionally process audio (trim/normalize/convert)
     const ap = settingsWithMeta.audioProcessing || {};
@@ -763,32 +833,6 @@ async function createHierarchicalBundle(config, event) {
       }
     }
     
-    // Get hierarchy tree from settings (new tree format or legacy levels format)
-    const settingsTree = settingsWithMeta.hierarchyTree;
-    const hierarchyLevels = settingsWithMeta.hierarchyLevels; // Legacy support
-    
-    console.log('[hierarchical] settingsTree:', settingsTree ? 'EXISTS' : 'NULL');
-    console.log('[hierarchical] hierarchyLevels:', hierarchyLevels ? 'EXISTS' : 'NULL');
-    if (settingsTree) {
-      console.log('[hierarchical] settingsTree.field:', settingsTree.field);
-      console.log('[hierarchical] settingsTree.values length:', settingsTree.values?.length);
-    }
-    
-    if (!settingsTree && (!hierarchyLevels || hierarchyLevels.length === 0)) {
-      throw new Error('Hierarchical bundle requires hierarchy configuration');
-    }
-    
-    // Generate sub-bundles from tree structure (temporary - will be replaced with hierarchy.json approach)
-    const subBundles = settingsTree 
-      ? generateSubBundlesFromTree(filteredRecords, settingsTree, '', [])
-      : generateSubBundles(filteredRecords, hierarchyLevels, 0, '', settingsWithMeta); // Legacy fallback
-    
-    console.log('[hierarchical] Generated', subBundles.length, 'sub-bundles');
-    
-    if (subBundles.length === 0) {
-      throw new Error('No sub-bundles were generated. Please check your hierarchy configuration.');
-    }
-    
     // Check if output path exists and is a directory
     if (fs.existsSync(outputPath)) {
       const stats = fs.statSync(outputPath);
@@ -801,6 +845,22 @@ async function createHierarchicalBundle(config, event) {
     // Create .tnset archive
     const output = fs.createWriteStream(outputPath);
     const archive = archiver('zip', { zlib: { level: 9 } });
+    
+    // Track archive progress for UI feedback
+    let lastProgressPercent = 0;
+    archive.on('progress', (progress) => {
+      const percent = Math.round((progress.fs.processedBytes / progress.fs.totalBytes) * 100);
+      // Only send updates when percentage changes to avoid flooding
+      if (percent !== lastProgressPercent && percent >= 0 && percent <= 100) {
+        lastProgressPercent = percent;
+        mainWindow?.webContents?.send('archive-progress', {
+          type: 'progress',
+          percent: percent,
+          processedBytes: progress.fs.processedBytes,
+          totalBytes: progress.fs.totalBytes
+        });
+      }
+    });
     
     archive.on('error', (err) => {
       throw err;
@@ -1009,23 +1069,50 @@ async function createHierarchicalBundle(config, event) {
     archive.append(JSON.stringify(settingsWithMeta, null, 2), { name: 'settings.json' });
     
     console.log('[bundler] Finalizing archive...');
-    await archive.finalize();
-    console.log('[bundler] Archive finalized');
+    mainWindow?.webContents?.send('archive-progress', { type: 'start' });
     
-    // Wait for output stream to finish
-    await new Promise((resolve, reject) => {
-      output.on('close', () => {
-        console.log('[bundler] Archive written successfully. Total bytes:', archive.pointer());
-        resolve();
+    // Monitor finalization progress with polling since archiver doesn't emit progress during finalize
+    let finalizeDone = false;
+    const progressInterval = setInterval(() => {
+      if (!finalizeDone) {
+        const currentBytes = archive.pointer();
+        mainWindow?.webContents?.send('archive-progress', {
+          type: 'finalizing',
+          bytesWritten: currentBytes
+        });
+      }
+    }, 500); // Update every 500ms
+    
+    try {
+      await archive.finalize();
+      finalizeDone = true;
+      clearInterval(progressInterval);
+      console.log('[bundler] Archive finalized');
+      
+      // Wait for output stream to finish
+      await new Promise((resolve, reject) => {
+        output.on('close', () => {
+          console.log('[bundler] Archive written successfully. Total bytes:', archive.pointer());
+          mainWindow?.webContents?.send('archive-progress', { 
+            type: 'done',
+            totalBytes: archive.pointer() 
+          });
+          resolve();
+        });
+        output.on('error', reject);
       });
-      output.on('error', reject);
-    });
+    } catch (error) {
+      finalizeDone = true;
+      clearInterval(progressInterval);
+      throw error;
+    }
     
     console.log('[bundler] Hierarchical bundle creation complete');
     
     return {
       success: true,
       recordCount: filteredRecords.length,
+      audioFileCount: soundFiles.size,
       subBundleCount: subBundles.length,
       hierarchicalBundle: true,
     };

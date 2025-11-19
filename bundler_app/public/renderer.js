@@ -2550,7 +2550,7 @@ async function createBundle() {
   document.getElementById('createBtn').disabled = true;
   document.getElementById('createBtn').textContent = 'Creating Bundle...';
 
-  // Listen for progress events
+  // Listen for audio processing progress events
   ipcRenderer.removeAllListeners('audio-processing-progress');
   ipcRenderer.on('audio-processing-progress', (event, info) => {
     if (!procContainer) return;
@@ -2573,6 +2573,38 @@ async function createBundle() {
       setTimeout(() => { procContainer.style.display = 'none'; }, 1500);
     } else if (info.type === 'skipped') {
       procContainer.style.display = 'none';
+    }
+  });
+  
+  // Listen for archive finalization progress events
+  ipcRenderer.removeAllListeners('archive-progress');
+  ipcRenderer.on('archive-progress', (event, info) => {
+    if (!procContainer) return;
+    if (info.type === 'start') {
+      procContainer.style.display = 'block';
+      procBar.style.width = '0%';
+      procMeta.textContent = 'Finalizing archive…';
+    } else if (info.type === 'progress') {
+      const pct = info.percent || 0;
+      procBar.style.width = pct + '%';
+      const mb = (info.processedBytes / 1024 / 1024).toFixed(2);
+      const totalMb = (info.totalBytes / 1024 / 1024).toFixed(2);
+      procMeta.textContent = `Compressing… ${pct}% — ${mb} MB / ${totalMb} MB`;
+    } else if (info.type === 'finalizing') {
+      // Indeterminate progress during finalization
+      const mb = (info.bytesWritten / 1024 / 1024).toFixed(2);
+      procBar.style.width = '100%';
+      procBar.style.background = 'linear-gradient(90deg, #4CAF50 25%, #81C784 50%, #4CAF50 75%)';
+      procBar.style.backgroundSize = '200% 100%';
+      procBar.style.animation = 'progress-animation 2s linear infinite';
+      procMeta.textContent = `Finalizing… ${mb} MB written`;
+    } else if (info.type === 'done') {
+      const mb = info.totalBytes ? (info.totalBytes / 1024 / 1024).toFixed(2) : '?';
+      procBar.style.width = '100%';
+      procBar.style.background = '#4CAF50';
+      procBar.style.animation = 'none';
+      procMeta.textContent = `Archive complete! ${mb} MB`;
+      setTimeout(() => { procContainer.style.display = 'none'; }, 1500);
     }
   });
   
