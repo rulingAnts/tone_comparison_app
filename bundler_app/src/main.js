@@ -530,9 +530,11 @@ async function createLegacyBundle(config, event) {
       console.log('[bundler] Output file exists, will overwrite');
     }
 
-    // Create zip bundle
+    // Create zip bundle with user-selected compression level
+    const compressionLevel = settingsWithMeta?.compressionLevel !== undefined ? settingsWithMeta.compressionLevel : 6;
+    console.log('[bundler] Using compression level:', compressionLevel);
     const output = fs.createWriteStream(outputPath);
-    const archive = archiver('zip', { zlib: { level: 9 } });
+    const archive = archiver('zip', { zlib: { level: compressionLevel } });
     
     // Track archive progress for UI feedback
     let lastProgressPercent = 0;
@@ -589,7 +591,10 @@ async function createLegacyBundle(config, event) {
       archive.file(addPath, { name: addName });
     }
     
+    // Send progress event and ensure UI has time to update before starting finalization
     mainWindow?.webContents?.send('archive-progress', { type: 'start' });
+    await new Promise(resolve => setTimeout(resolve, 100)); // Give UI time to show progress
+    console.log('[bundler] Finalizing archive...');
     
     // Monitor finalization progress with polling since archiver doesn't emit progress during finalize
     let finalizeDone = false;
@@ -632,6 +637,16 @@ async function createLegacyBundle(config, event) {
     } catch (vErr) {
       console.warn('[bundler] validation failed:', vErr.message);
     }
+    
+    // Clean up processed audio cache after bundle creation
+    if (processedDir && fs.existsSync(processedDir)) {
+      try {
+        fs.rmSync(processedDir, { recursive: true, force: true });
+        console.log('[bundler] Cleaned up processed audio cache:', processedDir);
+      } catch (cleanupErr) {
+        console.warn('[bundler] Failed to clean up processed audio cache:', cleanupErr.message);
+      }
+    }
 
     return {
       success: true,
@@ -640,6 +655,14 @@ async function createLegacyBundle(config, event) {
       missingSoundFiles: finalMissing.length > 0 ? finalMissing : null,
     };
   } catch (error) {
+    // Clean up on error too
+    if (typeof processedDir !== 'undefined' && processedDir && fs.existsSync(processedDir)) {
+      try {
+        fs.rmSync(processedDir, { recursive: true, force: true });
+      } catch (cleanupErr) {
+        // Ignore cleanup errors on error path
+      }
+    }
     return {
       success: false,
       error: error.message,
@@ -685,17 +708,11 @@ async function createHierarchicalBundle(config, event) {
       throw new Error(`Duplicate Reference values found: ${duplicates.join(', ')}. Please fix the source XML before creating bundle.`);
     }
     
-    // Filter records by reference numbers
-    const referenceNumbers = (settingsWithMeta.referenceNumbers || []).map((r) => normalizeRefString(r));
-    const refSet = new Set(referenceNumbers);
-    let filteredRecords = referenceNumbers.length > 0
-      ? dataForms.filter(df => {
-          const ref = df && df.Reference != null ? normalizeRefString(df.Reference) : '';
-          return refSet.has(ref);
-        })
-      : dataForms;
+    // For hierarchical bundles, use all data_forms (hierarchy filtering happens in sub-bundle generation)
+    // Reference number filtering is only for legacy bundles
+    let filteredRecords = sortByNumericRef(dataForms);
     
-    filteredRecords = sortByNumericRef(filteredRecords);
+    console.log('[hierarchical] Starting with', filteredRecords.length, 'total records (hierarchy will filter)');
     
     // Get hierarchy tree from settings (new tree format or legacy levels format)
     const settingsTree = settingsWithMeta.hierarchyTree;
@@ -819,6 +836,21 @@ async function createHierarchicalBundle(config, event) {
             elapsedMs: Date.now() - tStart,
           });
           console.log('[hierarchical] Processing complete. Output dir:', processedDir);
+          
+          // Create processing report for archive
+          var processingReport = {
+            outputFormat,
+            options: { autoTrim: !!ap.autoTrim, autoNormalize: !!ap.autoNormalize },
+            total: procResult.total,
+            completed: procResult.completed,
+            errors: procResult.errors,
+            results: (procResult.results || []).map((r) => ({
+              input: r.inputFile || r.input,
+              output: r.outputFile || r.output,
+              error: r.error ? String(r.error.message || r.error) : null,
+              stats: r.loudnormStats || null,
+            }))
+          };
         }
       } catch (procErr) {
         console.warn('[hierarchical] Audio processing failed, falling back to originals:', procErr.message);
@@ -842,9 +874,11 @@ async function createHierarchicalBundle(config, event) {
       console.log('[hierarchical] Output file exists, will overwrite');
     }
     
-    // Create .tnset archive
+    // Create .tnset archive with user-selected compression level
+    const compressionLevel = settingsWithMeta?.compressionLevel !== undefined ? settingsWithMeta.compressionLevel : 6;
+    console.log('[bundler] Using compression level:', compressionLevel);
     const output = fs.createWriteStream(outputPath);
-    const archive = archiver('zip', { zlib: { level: 9 } });
+    const archive = archiver('zip', { zlib: { level: compressionLevel } });
     
     // Track archive progress for UI feedback
     let lastProgressPercent = 0;
@@ -881,44 +915,28 @@ async function createHierarchicalBundle(config, event) {
     console.log('[hierarchical] Added XML files to xml/ folder');
     
     // Add all audio files to audio/ folder (flat structure)
+    // IMPORTANT: Only add audio for records that are actually in sub-bundles (after hierarchy filtering)
     
-    for (const record of filteredRecords) {
-      if (record.SoundFile) {
-        const baseSoundFile = record.SoundFile;
-        const lastDot = baseSoundFile.lastIndexOf('.');
-        const basename = lastDot !== -1 ? baseSoundFile.substring(0, lastDot) : baseSoundFile;
-        const ext = lastDot !== -1 ? baseSoundFile.substring(lastDot) : '';
-        
-        // Add base file
-        const addAudioFile = (soundFile) => {
-          let srcPath;
-          let actualFileName = soundFile;
-          
-          if (processedDir && processedNameMap.has(soundFile)) {
-            const processedName = processedNameMap.get(soundFile);
-            srcPath = path.join(processedDir, processedName);
-            actualFileName = processedName;
-          } else {
-            srcPath = path.join(audioFolder, soundFile);
-          }
-          
-          if (fs.existsSync(srcPath)) {
-            archive.file(srcPath, { name: `audio/${actualFileName}` });
-          }
-        };
-        
-        addAudioFile(baseSoundFile);
-        
-        // Add variant files
-        for (const variant of audioVariantConfigs) {
-          if (variant.suffix) {
-            addAudioFile(`${basename}${variant.suffix}${ext}`);
-          }
-        }
+    for (const soundFile of soundFiles) {
+      let srcPath;
+      let actualFileName = soundFile;
+      
+      if (processedDir && processedNameMap.has(soundFile)) {
+        const processedName = processedNameMap.get(soundFile);
+        srcPath = path.join(processedDir, processedName);
+        actualFileName = processedName;
+      } else {
+        srcPath = path.join(audioFolder, soundFile);
+      }
+      
+      if (fs.existsSync(srcPath)) {
+        archive.file(srcPath, { name: `audio/${actualFileName}` });
+      } else {
+        console.warn('[hierarchical] Audio file not found:', srcPath);
       }
     }
     
-    console.log('[hierarchical] Added audio files to audio/ folder');
+    console.log('[hierarchical] Added', soundFiles.size, 'audio files to audio/ folder');
     
     // Build hierarchy.json with complete structure
     const buildHierarchyFromTree = (node, records) => {
@@ -1068,8 +1086,16 @@ async function createHierarchicalBundle(config, event) {
     // Add settings.json
     archive.append(JSON.stringify(settingsWithMeta, null, 2), { name: 'settings.json' });
     
-    console.log('[bundler] Finalizing archive...');
+    // Add processing report if available
+    if (typeof processingReport !== 'undefined') {
+      archive.append(JSON.stringify(processingReport, null, 2), { name: 'processing_report.json' });
+      console.log('[hierarchical] Added processing report');
+    }
+    
+    // Send progress event and ensure UI has time to update before starting finalization
     mainWindow?.webContents?.send('archive-progress', { type: 'start' });
+    await new Promise(resolve => setTimeout(resolve, 100)); // Give UI time to show progress
+    console.log('[bundler] Finalizing archive...');
     
     // Monitor finalization progress with polling since archiver doesn't emit progress during finalize
     let finalizeDone = false;
@@ -1109,6 +1135,16 @@ async function createHierarchicalBundle(config, event) {
     
     console.log('[bundler] Hierarchical bundle creation complete');
     
+    // Clean up processed audio cache after bundle creation
+    if (typeof processedDir !== 'undefined' && processedDir && fs.existsSync(processedDir)) {
+      try {
+        fs.rmSync(processedDir, { recursive: true, force: true });
+        console.log('[hierarchical] Cleaned up processed audio cache:', processedDir);
+      } catch (cleanupErr) {
+        console.warn('[hierarchical] Failed to clean up processed audio cache:', cleanupErr.message);
+      }
+    }
+    
     return {
       success: true,
       recordCount: filteredRecords.length,
@@ -1117,6 +1153,14 @@ async function createHierarchicalBundle(config, event) {
       hierarchicalBundle: true,
     };
   } catch (error) {
+    // Clean up on error too
+    if (typeof processedDir !== 'undefined' && processedDir && fs.existsSync(processedDir)) {
+      try {
+        fs.rmSync(processedDir, { recursive: true, force: true });
+      } catch (cleanupErr) {
+        // Ignore cleanup errors on error path
+      }
+    }
     return {
       success: false,
       error: error.message,

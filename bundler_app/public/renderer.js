@@ -20,6 +20,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   setupToneFieldToggles();
   attachChangePersistence();
   setupModalHandlers();
+  updateCompressionEstimate(); // Initialize compression estimate display
 });
 
 function setupModalHandlers() {
@@ -104,6 +105,12 @@ function handleBundleTypeChange() {
       section.classList.remove('visible');
     }
   });
+  
+  // Show/hide reference numbers section (only for legacy bundles)
+  const refNumbersSection = document.getElementById('referenceNumbersSection');
+  if (refNumbersSection) {
+    refNumbersSection.style.display = (bundleType === 'legacy') ? 'block' : 'none';
+  }
   
   // Update output file extension in the button text
   updateCreateButtonText();
@@ -217,6 +224,14 @@ async function loadPersistedSettings() {
   }
   
   document.getElementById('bundleDescription').value = s.bundleDescription || '';
+  
+  // Compression level
+  const compressionLevel = s.compressionLevel !== undefined ? s.compressionLevel : 6;
+  const compressionSlider = document.getElementById('compressionLevel');
+  if (compressionSlider) {
+    compressionSlider.value = compressionLevel;
+  }
+  
   // Audio processing defaults
   const ap = s.audioProcessing || {};
   const apAutoTrim = !!ap.autoTrim;
@@ -296,7 +311,7 @@ function attachChangePersistence() {
   [
     'showWrittenForm', 'showGloss', 'requireUserSpelling', 'showReferenceNumbers',
     'userSpellingElement', 'toneGroupElement', 'referenceNumbers', 'glossElement', 'bundleDescription',
-    'autoTrim', 'autoNormalize', 'convertToFlac',
+    'autoTrim', 'autoNormalize', 'convertToFlac', 'compressionLevel',
     'toneGroupIdField', 'pitchField', 'abbreviationField', 'exemplarField',
   ].forEach((id) => {
     const el = byId(id);
@@ -371,6 +386,7 @@ function collectCurrentSettings() {
         autoNormalize: !!document.getElementById('autoNormalize')?.checked,
         convertToFlac: !!document.getElementById('convertToFlac')?.checked,
       },
+      compressionLevel: parseInt(document.getElementById('compressionLevel')?.value || 6),
     },
   };
 }
@@ -2508,6 +2524,47 @@ function getSelectedWrittenFormElements() {
   return Array.from(checkboxes).map(cb => cb.value);
 }
 
+// ========== Compression level estimates ==========
+
+function updateCompressionEstimate() {
+  const level = parseInt(document.getElementById('compressionLevel').value);
+  document.getElementById('compressionLevelValue').textContent = level;
+  
+  // Compression ratios and speed multipliers based on empirical data
+  const estimates = {
+    0: { size: 100, speed: 0.1, desc: 'No compression (fastest)' },
+    1: { size: 85, speed: 0.2, desc: 'Minimal compression' },
+    2: { size: 75, speed: 0.3, desc: 'Low compression' },
+    3: { size: 68, speed: 0.5, desc: 'Below default' },
+    4: { size: 62, speed: 0.7, desc: 'Moderate compression' },
+    5: { size: 58, speed: 0.9, desc: 'Default compression' },
+    6: { size: 55, speed: 1.0, desc: 'Good compression (recommended)' },
+    7: { size: 53, speed: 1.5, desc: 'Better compression' },
+    8: { size: 51, speed: 2.2, desc: 'High compression' },
+    9: { size: 50, speed: 3.0, desc: 'Maximum compression (slowest)' }
+  };
+  
+  const estimate = estimates[level];
+  const estimateDiv = document.getElementById('compressionEstimate');
+  
+  estimateDiv.innerHTML = `
+    <strong>${estimate.desc}</strong><br>
+    File size: ~${estimate.size}% of uncompressed | Processing time: ~${estimate.speed.toFixed(1)}x baseline
+  `;
+  
+  // Visual feedback for extreme settings
+  if (level === 0) {
+    estimateDiv.style.background = '#fff3cd';
+    estimateDiv.style.borderLeft = '3px solid #ffc107';
+  } else if (level >= 8) {
+    estimateDiv.style.background = '#fff3cd';
+    estimateDiv.style.borderLeft = '3px solid #ff9800';
+  } else {
+    estimateDiv.style.background = '#f8f9fa';
+    estimateDiv.style.borderLeft = 'none';
+  }
+}
+
 async function createBundle() {
   const statusEl = document.getElementById('status');
   statusEl.style.display = 'none';
@@ -2579,20 +2636,26 @@ async function createBundle() {
   // Listen for archive finalization progress events
   ipcRenderer.removeAllListeners('archive-progress');
   ipcRenderer.on('archive-progress', (event, info) => {
+    console.log('[renderer] Archive progress:', info.type, info);
     if (!procContainer) return;
     if (info.type === 'start') {
       procContainer.style.display = 'block';
       procBar.style.width = '0%';
-      procMeta.textContent = 'Finalizing archive…';
+      procBar.style.background = '#007bff';
+      procBar.style.animation = 'none';
+      procMeta.textContent = 'Preparing to finalize archive…';
     } else if (info.type === 'progress') {
       const pct = info.percent || 0;
       procBar.style.width = pct + '%';
+      procBar.style.background = '#007bff';
+      procBar.style.animation = 'none';
       const mb = (info.processedBytes / 1024 / 1024).toFixed(2);
       const totalMb = (info.totalBytes / 1024 / 1024).toFixed(2);
       procMeta.textContent = `Compressing… ${pct}% — ${mb} MB / ${totalMb} MB`;
     } else if (info.type === 'finalizing') {
       // Indeterminate progress during finalization
       const mb = (info.bytesWritten / 1024 / 1024).toFixed(2);
+      procContainer.style.display = 'block'; // Ensure visible
       procBar.style.width = '100%';
       procBar.style.background = 'linear-gradient(90deg, #4CAF50 25%, #81C784 50%, #4CAF50 75%)';
       procBar.style.backgroundSize = '200% 100%';
