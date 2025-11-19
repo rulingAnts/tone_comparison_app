@@ -104,43 +104,50 @@ async function restoreBundleFromSession() {
       hierarchyConfig = JSON.parse(fs.readFileSync(hierarchyPath, 'utf8'));
       const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
       
+      console.log('[desktop_matching] Hierarchy tree structure:', JSON.stringify(hierarchyConfig.tree).substring(0, 200));
+      
       // Verify bundle ID matches
       if (settings.bundleId !== sessionData.bundleId) {
         console.log('[desktop_matching] Bundle ID mismatch, cannot restore');
         return;
       }
       
-      // Build sub-bundle list
-      const subBundlesDir = path.join(extractedPath, 'sub_bundles');
+      // Build sub-bundle list from hierarchy tree (new structure)
       const subBundles = [];
       
-      if (fs.existsSync(subBundlesDir)) {
-        const scanSubBundles = (dir, pathPrefix = '') => {
-          const entries = fs.readdirSync(dir, { withFileTypes: true });
-          for (const entry of entries) {
-            if (entry.isDirectory()) {
-              const subPath = pathPrefix ? `${pathPrefix}/${entry.name}` : entry.name;
-              const subDir = path.join(dir, entry.name);
-              const metadataPath = path.join(subDir, 'metadata.json');
-              
-              if (fs.existsSync(metadataPath)) {
-                const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
-                subBundles.push({
-                  path: subPath,
-                  categoryPath: metadata.categoryPath || subPath,
-                  recordCount: metadata.recordCount || 0,
-                  audioConfig: metadata.audioConfig || { includeAudio: true, suffix: '' },
-                  fullPath: subDir,
-                });
-              } else {
-                scanSubBundles(subDir, subPath);
-              }
+      // Extract leaf nodes from hierarchy tree
+      const extractLeafNodes = (node, pathPrefix = '') => {
+        if (!node) return;
+        
+        if (node.values && Array.isArray(node.values)) {
+          for (const valueNode of node.values) {
+            const currentPath = pathPrefix ? `${pathPrefix}/${valueNode.value}` : valueNode.value;
+            
+            // Check if this is a leaf node (has references, no children)
+            if (valueNode.references && valueNode.references.length > 0 && !valueNode.children) {
+              subBundles.push({
+                path: currentPath,
+                categoryPath: currentPath,
+                label: valueNode.label || valueNode.value,
+                recordCount: valueNode.references.length,
+                references: valueNode.references,
+                audioVariants: valueNode.audioVariants || hierarchyConfig.audioVariants || []
+              });
+            }
+            
+            // Recursively process children
+            if (valueNode.children && Array.isArray(valueNode.children)) {
+              extractLeafNodes({ values: valueNode.children }, currentPath);
             }
           }
-        };
-        
-        scanSubBundles(subBundlesDir);
+        }
+      };
+      
+      if (hierarchyConfig.tree) {
+        extractLeafNodes(hierarchyConfig.tree);
       }
+      
+      console.log(`[desktop_matching] Found ${subBundles.length} sub-bundles in restored bundle`);
       
       bundleData = {
         settings,
@@ -159,36 +166,49 @@ async function restoreBundleFromSession() {
       if (sessionData.currentSubBundle) {
         const subBundle = bundleData.subBundles.find(sb => sb.path === sessionData.currentSubBundle);
         if (subBundle) {
-          let xmlPath = path.join(subBundle.fullPath, 'data_updated.xml');
-          if (!fs.existsSync(xmlPath)) {
-            xmlPath = path.join(subBundle.fullPath, 'data.xml');
-          }
-          if (fs.existsSync(xmlPath)) {
-            const xmlBuffer = fs.readFileSync(xmlPath);
-            const probe = xmlBuffer.slice(0, 200).toString('utf8');
-            const declMatch = probe.match(/encoding\s*=\s*"([^"]+)"/i);
-            const declared = declMatch ? declMatch[1].toLowerCase() : null;
-            let xmlData;
-            if ((declared && declared.includes('utf-16')) || probe.includes('\u0000')) {
-              xmlData = xmlBuffer.toString('utf16le');
-            } else {
-              xmlData = xmlBuffer.toString('utf8');
+          // Load all XML files from xml/ folder and filter by references
+          const xmlDir = path.join(extractedPath, 'xml');
+          if (fs.existsSync(xmlDir)) {
+            const xmlFiles = fs.readdirSync(xmlDir).filter(f => f.endsWith('.xml'));
+            let allRecords = [];
+            
+            for (const xmlFile of xmlFiles) {
+              const xmlPath = path.join(xmlDir, xmlFile);
+              const xmlBuffer = fs.readFileSync(xmlPath);
+              const probe = xmlBuffer.slice(0, 200).toString('utf8');
+              const declMatch = probe.match(/encoding\s*=\s*"([^"]+)"/i);
+              const declared = declMatch ? declMatch[1].toLowerCase() : null;
+              let xmlData;
+              if ((declared && declared.includes('utf-16')) || probe.includes('\u0000')) {
+                xmlData = xmlBuffer.toString('utf16le');
+              } else {
+                xmlData = xmlBuffer.toString('utf8');
+              }
+              
+              const parser = new XMLParser({
+                ignoreAttributes: false,
+                attributeNamePrefix: '@_',
+                trimValues: true,
+                parseAttributeValue: false,
+                parseTagValue: false,
+              });
+              const xmlResult = parser.parse(xmlData);
+              const phonData = xmlResult.phon_data;
+              const dataForms = Array.isArray(phonData.data_form) 
+                ? phonData.data_form 
+                : [phonData.data_form];
+              
+              allRecords.push(...dataForms);
             }
             
-            const parser = new XMLParser({
-              ignoreAttributes: false,
-              attributeNamePrefix: '@_',
-              trimValues: true,
-              parseAttributeValue: false,
-              parseTagValue: false,
+            // Filter records by sub-bundle references
+            const subBundleRefs = new Set(subBundle.references.map(ref => normalizeRefString(ref)));
+            const filteredRecords = allRecords.filter(record => {
+              const ref = normalizeRefString(record.Reference);
+              return subBundleRefs.has(ref);
             });
-            const xmlResult = parser.parse(xmlData);
-            const phonData = xmlResult.phon_data;
-            const dataForms = Array.isArray(phonData.data_form) 
-              ? phonData.data_form 
-              : [phonData.data_form];
             
-            bundleData.records = dataForms;
+            bundleData.records = filteredRecords;
             bundleData.currentSubBundlePath = sessionData.currentSubBundle;
             currentSubBundlePath = sessionData.currentSubBundle;
           }
@@ -513,38 +533,39 @@ async function loadHierarchicalBundle(filePath) {
     }
     const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
     
-    // Build sub-bundle list
-    const subBundlesDir = path.join(extractedPath, 'sub_bundles');
+    // Build sub-bundle list from hierarchy tree (new structure)
     const subBundles = [];
     
-    if (fs.existsSync(subBundlesDir)) {
-      const scanSubBundles = (dir, pathPrefix = '') => {
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          if (entry.isDirectory()) {
-            const subPath = pathPrefix ? `${pathPrefix}/${entry.name}` : entry.name;
-            const subDir = path.join(dir, entry.name);
-            const metadataPath = path.join(subDir, 'metadata.json');
-            
-            if (fs.existsSync(metadataPath)) {
-              // This is a leaf sub-bundle
-              const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
-              subBundles.push({
-                path: subPath,
-                categoryPath: metadata.categoryPath || subPath,
-                recordCount: metadata.recordCount || 0,
-                audioConfig: metadata.audioConfig || { includeAudio: true, suffix: '' },
-                fullPath: subDir,
-              });
-            } else {
-              // Recurse into subdirectory
-              scanSubBundles(subDir, subPath);
-            }
+    // Extract leaf nodes from hierarchy tree
+    const extractLeafNodes = (node, pathPrefix = '') => {
+      if (!node) return;
+      
+      if (node.values && Array.isArray(node.values)) {
+        for (const valueNode of node.values) {
+          const currentPath = pathPrefix ? `${pathPrefix}/${valueNode.value}` : valueNode.value;
+          
+          // Check if this is a leaf node (has references, no children)
+          if (valueNode.references && valueNode.references.length > 0 && !valueNode.children) {
+            subBundles.push({
+              path: currentPath,
+              categoryPath: currentPath,
+              label: valueNode.label || valueNode.value,
+              recordCount: valueNode.references.length,
+              references: valueNode.references,
+              audioVariants: valueNode.audioVariants || hierarchyConfig.audioVariants || []
+            });
+          }
+          
+          // Recursively process children
+          if (valueNode.children && Array.isArray(valueNode.children)) {
+            extractLeafNodes({ values: valueNode.children }, currentPath);
           }
         }
-      };
-      
-      scanSubBundles(subBundlesDir);
+      }
+    };
+    
+    if (hierarchyConfig.tree) {
+      extractLeafNodes(hierarchyConfig.tree);
     }
     
     console.log(`[desktop_matching] Found ${subBundles.length} sub-bundles in hierarchical bundle`);
@@ -872,15 +893,9 @@ ipcMain.handle('select-image-file', async () => {
 ipcMain.handle('get-audio-path', async (event, soundFile, suffix) => {
   if (!extractedPath) return null;
   
-  // Determine audio directory based on bundle type
-  let audioDir;
-  if (bundleType === 'hierarchical' && currentSubBundlePath) {
-    // For hierarchical bundles, audio is in sub_bundles/{path}/audio/
-    audioDir = path.join(extractedPath, 'sub_bundles', currentSubBundlePath, 'audio');
-  } else {
-    // For legacy bundles, audio is in audio/
-    audioDir = path.join(extractedPath, 'audio');
-  }
+  // For new hierarchical bundles, audio is in flat audio/ folder
+  // For legacy bundles, audio is also in audio/
+  const audioDir = path.join(extractedPath, 'audio');
   
   if (!fs.existsSync(audioDir)) return null;
   
@@ -1004,48 +1019,66 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
       throw new Error(`Sub-bundle not found: ${subBundlePath}`);
     }
     
-    // Find XML file (prefer data_updated.xml for re-imports, else data.xml)
-    let xmlPath = path.join(subBundle.fullPath, 'data_updated.xml');
-    const isReimport = fs.existsSync(xmlPath);
-    if (!isReimport) {
-      xmlPath = path.join(subBundle.fullPath, 'data.xml');
-    }
-    if (!fs.existsSync(xmlPath)) {
-      throw new Error('Sub-bundle missing data.xml');
+    // Load all XML files from xml/ folder and filter by references
+    const xmlDir = path.join(bundleData.extractedPath, 'xml');
+    if (!fs.existsSync(xmlDir)) {
+      throw new Error('Bundle missing xml/ folder');
     }
     
-    // Parse XML with encoding detection
-    const xmlBuffer = fs.readFileSync(xmlPath);
-    const probe = xmlBuffer.slice(0, 200).toString('utf8');
-    const declMatch = probe.match(/encoding\s*=\s*"([^"]+)"/i);
-    const declared = declMatch ? declMatch[1].toLowerCase() : null;
-    let xmlData;
-    if ((declared && declared.includes('utf-16')) || probe.includes('\u0000')) {
-      xmlData = xmlBuffer.toString('utf16le');
-    } else {
-      xmlData = xmlBuffer.toString('utf8');
+    const xmlFiles = fs.readdirSync(xmlDir).filter(f => f.endsWith('.xml'));
+    let allRecords = [];
+    let isReimport = false;
+    
+    for (const xmlFile of xmlFiles) {
+      const xmlPath = path.join(xmlDir, xmlFile);
+      
+      // Check if this is a re-import (data_updated.xml exists)
+      if (xmlFile === 'data_updated.xml') {
+        isReimport = true;
+      }
+      
+      // Parse XML with encoding detection
+      const xmlBuffer = fs.readFileSync(xmlPath);
+      const probe = xmlBuffer.slice(0, 200).toString('utf8');
+      const declMatch = probe.match(/encoding\s*=\s*"([^"]+)"/i);
+      const declared = declMatch ? declMatch[1].toLowerCase() : null;
+      let xmlData;
+      if ((declared && declared.includes('utf-16')) || probe.includes('\u0000')) {
+        xmlData = xmlBuffer.toString('utf16le');
+      } else {
+        xmlData = xmlBuffer.toString('utf8');
+      }
+      
+      const parser = new XMLParser({
+        ignoreAttributes: false,
+        attributeNamePrefix: '@_',
+        trimValues: true,
+        parseAttributeValue: false,
+        parseTagValue: false,
+      });
+      const xmlResult = parser.parse(xmlData);
+      
+      const phonData = xmlResult.phon_data;
+      
+      // Handle data_form which can be undefined, empty array, single object, or array of objects
+      let dataForms;
+      if (!phonData.data_form || (Array.isArray(phonData.data_form) && phonData.data_form.length === 0)) {
+        dataForms = [];
+      } else if (Array.isArray(phonData.data_form)) {
+        dataForms = phonData.data_form;
+      } else {
+        dataForms = [phonData.data_form];
+      }
+      
+      allRecords.push(...dataForms);
     }
     
-    const parser = new XMLParser({
-      ignoreAttributes: false,
-      attributeNamePrefix: '@_',
-      trimValues: true,
-      parseAttributeValue: false,
-      parseTagValue: false,
+    // Filter records by sub-bundle references
+    const subBundleRefs = new Set(subBundle.references.map(ref => normalizeRefString(ref)));
+    const dataForms = allRecords.filter(record => {
+      const ref = normalizeRefString(record.Reference);
+      return subBundleRefs.has(ref);
     });
-    const xmlResult = parser.parse(xmlData);
-    
-    const phonData = xmlResult.phon_data;
-    
-    // Handle data_form which can be undefined, empty array, single object, or array of objects
-    let dataForms;
-    if (!phonData.data_form || (Array.isArray(phonData.data_form) && phonData.data_form.length === 0)) {
-      dataForms = [];
-    } else if (Array.isArray(phonData.data_form)) {
-      dataForms = phonData.data_form;
-    } else {
-      dataForms = [phonData.data_form];
-    }
     
     // Update bundleData with current sub-bundle records
     bundleData.records = dataForms;
@@ -1112,20 +1145,8 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
         // Convert to array and sort by group number
         subBundleSession.groups = Array.from(groupMap.values()).sort((a, b) => a.groupNumber - b.groupNumber);
         
-        // Try to load images from images/ folder if present
-        const imagesPath = path.join(subBundle.fullPath, 'images');
-        if (fs.existsSync(imagesPath)) {
-          subBundleSession.groups.forEach(group => {
-            // Look for image files matching group number pattern
-            const files = fs.readdirSync(imagesPath);
-            const groupImageFile = files.find(f => 
-              f.match(new RegExp(`^(group[_\\s-]?)?${group.groupNumber}[._]`, 'i'))
-            );
-            if (groupImageFile) {
-              group.image = path.join(imagesPath, groupImageFile);
-            }
-          });
-        }
+        // Note: Image loading from sub-bundle folders not supported in new structure
+        // Images would need to be in a shared images/ folder with reference-based naming
       }
       
       // Update assigned count
@@ -1148,7 +1169,7 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
         path: subBundlePath,
         categoryPath: subBundle.categoryPath,
         recordCount: dataForms.length,
-        audioConfig: subBundle.audioConfig,
+        audioVariants: subBundle.audioVariants || [],
       },
       recordCount: dataForms.length,
       session: sessionData,
