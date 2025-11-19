@@ -232,6 +232,43 @@ async function loadBundle() {
   }
 }
 
+async function clearBundle() {
+  if (!confirm('Clear all cached bundle data and session? This will reset the app.')) {
+    return;
+  }
+  
+  try {
+    const result = await ipcRenderer.invoke('clear-bundle');
+    if (result.success) {
+      // Reload the page to reset UI
+      window.location.reload();
+    } else {
+      alert('Failed to clear bundle: ' + result.error);
+    }
+  } catch (error) {
+    alert('Error clearing bundle: ' + error.message);
+  }
+}
+
+async function clearBundleAndReload() {
+  if (!confirm('Load a new bundle? Current progress will be saved first.')) {
+    return;
+  }
+  
+  try {
+    // Clear the bundle cache
+    const result = await ipcRenderer.invoke('clear-bundle');
+    if (result.success) {
+      // Reload the page to show welcome screen
+      window.location.reload();
+    } else {
+      alert('Failed to clear bundle: ' + result.error);
+    }
+  } catch (error) {
+    alert('Error: ' + error.message);
+  }
+}
+
 function renderHierarchyTree(hierarchy, subBundles) {
   const treeContainer = document.getElementById('hierarchyTree');
   treeContainer.innerHTML = '';
@@ -474,6 +511,11 @@ function updateProgressIndicator() {
   const total = session.queue.length + getTotalAssignedWords();
   const completed = getTotalAssignedWords();
   document.getElementById('progressIndicator').textContent = window.i18n.t('tm_progressFormat', { completed, total });
+  
+  // Show "New Bundle" button when a bundle is loaded
+  if (session && bundleSettings) {
+    document.getElementById('newBundleBtn').classList.remove('hidden');
+  }
 }
 
 function getTotalAssignedWords() {
