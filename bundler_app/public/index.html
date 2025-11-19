@@ -572,12 +572,12 @@
       </div>
     </div>
 
-    <div class="section">
+    <div class="section" id="referenceNumbersSection">
       <h2>4. Record Filtering</h2>
       <div class="form-group">
         <label>Reference Numbers (one per line, or comma/space separated)</label>
         <textarea id="referenceNumbers" placeholder="Leave empty to include all records&#10;Or enter specific reference numbers like:&#10;001&#10;002&#10;003"></textarea>
-        <div class="info">Only records with these reference numbers will be included</div>
+        <div class="info">Only records with these reference numbers will be included. For hierarchical bundles, use the hierarchy tree above instead.</div>
       </div>
     </div>
 
@@ -679,6 +679,20 @@
         <div class="file-selector">
           <input type="text" id="outputPath" readonly placeholder="No output file selected">
           <button onclick="selectOutputFile()">Browse</button>
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:16px;">
+        <label for="compressionLevel">Compression Level: <span id="compressionLevelValue">6</span></label>
+        <input type="range" id="compressionLevel" min="0" max="9" value="6" 
+               oninput="updateCompressionEstimate()" 
+               style="width: 100%; margin: 8px 0;">
+        <div style="display: flex; justify-content: space-between; font-size: 11px; color: #666; margin-bottom: 8px;">
+          <span>0 (fastest)</span>
+          <span>5 (balanced)</span>
+          <span>9 (smallest)</span>
+        </div>
+        <div id="compressionEstimate" class="info" style="font-size: 12px; padding: 8px; background: #f8f9fa; border-radius: 4px; margin-top: 4px;">
+          <strong>Estimated:</strong> File size ~100% | Processing time ~1.0x
         </div>
       </div>
       <div class="form-group" style="margin-top:12px; display:flex; gap:10px; align-items:center;">
