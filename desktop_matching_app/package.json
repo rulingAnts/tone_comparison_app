@@ -1,12 +1,10 @@
 {
   "name": "desktop-matching-app",
   "version": "1.0.0",
-  "description": "Desktop app for tone group assignment and review - PWA Edition",
+  "description": "Desktop app for tone group assignment and review - Electron Edition",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "start:pwa": "node server/server.js",
-    "dev": "node server/server.js",
     "debug": "ELECTRON_ENABLE_LOGGING=1 electron --remote-debugging-port=9224 .",
     "build": "electron-builder",
     "build:mac": "electron-builder --mac dmg --universal --publish never",
@@ -19,8 +17,8 @@
     "tone",
     "linguistics",
     "matching",
-    "pwa",
-    "progressive-web-app"
+    "electron",
+    "desktop"
   ],
   "author": "",
   "license": "ISC",
