@@ -945,76 +945,95 @@ async function createHierarchicalBundle(config, event) {
       // Handle organizational nodes
       if (node.isOrganizational && node.organizationalGroups) {
         const field = node.organizationalBaseField || '';
-        const allValues = [];
         
-        // Process organizational groups
+        // Build organizational group structure - groups become parent nodes
+        const organizationalValues = [];
+        
+        // Process each organizational group
         for (const group of node.organizationalGroups) {
           // Skip excluded groups
           if (group.included === false) continue;
           
           if (group.children && group.children.values) {
-            // Add values from this group (only if they're included)
             const includedGroupValues = group.children.values.filter(v => v.included !== false);
-            allValues.push(...includedGroupValues.map(v => ({
-              ...v,
-              organizationalGroup: group.name  // Track which group it came from
-            })));
+            
+            // Build children for this organizational group
+            const groupChildren = [];
+            
+            for (const valueConfig of includedGroupValues) {
+              // Filter records for this specific value
+              const valueRecords = records.filter(r => r[field] === valueConfig.value);
+              
+              if (valueRecords.length > 0) {
+                const childNode = {
+                  value: valueConfig.value,
+                  label: valueConfig.value,
+                  recordCount: valueRecords.length,
+                  audioVariants: valueConfig.audioVariants || [],
+                  references: valueRecords.map(r => normalizeRefString(r.Reference)).filter(ref => ref)
+                };
+                
+                // Recursively build children if they exist
+                if (valueConfig.children && valueConfig.children.field) {
+                  const childTree = buildHierarchyFromTree(valueConfig.children, valueRecords);
+                  if (childTree && childTree.values && childTree.values.length > 0) {
+                    childNode.children = childTree.values;
+                    // For non-leaf nodes, don't include references at this level
+                    delete childNode.references;
+                  }
+                }
+                
+                groupChildren.push(childNode);
+              }
+            }
+            
+            // Create organizational group as parent node
+            if (groupChildren.length > 0) {
+              organizationalValues.push({
+                value: group.name,
+                label: group.name,
+                recordCount: groupChildren.reduce((sum, child) => sum + child.recordCount, 0),
+                children: groupChildren
+              });
+            }
           }
         }
         
-        // Process unassigned values (only if they're included)
+        // Process unassigned values as direct children (not under a group)
         if (node.unassignedValues) {
           const includedUnassigned = node.unassignedValues.filter(v => v.included !== false);
-          allValues.push(...includedUnassigned);
-        }
-        
-        // Group records by value using the base field
-        const valueGroups = new Map();
-        for (const record of records) {
-          const value = record[field];
-          const valueConfig = allValues.find(v => v.value === value);
-          if (value && valueConfig) {
-            if (!valueGroups.has(value)) {
-              valueGroups.set(value, { records: [], valueConfig });
-            }
-            valueGroups.get(value).records.push(record);
-          }
-        }
-        
-        // Build values array
-        const values = [];
-        for (const [value, groupData] of valueGroups.entries()) {
-          const { records: valueRecords, valueConfig } = groupData;
-          const valueNode = {
-            value: value,
-            label: value,
-            recordCount: valueRecords.length,
-            audioVariants: valueConfig.audioVariants || [],
-            references: valueRecords.map(r => normalizeRefString(r.Reference)).filter(ref => ref)
-          };
           
-          // Add organizational group info if present
-          if (valueConfig.organizationalGroup) {
-            valueNode.organizationalGroup = valueConfig.organizationalGroup;
-          }
-          
-          // Recursively build children if they exist (organizational values can have children too)
-          if (valueConfig.children && valueConfig.children.field) {
-            const childTree = buildHierarchyFromTree(valueConfig.children, valueRecords);
-            if (childTree && childTree.values && childTree.values.length > 0) {
-              valueNode.children = childTree.values;
-              // For non-leaf nodes, don't include references at this level
-              delete valueNode.references;
+          for (const valueConfig of includedUnassigned) {
+            const valueRecords = records.filter(r => r[field] === valueConfig.value);
+            
+            if (valueRecords.length > 0) {
+              const valueNode = {
+                value: valueConfig.value,
+                label: valueConfig.value,
+                recordCount: valueRecords.length,
+                audioVariants: valueConfig.audioVariants || [],
+                references: valueRecords.map(r => normalizeRefString(r.Reference)).filter(ref => ref)
+              };
+              
+              // Recursively build children if they exist
+              if (valueConfig.children && valueConfig.children.field) {
+                const childTree = buildHierarchyFromTree(valueConfig.children, valueRecords);
+                if (childTree && childTree.values && childTree.values.length > 0) {
+                  valueNode.children = childTree.values;
+                  // For non-leaf nodes, don't include references at this level
+                  delete valueNode.references;
+                }
+              }
+              
+              organizationalValues.push(valueNode);
             }
           }
-          
-          values.push(valueNode);
         }
         
         return {
           field: field,
           isOrganizational: true,
-          values: values
+          values: organizationalValues
         };
       }
       
