@@ -483,6 +483,10 @@ async function backToNavigation() {
     // Update session
     session = result.session || session;
     
+    // Clear current word and group selection to prevent stale data
+    currentWord = null;
+    currentGroupId = null;
+    
     // Hide work area and back button
     document.getElementById('workArea').classList.add('hidden');
     document.getElementById('backToNavBtn').classList.add('hidden');
@@ -562,6 +566,8 @@ async function loadCurrentWord() {
   
   // Update written form
   const writtenFormLine = document.getElementById('writtenFormLine');
+  if (!writtenFormLine) return; // Guard: element may not exist in navigation view
+  
   if (bundleSettings.showWrittenForm && bundleSettings.writtenFormElements) {
     const writtenParts = bundleSettings.writtenFormElements
       .map(elem => currentWord[elem])
@@ -677,6 +683,9 @@ async function confirmSpelling() {
 function updateAddWordButton() {
   const addWordBtn = document.getElementById('addWordBtn');
   const addWordHint = document.getElementById('addWordHint');
+  
+  // Guard: elements may not exist if we're in navigation view
+  if (!addWordBtn || !addWordHint) return;
   
   const needsSpelling = bundleSettings.requireUserSpelling;
   const ref = currentWord?.Reference;
