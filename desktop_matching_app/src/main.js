@@ -1032,15 +1032,38 @@ ipcMain.handle('reset-session', async () => {
   }
   
   // Reset session but keep bundle and locale
-  const queue = bundleData.records.map(df => normalizeRefString(df.Reference));
-  sessionData = {
-    bundleId: bundleData.bundleId,
-    queue,
-    selectedAudioVariantIndex: sessionData.selectedAudioVariantIndex || 0,
-    groups: [],
-    records: {},
-    locale: sessionData.locale || 'en',
-  };
+  if (bundleType === 'hierarchical') {
+    // For hierarchical bundles, reset all sub-bundles
+    sessionData.subBundles = bundleData.subBundles.map(sb => {
+      const subBundleRecords = bundleData.allDataForms.filter(df => 
+        sb.references && sb.references.some(r => normalizeRefString(r) === normalizeRefString(df.Reference))
+      );
+      const queue = subBundleRecords.map(df => normalizeRefString(df.Reference));
+      
+      return {
+        path: sb.path,
+        queue,
+        groups: [],
+        recordCount: subBundleRecords.length,
+        assignedCount: 0,
+      };
+    });
+    sessionData.currentSubBundle = null;
+    sessionData.queue = [];
+    sessionData.groups = [];
+    sessionData.records = {};
+  } else {
+    // For legacy bundles
+    const queue = bundleData.records.map(df => normalizeRefString(df.Reference));
+    sessionData = {
+      bundleId: bundleData.bundleId,
+      queue,
+      selectedAudioVariantIndex: sessionData.selectedAudioVariantIndex || 0,
+      groups: [],
+      records: {},
+      locale: sessionData.locale || 'en',
+    };
+  }
   
   saveSession();
   

@@ -240,6 +240,12 @@ function renderHierarchyTree(hierarchy, subBundles) {
   const treeContainer = document.getElementById('hierarchyTree');
   treeContainer.innerHTML = '';
   
+  // Guard against undefined subBundles
+  if (!subBundles || !Array.isArray(subBundles)) {
+    treeContainer.innerHTML = '<div class="no-bundle">No sub-bundles available</div>';
+    return;
+  }
+  
   // Build tree structure from flat sub-bundle list
   const tree = buildTreeStructure(subBundles);
   
