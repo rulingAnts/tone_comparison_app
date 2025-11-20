@@ -1078,6 +1078,10 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
     
     let dataForms = [];
     
+    // Check if this is a re-import (data_updated.xml exists in xml/ folder)
+    const xmlDir = path.join(bundleData.extractedPath, 'xml');
+    const isReimport = fs.existsSync(path.join(xmlDir, 'data_updated.xml'));
+    
     // Filter allDataForms by references list
     if (subBundle.references && bundleData.allDataForms) {
       console.log('[load-sub-bundle] Filtering records by Reference list');
