@@ -454,6 +454,21 @@
       background: #e9ecef;
     }
 
+    .category-header.org-group-header {
+      background: #e3f2fd;
+      margin-top: 4px;
+    }
+
+    .category-header.org-group-header:hover {
+      background: #bbdefb;
+    }
+
+    .category-header.org-group-header .label {
+      color: #1976d2;
+      font-weight: 400;
+      font-size: 14px;
+    }
+
     .category-header .toggle {
       font-size: 12px;
       color: #666;
@@ -861,12 +876,18 @@
         <h2 data-i18n="tm_welcomeTitle">Welcome to Tone Matching Desktop</h2>
         <p style="margin-bottom: 20px;" data-i18n="tm_welcomeMessage">Load a .tncmp bundle to begin tone group assignment</p>
         <button onclick="loadBundle()" data-i18n="tm_loadBundle">Load Bundle</button>
+        <button id="clearBundleBtn" onclick="clearBundle()" class="danger" style="display: none; margin-top: 10px;" data-i18n="tm_clearBundle">Clear Current Bundle</button>
       </div>
 
       <!-- Navigation Screen for Hierarchical Bundles -->
       <div id="navigationScreen" class="navigation-screen hidden">
-        <h2 data-i18n="tm_selectSubBundle">Select Sub-Bundle</h2>
-        <p class="subtitle" data-i18n="tm_selectSubBundle_subtitle">Choose a category to begin sorting tone groups</p>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+          <div>
+            <h2 data-i18n="tm_selectSubBundle">Select Sub-Bundle</h2>
+            <p class="subtitle" data-i18n="tm_selectSubBundle_subtitle">Choose a category to begin sorting tone groups</p>
+          </div>
+          <button onclick="clearBundle()" class="danger" data-i18n="tm_loadDifferentBundle">Load Different Bundle</button>
+        </div>
         
         <div id="hierarchyTree" class="hierarchy-tree">
           <!-- Tree will be populated by JavaScript -->

@@ -175,6 +175,10 @@ async function loadBundle() {
     session = result.session;
     bundleType = result.bundleType || (result.requiresNavigation ? 'hierarchical' : 'legacy');
     
+    // Show clear bundle button
+    const clearBtn = document.getElementById('clearBundleBtn');
+    if (clearBtn) clearBtn.style.display = 'inline-block';
+    
     // Check if this is a hierarchical bundle
     if (result.requiresNavigation && result.bundleType === 'hierarchical') {
       // Show navigation screen for hierarchical bundles
@@ -257,11 +261,29 @@ function buildTreeStructure(subBundles) {
       if (!current[part]) {
         current[part] = {
           name: part,
-          isLeaf: index === parts.length - 1,
-          subBundle: index === parts.length - 1 ? sb : null,
-          children: {}
+          isLeaf: false,
+          subBundle: null,
+          children: {},
+          orgGroups: {} // Track organizational groups
         };
       }
+      
+      // On the last part (leaf), check for organizational group
+      if (index === parts.length - 1) {
+        if (sb.organizationalGroup) {
+          // Create organizational group node
+          const orgGroup = sb.organizationalGroup;
+          if (!current[part].orgGroups[orgGroup]) {
+            current[part].orgGroups[orgGroup] = [];
+          }
+          current[part].orgGroups[orgGroup].push(sb);
+        } else {
+          // No org group - make this a direct leaf
+          current[part].isLeaf = true;
+          current[part].subBundle = sb;
+        }
+      }
+      
       current = current[part].children;
     });
   });
@@ -274,7 +296,7 @@ function renderTreeNode(treeNode, container, subBundles, depth = 0) {
     const node = treeNode[key];
     
     if (node.isLeaf && node.subBundle) {
-      // Leaf node - render as sub-bundle item
+      // Direct leaf node - render as sub-bundle item
       const item = createSubBundleItem(node.subBundle);
       container.appendChild(item);
     } else {
@@ -284,10 +306,12 @@ function renderTreeNode(treeNode, container, subBundles, depth = 0) {
       
       const header = document.createElement('div');
       header.className = 'category-header';
+      
+      const itemCount = countSubBundles(node.children, node.orgGroups);
       header.innerHTML = `
         <span class="toggle">▼</span>
         <span class="label">${node.name}</span>
-        <span class="count">${countSubBundles(node.children)} items</span>
+        <span class="count">${itemCount} items</span>
       `;
       
       const childrenDiv = document.createElement('div');
@@ -303,20 +327,63 @@ function renderTreeNode(treeNode, container, subBundles, depth = 0) {
       categoryDiv.appendChild(childrenDiv);
       container.appendChild(categoryDiv);
       
-      // Recursively render children
+      // First render organizational groups if present
+      if (node.orgGroups && Object.keys(node.orgGroups).length > 0) {
+        Object.keys(node.orgGroups).sort().forEach(orgGroupName => {
+          const orgGroupDiv = document.createElement('div');
+          orgGroupDiv.className = 'category-node org-group';
+          
+          const orgHeader = document.createElement('div');
+          orgHeader.className = 'category-header org-group-header';
+          orgHeader.innerHTML = `
+            <span class="toggle">▼</span>
+            <span class="label">${orgGroupName}</span>
+            <span class="count">${node.orgGroups[orgGroupName].length} items</span>
+          `;
+          
+          const orgChildrenDiv = document.createElement('div');
+          orgChildrenDiv.className = 'category-children';
+          
+          orgHeader.addEventListener('click', () => {
+            orgChildrenDiv.classList.toggle('collapsed');
+            orgHeader.querySelector('.toggle').textContent = orgChildrenDiv.classList.contains('collapsed') ? '▶' : '▼';
+          });
+          
+          orgGroupDiv.appendChild(orgHeader);
+          orgGroupDiv.appendChild(orgChildrenDiv);
+          childrenDiv.appendChild(orgGroupDiv);
+          
+          // Render sub-bundles in this org group
+          node.orgGroups[orgGroupName].forEach(sb => {
+            const item = createSubBundleItem(sb);
+            orgChildrenDiv.appendChild(item);
+          });
+        });
+      }
+      
+      // Then recursively render child categories
       renderTreeNode(node.children, childrenDiv, subBundles, depth + 1);
     }
   });
 }
 
-function countSubBundles(children) {
+function countSubBundles(children, orgGroups) {
   let count = 0;
+  
+  // Count items in organizational groups
+  if (orgGroups) {
+    Object.keys(orgGroups).forEach(groupName => {
+      count += orgGroups[groupName].length;
+    });
+  }
+  
+  // Count items in child categories
   Object.keys(children).forEach(key => {
     const node = children[key];
     if (node.isLeaf) {
       count++;
     } else {
-      count += countSubBundles(node.children);
+      count += countSubBundles(node.children, node.orgGroups);
     }
   });
   return count;
@@ -1547,6 +1614,41 @@ async function confirmMoveWord() {
     await loadCurrentWord();
   } else {
     alert(`Failed to move word: ${result.error}`);
+  }
+}
+
+// Review Status Management
+
+async function clearBundle() {
+  const confirmed = confirm('Clear current bundle and session? This will reset all progress.');
+  if (!confirmed) return;
+  
+  try {
+    await ipcRenderer.invoke('clear-bundle');
+    
+    // Reset local state
+    bundleSettings = null;
+    session = null;
+    currentWord = null;
+    currentGroupId = null;
+    recordCache.clear();
+    bundleType = null;
+    currentSubBundle = null;
+    
+    // Hide all screens and show welcome
+    document.getElementById('welcomeScreen').classList.remove('hidden');
+    document.getElementById('navigationScreen').classList.add('hidden');
+    document.getElementById('workArea').classList.add('hidden');
+    document.getElementById('subBundleIndicator').classList.add('hidden');
+    document.getElementById('backToNavBtn').classList.add('hidden');
+    
+    // Hide clear button
+    const clearBtn = document.getElementById('clearBundleBtn');
+    if (clearBtn) clearBtn.style.display = 'none';
+    
+    console.log('[desktop_matching] Bundle cleared');
+  } catch (error) {
+    alert('Failed to clear bundle: ' + error.message);
   }
 }
 
