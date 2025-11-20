@@ -555,13 +555,15 @@ async function loadCurrentWord() {
   currentWord = await ipcRenderer.invoke('get-current-word');
   
   if (!currentWord) {
-    // No more words - check if this is completion
+    // No more words - show completion message and hide word panel
     checkCompletion();
-    document.querySelector('.word-panel').innerHTML = `<h2>${window.i18n.t('tm_allWordsAssigned_title')}</h2><p>${window.i18n.t('tm_allWordsAssigned_message')}</p>`;
+    document.querySelector('.word-panel').style.display = 'none';
+    document.getElementById('completionMessage').classList.remove('hidden');
     return;
   }
   
-  // Hide completion message if word exists
+  // Show word panel and hide completion message if word exists
+  document.querySelector('.word-panel').style.display = 'block';
   document.getElementById('completionMessage').classList.add('hidden');
   
   // Update written form
