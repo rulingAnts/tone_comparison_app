@@ -463,6 +463,10 @@ async function selectSubBundle(subBundlePath) {
     document.getElementById('subBundlePath').textContent = subBundlePath;
     document.getElementById('backToNavBtn').classList.remove('hidden');
     
+    // Ensure word panel is visible and completion message is hidden before loading
+    document.querySelector('.word-panel').style.display = 'block';
+    document.getElementById('completionMessage').classList.add('hidden');
+    
     // Load current word and groups
     await loadCurrentWord();
     renderGroups();
