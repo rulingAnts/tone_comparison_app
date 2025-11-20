@@ -323,7 +323,16 @@ function attachChangePersistence() {
   const userSpellingEl = byId('userSpellingElement');
   if (userSpellingEl) {
     userSpellingEl.addEventListener('change', validateUserSpellingField);
+    userSpellingEl.addEventListener('change', handleCustomFieldSelection);
   }
+  
+  // Add custom field listeners to tone field selects
+  ['toneGroupElement', 'toneGroupIdField', 'pitchField', 'abbreviationField', 'exemplarField'].forEach(id => {
+    const select = byId(id);
+    if (select) {
+      select.addEventListener('change', handleCustomFieldSelection);
+    }
+  });
 
   const addBtn = document.getElementById('addAudioVariantBtn');
   if (addBtn) {
@@ -508,8 +517,23 @@ function updateToneFieldOptions() {
       select.appendChild(opt);
     });
     
+    // Add custom option
+    const customOpt = document.createElement('option');
+    customOpt.value = '__custom__';
+    customOpt.textContent = '+ Add custom field name...';
+    customOpt.style.fontWeight = 'bold';
+    customOpt.style.color = '#007bff';
+    select.appendChild(customOpt);
+    
     // Restore previous value if still valid
     if (availableFields.includes(currentValues[index])) {
+      select.value = currentValues[index];
+    } else if (currentValues[index] && currentValues[index] !== '__custom__') {
+      // Custom field name entered previously - add it to the list
+      const customOpt = document.createElement('option');
+      customOpt.value = currentValues[index];
+      customOpt.textContent = currentValues[index] + ' (custom)';
+      select.insertBefore(customOpt, select.lastChild);
       select.value = currentValues[index];
     } else if (index === 0 && availableFields.includes('SurfaceMelodyGroup')) {
       // Default tone group to SurfaceMelodyGroup if available
@@ -534,17 +558,62 @@ function updateUserSpellingOptions() {
     opt.textContent = f;
     select.appendChild(opt);
   });
+  
+  // Add custom option
+  const customOpt = document.createElement('option');
+  customOpt.value = '__custom__';
+  customOpt.textContent = '+ Add custom field name...';
+  customOpt.style.fontWeight = 'bold';
+  customOpt.style.color = '#007bff';
+  select.appendChild(customOpt);
 
   // Prefer "Orthographic" if present
   if (availableFields.includes('Orthographic')) {
     select.value = 'Orthographic';
   } else if (availableFields.includes(current)) {
     select.value = current;
+  } else if (current && current !== '__custom__') {
+    // Custom field name entered previously - add it to the list
+    const customOpt = document.createElement('option');
+    customOpt.value = current;
+    customOpt.textContent = current + ' (custom)';
+    select.insertBefore(customOpt, select.lastChild);
+    select.value = current;
   } else {
     select.value = '';
   }
   
   validateUserSpellingField();
+}
+
+function handleCustomFieldSelection(event) {
+  const select = event.target;
+  if (select.value === '__custom__') {
+    const fieldName = prompt('Enter custom field name:\n\nThis field will be created in the exported XML if it doesn\'t exist.\nUse standard XML naming (e.g., "MyCustomField")');
+    
+    if (fieldName && fieldName.trim()) {
+      const cleanName = fieldName.trim();
+      // Basic validation: no spaces, starts with letter
+      if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(cleanName)) {
+        alert('Invalid field name. Must start with a letter and contain only letters, numbers, and underscores.');
+        select.value = '';
+        return;
+      }
+      
+      // Add the custom field to the dropdown
+      const customOpt = document.createElement('option');
+      customOpt.value = cleanName;
+      customOpt.textContent = cleanName + ' (custom)';
+      select.insertBefore(customOpt, select.lastChild);
+      select.value = cleanName;
+      
+      // Persist the change
+      persistSettings();
+    } else {
+      // User cancelled or entered empty string
+      select.value = '';
+    }
+  }
 }
 
 function validateUserSpellingField() {
@@ -2590,6 +2659,24 @@ async function createBundle() {
 
   if (settings.showGloss && !settings.glossElement) {
     showStatus('error', 'Please select a gloss element, or uncheck "Include gloss".');
+    return;
+  }
+  
+  // Validate tone fields - if checkbox is enabled, must have a field selected
+  if (document.getElementById('enableToneGroupId')?.checked && !settings.toneGroupIdField) {
+    showStatus('error', 'Please select a field for Tone Group ID, or uncheck the option.');
+    return;
+  }
+  if (document.getElementById('enablePitchField')?.checked && !settings.pitchField) {
+    showStatus('error', 'Please select a field for Pitch, or uncheck the option.');
+    return;
+  }
+  if (document.getElementById('enableAbbreviationField')?.checked && !settings.abbreviationField) {
+    showStatus('error', 'Please select a field for Abbreviation, or uncheck the option.');
+    return;
+  }
+  if (document.getElementById('enableExemplarField')?.checked && !settings.exemplarField) {
+    showStatus('error', 'Please select a field for Exemplar, or uncheck the option.');
     return;
   }
   
