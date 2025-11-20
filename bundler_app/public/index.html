@@ -807,6 +807,33 @@
     </div>
   </div>
 
+  <!-- Add Custom Field Modal -->
+  <div id="addCustomFieldOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.35); align-items:center; justify-content:center; z-index: 1000;">
+    <div role="dialog" aria-modal="true" aria-labelledby="addCustomFieldTitle" style="background:#fff; width:min(520px, 92vw); border-radius:8px; box-shadow:0 12px 32px rgba(0,0,0,0.2);">
+      <div style="padding:16px 20px; border-bottom:1px solid #eee;">
+        <h2 id="addCustomFieldTitle" style="font-size:18px; color:#333;">Add Custom XML Field</h2>
+      </div>
+      <form id="addCustomFieldForm" style="padding:18px 20px;">
+        <label for="customFieldInput" style="display:block; color:#555; margin-bottom:8px;">Field name</label>
+        <input id="customFieldInput" type="text" placeholder="e.g., MyCustomField" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; font-size:14px;" required pattern="[A-Za-z][A-Za-z0-9_]*">
+        <div style="color:#666; font-size:12px; margin-top:8px;">
+          <strong>Field naming rules:</strong><br>
+          • Must start with a letter (A-Z or a-z)<br>
+          • Can contain letters, numbers, and underscores<br>
+          • No spaces or special characters<br>
+          • Examples: <code style="background:#f0f0f0; padding:2px 4px; border-radius:3px;">MyToneGroup</code>, <code style="background:#f0f0f0; padding:2px 4px; border-radius:3px;">Custom_Spelling</code>
+        </div>
+        <div style="color:#ff6b6b; font-size:12px; margin-top:12px; padding:10px; background:#fff5f5; border-left:3px solid #ff6b6b; border-radius:4px;">
+          <strong>Note:</strong> This field will be created in the exported XML even if it doesn't exist in your source data.
+        </div>
+        <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:16px;">
+          <button type="button" class="btn-secondary" id="cancelAddCustomFieldBtn">Cancel</button>
+          <button type="submit" class="btn-success" id="confirmAddCustomFieldBtn">Add Field</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="renderer.js"></script>
 </body>
 </html>

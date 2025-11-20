@@ -589,30 +589,73 @@ function updateUserSpellingOptions() {
 function handleCustomFieldSelection(event) {
   const select = event.target;
   if (select.value === '__custom__') {
-    const fieldName = prompt('Enter custom field name:\n\nThis field will be created in the exported XML if it doesn\'t exist.\nUse standard XML naming (e.g., "MyCustomField")');
+    // Store which select triggered this
+    const selectId = select.id;
     
-    if (fieldName && fieldName.trim()) {
-      const cleanName = fieldName.trim();
-      // Basic validation: no spaces, starts with letter
-      if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(cleanName)) {
-        alert('Invalid field name. Must start with a letter and contain only letters, numbers, and underscores.');
-        select.value = '';
-        return;
+    // Show modal
+    const overlay = document.getElementById('addCustomFieldOverlay');
+    const input = document.getElementById('customFieldInput');
+    const form = document.getElementById('addCustomFieldForm');
+    
+    if (!overlay || !input || !form) {
+      console.error('Custom field modal elements not found');
+      select.value = '';
+      return;
+    }
+    
+    // Clear previous input
+    input.value = '';
+    
+    // Show modal
+    overlay.style.display = 'flex';
+    setTimeout(() => input.focus(), 100);
+    
+    // Handle form submission
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      const fieldName = input.value.trim();
+      
+      if (fieldName) {
+        // Validation happens via HTML5 pattern attribute
+        // Add the custom field to the dropdown
+        const customOpt = document.createElement('option');
+        customOpt.value = fieldName;
+        customOpt.textContent = fieldName + ' (custom)';
+        select.insertBefore(customOpt, select.lastChild);
+        select.value = fieldName;
+        
+        // Close modal
+        overlay.style.display = 'none';
+        
+        // Persist the change
+        persistSettings();
       }
       
-      // Add the custom field to the dropdown
-      const customOpt = document.createElement('option');
-      customOpt.value = cleanName;
-      customOpt.textContent = cleanName + ' (custom)';
-      select.insertBefore(customOpt, select.lastChild);
-      select.value = cleanName;
-      
-      // Persist the change
-      persistSettings();
-    } else {
-      // User cancelled or entered empty string
+      // Clean up listeners
+      form.removeEventListener('submit', handleSubmit);
+      cancelBtn.removeEventListener('click', handleCancel);
+    };
+    
+    // Handle cancel
+    const cancelBtn = document.getElementById('cancelAddCustomFieldBtn');
+    const handleCancel = () => {
+      overlay.style.display = 'none';
       select.value = '';
-    }
+      form.removeEventListener('submit', handleSubmit);
+      cancelBtn.removeEventListener('click', handleCancel);
+    };
+    
+    form.addEventListener('submit', handleSubmit);
+    cancelBtn.addEventListener('click', handleCancel);
+    
+    // Handle ESC key
+    const handleEsc = (e) => {
+      if (e.key === 'Escape') {
+        handleCancel();
+        document.removeEventListener('keydown', handleEsc);
+      }
+    };
+    document.addEventListener('keydown', handleEsc);
   }
 }
 
