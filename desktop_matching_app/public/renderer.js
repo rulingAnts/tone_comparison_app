@@ -1467,7 +1467,7 @@ function renderMoveWordTree(hierarchy, subBundles) {
   console.log('[renderMoveWordTree] hierarchy:', hierarchy);
   console.log('[renderMoveWordTree] subBundles:', subBundles);
   
-  function renderNode(nodes, level = 0) {
+  function renderNode(nodes, level = 0, pathPrefix = '') {
     if (!Array.isArray(nodes)) {
       console.error('[renderNode] nodes is not an array:', nodes);
       return;
@@ -1475,20 +1475,16 @@ function renderMoveWordTree(hierarchy, subBundles) {
     
     nodes.forEach(node => {
       const hasChildren = node.children && node.children.length > 0;
+      const hasReferences = node.references && node.references.length > 0;
       
-      if (hasChildren) {
-        // Category node - render as non-selectable header
-        const categoryDiv = document.createElement('div');
-        categoryDiv.className = 'move-tree-category';
-        categoryDiv.style.paddingLeft = `${level * 20}px`;
-        categoryDiv.textContent = node.label || node.value;
-        treeContainer.appendChild(categoryDiv);
-        
-        // Recursively render children
-        renderNode(node.children, level + 1);
-      } else {
-        // Bottom-level node - render as selectable sub-bundle
-        const subBundlePath = node.value;
+      // Build full path for this node
+      const currentPath = pathPrefix ? `${pathPrefix}/${node.value}` : node.value;
+      
+      // Leaf nodes have references (actual sub-bundles)
+      // Organizational/category nodes have children but no references
+      if (hasReferences && !hasChildren) {
+        // This is a selectable leaf sub-bundle
+        const subBundlePath = currentPath;
         const subBundle = subBundles.find(sb => sb.path === subBundlePath);
         
         if (subBundle) {
@@ -1510,7 +1506,7 @@ function renderMoveWordTree(hierarchy, subBundles) {
           
           const label = document.createElement('span');
           label.className = 'move-tree-sub-bundle-label';
-          label.textContent = node.label || subBundle.path.split('/').pop();
+          label.textContent = node.label || node.value;
           
           const info = document.createElement('span');
           info.className = 'move-tree-sub-bundle-info';
@@ -1533,6 +1529,16 @@ function renderMoveWordTree(hierarchy, subBundles) {
           
           treeContainer.appendChild(itemDiv);
         }
+      } else if (hasChildren) {
+        // Category or organizational group node - render as non-selectable header
+        const categoryDiv = document.createElement('div');
+        categoryDiv.className = 'move-tree-category';
+        categoryDiv.style.paddingLeft = `${level * 20}px`;
+        categoryDiv.textContent = node.label || node.value;
+        treeContainer.appendChild(categoryDiv);
+        
+        // Recursively render children with updated path
+        renderNode(node.children, level + 1, currentPath);
       }
     });
   }
