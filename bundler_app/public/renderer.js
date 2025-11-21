@@ -3111,7 +3111,7 @@ async function checkConflicts() {
   
   try {
     // Get current settings
-    const settings = await collectSettings();
+    const settings = collectCurrentSettings();
     const xmlPath = document.getElementById('xmlPath').value;
     
     if (!xmlPath) {
