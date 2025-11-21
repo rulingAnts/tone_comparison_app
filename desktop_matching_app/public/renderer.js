@@ -1230,11 +1230,15 @@ async function renderGroups() {
 }
 
 async function exportBundle() {
-  const result = await ipcRenderer.invoke('export-bundle');
-  if (result.success) {
-    alert(window.i18n.t('tm_export_success', { outputPath: result.outputPath }));
+  // Check for conflicts first
+  const conflictResult = await ipcRenderer.invoke('check-export-conflicts');
+  
+  if (conflictResult.hasConflicts) {
+    // Show conflict modal
+    showConflictModal(conflictResult);
   } else {
-    alert(window.i18n.t('tm_export_failed', { error: result.error }));
+    // No conflicts, proceed with export
+    await proceedWithExport();
   }
 }
 
@@ -1244,11 +1248,15 @@ async function exportHierarchicalBundle() {
     return;
   }
   
-  const result = await ipcRenderer.invoke('export-bundle');
-  if (result.success) {
-    alert(`Complete session exported successfully!\n\nLocation: ${result.outputPath}`);
+  // Check for conflicts first
+  const conflictResult = await ipcRenderer.invoke('check-export-conflicts');
+  
+  if (conflictResult.hasConflicts) {
+    // Show conflict modal
+    showConflictModal(conflictResult);
   } else {
-    alert(`Export failed: ${result.error}`);
+    // No conflicts, proceed with export
+    await proceedWithExport();
   }
 }
 
@@ -1263,6 +1271,77 @@ async function exportCurrentSubBundle() {
     alert(`Sub-bundle exported successfully!\n\nLocation: ${result.outputPath}`);
   } else {
     alert(`Export failed: ${result.error}`);
+  }
+}
+
+// Conflict resolution functions
+function showConflictModal(conflictData) {
+  const modal = document.getElementById('conflictModal');
+  const conflictList = document.getElementById('conflictList');
+  
+  // Build conflict display
+  let html = '';
+  conflictData.conflicts.forEach(groupConflict => {
+    html += `
+      <div style="border: 1px solid #ddd; padding: 12px; margin-bottom: 12px; border-radius: 4px; background: #f9f9f9;">
+        <h4 style="margin: 0 0 8px 0;">Group ${groupConflict.groupNumber}${groupConflict.groupId ? ` (${groupConflict.groupId})` : ''}${groupConflict.subBundlePath ? ` - ${groupConflict.subBundlePath}` : ''}</h4>
+    `;
+    
+    if (groupConflict.pitchConflicts && groupConflict.pitchConflicts.length > 0) {
+      html += `<p style="margin: 4px 0;"><strong>Pitch (${conflictData.fieldNames.pitch}):</strong></p><ul style="margin: 4px 0 8px 20px;">`;
+      groupConflict.pitchConflicts.forEach(c => {
+        html += `<li>Ref ${c.reference}: "${c.currentValue}" → "${c.willBecome}"</li>`;
+      });
+      html += `</ul>`;
+    }
+    
+    if (groupConflict.abbreviationConflicts && groupConflict.abbreviationConflicts.length > 0) {
+      html += `<p style="margin: 4px 0;"><strong>Abbreviation (${conflictData.fieldNames.abbreviation}):</strong></p><ul style="margin: 4px 0 8px 20px;">`;
+      groupConflict.abbreviationConflicts.forEach(c => {
+        html += `<li>Ref ${c.reference}: "${c.currentValue}" → "${c.willBecome}"</li>`;
+      });
+      html += `</ul>`;
+    }
+    
+    if (groupConflict.exemplarConflicts && groupConflict.exemplarConflicts.length > 0) {
+      html += `<p style="margin: 4px 0;"><strong>Exemplar (${conflictData.fieldNames.exemplar}):</strong></p><ul style="margin: 4px 0 8px 20px;">`;
+      groupConflict.exemplarConflicts.forEach(c => {
+        html += `<li>Ref ${c.reference}: "${c.currentValue}" → "${c.willBecome}"</li>`;
+      });
+      html += `</ul>`;
+    }
+    
+    html += `</div>`;
+  });
+  
+  conflictList.innerHTML = html;
+  modal.style.display = 'flex';
+}
+
+function cancelConflictExport() {
+  document.getElementById('conflictModal').style.display = 'none';
+}
+
+async function approveConflictExport() {
+  document.getElementById('conflictModal').style.display = 'none';
+  // User approved, proceed with export
+  await proceedWithExport();
+}
+
+async function proceedWithExport() {
+  const result = await ipcRenderer.invoke('export-bundle');
+  if (result.success) {
+    if (bundleType === 'hierarchical') {
+      alert(`Complete session exported successfully!\n\nLocation: ${result.outputPath}`);
+    } else {
+      alert(window.i18n.t('tm_export_success', { outputPath: result.outputPath }));
+    }
+  } else {
+    if (bundleType === 'hierarchical') {
+      alert(`Export failed: ${result.error}`);
+    } else {
+      alert(window.i18n.t('tm_export_failed', { error: result.error }));
+    }
   }
 }
 

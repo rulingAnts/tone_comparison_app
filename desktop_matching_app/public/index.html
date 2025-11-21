@@ -1091,6 +1091,42 @@
     </div>
   </div>
 
+  <!-- Conflict Resolution Modal -->
+  <div id="conflictModal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 900px; max-height: 80vh; overflow-y: auto;">
+      <div class="modal-header">
+        <h2>⚠️ Data Conflicts Detected</h2>
+      </div>
+      
+      <div class="modal-body">
+        <p style="margin-bottom: 16px;">
+          Some words in your tone groups have values that differ from the group's majority. 
+          If you proceed with export, these values will be <strong>overwritten</strong> to ensure consistency.
+        </p>
+        
+        <div id="conflictList" style="max-height: 400px; overflow-y: auto; margin: 20px 0; border: 1px solid #ddd; border-radius: 4px; padding: 12px;">
+          <!-- Conflicts will be rendered here -->
+        </div>
+        
+        <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 12px; border-radius: 4px; margin: 16px 0;">
+          <strong>Alternative Options:</strong>
+          <ul style="margin: 8px 0 0 0; padding-left: 24px;">
+            <li>Configure different output field names in the bundle to preserve original data</li>
+            <li>Manually fix inconsistencies in your source XML file</li>
+            <li>Remove problematic fields from bundle configuration</li>
+          </ul>
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button class="secondary" onclick="cancelConflictExport()">Cancel Export</button>
+        <button onclick="approveConflictExport()" style="background: #dc3545; color: white;">
+          Overwrite Conflicts and Export
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script src="localization.js"></script>
   <script src="renderer.js"></script>
 </body>

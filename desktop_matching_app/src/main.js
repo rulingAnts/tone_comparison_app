@@ -541,111 +541,106 @@ async function loadLegacyBundle(filePath) {
         const abbreviationKey = settings.abbreviationField;
         const exemplarKey = settings.exemplarField;
         
-        // Check which fields to use for grouping
-        const useIdField = settings.loadGroupsFromId && tgIdKey;
-        const usePitchField = settings.loadGroupsFromPitch && pitchKey;
-        const useAbbreviationField = settings.loadGroupsFromAbbreviation && abbreviationKey;
-        const useExemplarField = settings.loadGroupsFromExemplar && exemplarKey;
+        // Backward compatibility: migrate old multi-field settings to new single-field
+        if (settings.groupingField === undefined) {
+          if (settings.loadGroupsFromId) {
+            settings.groupingField = 'id';
+          } else if (settings.loadGroupsFromPitch) {
+            settings.groupingField = 'pitch';
+          } else if (settings.loadGroupsFromAbbreviation) {
+            settings.groupingField = 'abbreviation';
+          } else if (settings.loadGroupsFromExemplar) {
+            settings.groupingField = 'exemplar';
+          } else {
+            settings.groupingField = 'none';
+          }
+        }
         
-        // Build group map from records
-        const groupMap = new Map(); // composite key -> { id, members[], metadata }
+        // Determine which single field to use for grouping
+        const groupingField = settings.groupingField || 'none';
+        let groupingKey = null;
         
-        dataForms.forEach(record => {
-          const ref = normalizeRefString(record.Reference);
-          
-          // Build composite key from selected fields
-          const keyParts = [];
-          if (useIdField && record[tgIdKey]) {
-            keyParts.push(`id:${record[tgIdKey]}`);
-          }
-          if (usePitchField && record[pitchKey]) {
-            keyParts.push(`pitch:${record[pitchKey]}`);
-          }
-          if (useAbbreviationField && record[abbreviationKey]) {
-            keyParts.push(`abbrev:${record[abbreviationKey]}`);
-          }
-          if (useExemplarField && record[exemplarKey]) {
-            keyParts.push(`exemplar:${record[exemplarKey]}`);
-          }
-          
-          // Only group if we have at least one non-empty field
-          if (keyParts.length > 0) {
-            const compositeKey = keyParts.join('|');
+        if (groupingField === 'id' && tgIdKey) {
+          groupingKey = tgIdKey;
+        } else if (groupingField === 'pitch' && pitchKey) {
+          groupingKey = pitchKey;
+        } else if (groupingField === 'abbreviation' && abbreviationKey) {
+          groupingKey = abbreviationKey;
+        } else if (groupingField === 'exemplar' && exemplarKey) {
+          groupingKey = exemplarKey;
+        }
+        
+        // Build group map from records using single field
+        const groupMap = new Map(); // field value -> { id, members[], groupingValue }
+        
+        if (groupingKey) {
+          dataForms.forEach(record => {
+            const ref = normalizeRefString(record.Reference);
+            const groupValue = record[groupingKey];
             
-            if (!groupMap.has(compositeKey)) {
-              // Determine group ID: prefer existing ID field, fallback to generated
-              const groupId = (useIdField && record[tgIdKey]) 
-                ? record[tgIdKey] 
-                : `group_${compositeKey.replace(/[^a-zA-Z0-9]/g, '_')}`;
+            if (groupValue) {
+              if (!groupMap.has(groupValue)) {
+                // Determine group ID: use value if it's the ID field, otherwise generate
+                const groupId = (groupingField === 'id') 
+                  ? groupValue 
+                  : `group_${groupValue.replace(/[^a-zA-Z0-9]/g, '_')}`;
+                
+                groupMap.set(groupValue, {
+                  id: groupId,
+                  groupNumber: groupMap.size + 1,
+                  members: [],
+                  image: null,
+                  additionsSinceReview: 0,
+                  requiresReview: false,
+                  groupingValue: groupValue, // Store the value used for grouping
+                });
+              }
               
-              groupMap.set(compositeKey, {
-                id: groupId,
-                groupNumber: groupMap.size + 1,
-                members: [],
-                image: null,
-                additionsSinceReview: 0,
-                requiresReview: false,
-                // Store metadata if available
-                pitchTranscription: usePitchField ? record[pitchKey] : undefined,
-                toneAbbreviation: useAbbreviationField ? record[abbreviationKey] : undefined,
-                exemplarWord: useExemplarField ? record[exemplarKey] : undefined,
-              });
+              groupMap.get(groupValue).members.push(ref);
+              
+              // Remove from queue
+              const qIdx = sessionData.queue.indexOf(ref);
+              if (qIdx !== -1) {
+                sessionData.queue.splice(qIdx, 1);
+              }
             }
             
-            groupMap.get(compositeKey).members.push(ref);
-            
-            // Remove from queue
-            const qIdx = sessionData.queue.indexOf(ref);
-            if (qIdx !== -1) {
-              sessionData.queue.splice(qIdx, 1);
+            // Import user spelling if present
+            if (record[userSpellingKey]) {
+              sessionData.records[ref] = {
+                userSpelling: record[userSpellingKey],
+              };
             }
-          }
-          
-          // Import user spelling if present
-          if (record[userSpellingKey]) {
-            sessionData.records[ref] = {
-              userSpelling: record[userSpellingKey],
-            };
-          }
-        });
+          });
+        } else {
+          // No grouping field selected, just import user spelling
+          dataForms.forEach(record => {
+            const ref = normalizeRefString(record.Reference);
+            if (record[userSpellingKey]) {
+              sessionData.records[ref] = {
+                userSpelling: record[userSpellingKey],
+              };
+            }
+          });
+        }
         
         // Convert to array and sort by group number
         sessionData.groups = Array.from(groupMap.values()).sort((a, b) => a.groupNumber - b.groupNumber);
         
-        // Determine most common metadata values for each group
+        // Determine most common metadata values for ALL fields (not just grouping field)
+        // This ensures group has representative values even if grouped by ID only
         sessionData.groups.forEach(group => {
           const commonMetadata = findMostCommonGroupMetadata(
             group.members,
             dataForms,
-            usePitchField ? pitchKey : null,
-            useAbbreviationField ? abbreviationKey : null,
-            useExemplarField ? exemplarKey : null
+            pitchKey,
+            abbreviationKey,
+            exemplarKey
           );
           
-          // Update group with most common values (overwrite initial first-member values)
-          if (commonMetadata.pitchTranscription !== undefined) {
-            group.pitchTranscription = commonMetadata.pitchTranscription;
-          }
-          if (commonMetadata.toneAbbreviation !== undefined) {
-            group.toneAbbreviation = commonMetadata.toneAbbreviation;
-          }
-          if (commonMetadata.exemplarWord !== undefined) {
-            group.exemplarWord = commonMetadata.exemplarWord;
-          }
-          
-          // Set exemplarWordRef: prefer member with exemplar word if available, else first member
-          if (group.members.length > 0) {
-            if (group.exemplarWord && exemplarKey) {
-              // Find member that has this exemplar value
-              const exemplarMember = group.members.find(ref => {
-                const record = dataForms.find(df => normalizeRefString(df.Reference) === ref);
-                return record && record[exemplarKey] === group.exemplarWord;
-              });
-              group.exemplarWordRef = exemplarMember || group.members[0];
-            } else {
-              group.exemplarWordRef = group.members[0];
-            }
-          }
+          group.pitchTranscription = commonMetadata.pitchTranscription;
+          group.toneAbbreviation = commonMetadata.toneAbbreviation;
+          group.exemplarWord = commonMetadata.exemplarWord;
         });
         
         // Try to load images from images/ folder if present
@@ -1320,7 +1315,6 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
       subBundleSession.groups = [];
       
       // If reimporting, reconstruct groups from XML tone assignments
-      // Can use multiple field sources for grouping
       if (isReimport) {
         const settings = bundleData.settings;
         const tgKey = settings.toneGroupElement || 'SurfaceMelodyGroup';
@@ -1330,115 +1324,108 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
         const abbreviationKey = settings.abbreviationField;
         const exemplarKey = settings.exemplarField;
         
-        // Check which fields to use for grouping
-        const useIdField = settings.loadGroupsFromId && tgIdKey;
-        const usePitchField = settings.loadGroupsFromPitch && pitchKey;
-        const useAbbreviationField = settings.loadGroupsFromAbbreviation && abbreviationKey;
-        const useExemplarField = settings.loadGroupsFromExemplar && exemplarKey;
+        // Backward compatibility: migrate old multi-field settings to new single-field
+        if (settings.groupingField === undefined) {
+          if (settings.loadGroupsFromId) {
+            settings.groupingField = 'id';
+          } else if (settings.loadGroupsFromPitch) {
+            settings.groupingField = 'pitch';
+          } else if (settings.loadGroupsFromAbbreviation) {
+            settings.groupingField = 'abbreviation';
+          } else if (settings.loadGroupsFromExemplar) {
+            settings.groupingField = 'exemplar';
+          } else {
+            settings.groupingField = 'none';
+          }
+        }
         
-        // Build group map from records
-        // Strategy: Create composite keys from selected fields to group words
-        const groupMap = new Map(); // composite key -> { id, members[], metadata }
-        const refToGroupKey = new Map(); // ref -> composite key
+        // Determine which single field to use for grouping
+        const groupingField = settings.groupingField || 'none';
+        let groupingKey = null;
         
-        dataForms.forEach(record => {
-          const ref = normalizeRefString(record.Reference);
-          
-          // Build composite key from selected fields
-          const keyParts = [];
-          if (useIdField && record[tgIdKey]) {
-            keyParts.push(`id:${record[tgIdKey]}`);
-          }
-          if (usePitchField && record[pitchKey]) {
-            keyParts.push(`pitch:${record[pitchKey]}`);
-          }
-          if (useAbbreviationField && record[abbreviationKey]) {
-            keyParts.push(`abbrev:${record[abbreviationKey]}`);
-          }
-          if (useExemplarField && record[exemplarKey]) {
-            keyParts.push(`exemplar:${record[exemplarKey]}`);
-          }
-          
-          // Only group if we have at least one non-empty field
-          if (keyParts.length > 0) {
-            const compositeKey = keyParts.join('|');
+        if (groupingField === 'id' && tgIdKey) {
+          groupingKey = tgIdKey;
+        } else if (groupingField === 'pitch' && pitchKey) {
+          groupingKey = pitchKey;
+        } else if (groupingField === 'abbreviation' && abbreviationKey) {
+          groupingKey = abbreviationKey;
+        } else if (groupingField === 'exemplar' && exemplarKey) {
+          groupingKey = exemplarKey;
+        }
+        
+        // Build group map from records using single field
+        const groupMap = new Map(); // field value -> { id, members[], groupingValue }
+        
+        if (groupingKey) {
+          dataForms.forEach(record => {
+            const ref = normalizeRefString(record.Reference);
+            const groupValue = record[groupingKey];
             
-            if (!groupMap.has(compositeKey)) {
-              // Determine group ID: prefer existing ID field, fallback to generated
-              const groupId = (useIdField && record[tgIdKey]) 
-                ? record[tgIdKey] 
-                : `group_${compositeKey.replace(/[^a-zA-Z0-9]/g, '_')}`;
+            if (groupValue) {
+              if (!groupMap.has(groupValue)) {
+                // Determine group ID: use value if it's the ID field, otherwise generate
+                const groupId = (groupingField === 'id') 
+                  ? groupValue 
+                  : `group_${groupValue.replace(/[^a-zA-Z0-9]/g, '_')}`;
+                
+                groupMap.set(groupValue, {
+                  id: groupId,
+                  groupNumber: groupMap.size + 1,
+                  members: [],
+                  image: null,
+                  additionsSinceReview: 0,
+                  requiresReview: false,
+                  groupingValue: groupValue, // Store the value used for grouping
+                });
+              }
               
-              groupMap.set(compositeKey, {
-                id: groupId,
-                groupNumber: groupMap.size + 1,
-                members: [],
-                image: null,
-                additionsSinceReview: 0,
-                requiresReview: false,
-                // Store metadata if available
-                pitchTranscription: usePitchField ? record[pitchKey] : undefined,
-                toneAbbreviation: useAbbreviationField ? record[abbreviationKey] : undefined,
-                exemplarWord: useExemplarField ? record[exemplarKey] : undefined,
-              });
+              groupMap.get(groupValue).members.push(ref);
+              
+              // Remove from queue
+              const qIdx = subBundleSession.queue.indexOf(ref);
+              if (qIdx !== -1) {
+                subBundleSession.queue.splice(qIdx, 1);
+              }
             }
             
-            groupMap.get(compositeKey).members.push(ref);
-            refToGroupKey.set(ref, compositeKey);
-            
-            // Remove from queue
-            const qIdx = subBundleSession.queue.indexOf(ref);
-            if (qIdx !== -1) {
-              subBundleSession.queue.splice(qIdx, 1);
+            // Import user spelling if present
+            if (record[userSpellingKey]) {
+              if (!sessionData.records[ref]) {
+                sessionData.records[ref] = {};
+              }
+              sessionData.records[ref].userSpelling = record[userSpellingKey];
             }
-          }
-          
-          // Import user spelling if present
-          if (record[userSpellingKey]) {
-            if (!sessionData.records[ref]) {
-              sessionData.records[ref] = {};
+          });
+        } else {
+          // No grouping field selected, just import user spelling
+          dataForms.forEach(record => {
+            const ref = normalizeRefString(record.Reference);
+            if (record[userSpellingKey]) {
+              if (!sessionData.records[ref]) {
+                sessionData.records[ref] = {};
+              }
+              sessionData.records[ref].userSpelling = record[userSpellingKey];
             }
-            sessionData.records[ref].userSpelling = record[userSpellingKey];
-          }
-        });
+          });
+        }
         
         // Convert to array and sort by group number
         subBundleSession.groups = Array.from(groupMap.values()).sort((a, b) => a.groupNumber - b.groupNumber);
         
-        // Determine most common metadata values for each group
+        // Determine most common metadata values for ALL fields (not just grouping field)
+        // This ensures group has representative values even if grouped by ID only
         subBundleSession.groups.forEach(group => {
           const commonMetadata = findMostCommonGroupMetadata(
             group.members,
             dataForms,
-            usePitchField ? pitchKey : null,
-            useAbbreviationField ? abbreviationKey : null,
-            useExemplarField ? exemplarKey : null
+            pitchKey,
+            abbreviationKey,
+            exemplarKey
           );
           
-          // Update group with most common values (overwrite initial first-member values)
-          if (commonMetadata.pitchTranscription !== undefined) {
-            group.pitchTranscription = commonMetadata.pitchTranscription;
-          }
-          if (commonMetadata.toneAbbreviation !== undefined) {
-            group.toneAbbreviation = commonMetadata.toneAbbreviation;
-          }
-          if (commonMetadata.exemplarWord !== undefined) {
-            group.exemplarWord = commonMetadata.exemplarWord;
-          }
-          
-          // Set exemplarWordRef: prefer member with exemplar word if available, else first member
-          if (group.members.length > 0) {
-            if (group.exemplarWord && exemplarKey) {
-              // Find member that has this exemplar value
-              const exemplarMember = group.members.find(ref => {
-                const record = dataForms.find(df => normalizeRefString(df.Reference) === ref);
-                return record && record[exemplarKey] === group.exemplarWord;
-              });
-              group.exemplarWordRef = exemplarMember || group.members[0];
-            } else {
-              group.exemplarWordRef = group.members[0];
-            }
-          }
+          group.pitchTranscription = commonMetadata.pitchTranscription;
+          group.toneAbbreviation = commonMetadata.toneAbbreviation;
+          group.exemplarWord = commonMetadata.exemplarWord;
         });
         
         // Try to load images from images/ folder if present
@@ -1564,6 +1551,75 @@ ipcMain.handle('clear-bundle', async () => {
     console.error('[desktop_matching] Failed to clear bundle:', error);
     return { success: false, error: error.message };
   }
+});
+
+// Check for conflicts before export
+ipcMain.handle('check-export-conflicts', async () => {
+  if (!bundleData || !sessionData) {
+    return { hasConflicts: false, error: 'No bundle loaded' };
+  }
+  
+  const settings = bundleData.settings;
+  const pitchKey = settings.pitchField;
+  const abbreviationKey = settings.abbreviationField;
+  const exemplarKey = settings.exemplarField;
+  
+  let conflicts = [];
+  
+  if (bundleType === 'hierarchical') {
+    // Check all sub-bundles for conflicts
+    if (sessionData.subBundles && Array.isArray(sessionData.subBundles)) {
+      sessionData.subBundles.forEach(subBundleSession => {
+        if (subBundleSession.groups && subBundleSession.groups.length > 0) {
+          // Find the dataForms for this sub-bundle
+          const subBundle = bundleData.subBundles.find(sb => sb.path === subBundleSession.path);
+          if (subBundle && subBundle.references && bundleData.allDataForms) {
+            const refSet = new Set(subBundle.references.map(r => normalizeRefString(r)));
+            const dataForms = bundleData.allDataForms.filter(df => {
+              const ref = normalizeRefString(df.Reference);
+              return refSet.has(ref);
+            });
+            
+            const subBundleConflicts = detectGroupConflicts(
+              subBundleSession.groups,
+              dataForms,
+              pitchKey,
+              abbreviationKey,
+              exemplarKey
+            );
+            
+            // Add sub-bundle path to each conflict for context
+            subBundleConflicts.forEach(conflict => {
+              conflict.subBundlePath = subBundleSession.path;
+            });
+            
+            conflicts = conflicts.concat(subBundleConflicts);
+          }
+        }
+      });
+    }
+  } else {
+    // Legacy bundle - check session groups
+    if (sessionData.groups && sessionData.groups.length > 0) {
+      conflicts = detectGroupConflicts(
+        sessionData.groups,
+        bundleData.records,
+        pitchKey,
+        abbreviationKey,
+        exemplarKey
+      );
+    }
+  }
+  
+  return {
+    hasConflicts: conflicts.length > 0,
+    conflicts: conflicts,
+    fieldNames: {
+      pitch: pitchKey,
+      abbreviation: abbreviationKey,
+      exemplar: exemplarKey,
+    },
+  };
 });
 
 ipcMain.handle('export-bundle', async () => {
