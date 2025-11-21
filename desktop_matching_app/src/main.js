@@ -571,6 +571,8 @@ async function loadLegacyBundle(filePath) {
       }
       
       // Build group map from records using single field (if configured)
+      const groupMap = new Map(); // field value -> { id, members[], groupingValue }
+      
       if (groupingKey) {
           dataForms.forEach(record => {
             const ref = normalizeRefString(record.Reference);
@@ -610,17 +612,6 @@ async function loadLegacyBundle(filePath) {
               };
             }
           });
-        } else {
-          // No grouping field selected, just import user spelling
-          dataForms.forEach(record => {
-            const ref = normalizeRefString(record.Reference);
-            if (record[userSpellingKey]) {
-              sessionData.records[ref] = {
-                userSpelling: record[userSpellingKey],
-              };
-            }
-          });
-        }
         
         // Convert to array and sort by group number
         sessionData.groups = Array.from(groupMap.values()).sort((a, b) => a.groupNumber - b.groupNumber);
@@ -639,6 +630,16 @@ async function loadLegacyBundle(filePath) {
           group.pitchTranscription = commonMetadata.pitchTranscription;
           group.toneAbbreviation = commonMetadata.toneAbbreviation;
           group.exemplarWord = commonMetadata.exemplarWord;
+        });
+      } else {
+        // No grouping field selected, just import user spelling
+        dataForms.forEach(record => {
+          const ref = normalizeRefString(record.Reference);
+          if (record[userSpellingKey]) {
+            sessionData.records[ref] = {
+              userSpelling: record[userSpellingKey],
+            };
+          }
         });
       }
       
@@ -1397,18 +1398,6 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
               sessionData.records[ref].userSpelling = record[userSpellingKey];
             }
           });
-        } else {
-          // No grouping field selected, just import user spelling
-          dataForms.forEach(record => {
-            const ref = normalizeRefString(record.Reference);
-            if (record[userSpellingKey]) {
-              if (!sessionData.records[ref]) {
-                sessionData.records[ref] = {};
-              }
-              sessionData.records[ref].userSpelling = record[userSpellingKey];
-            }
-          });
-        }
         
         // Convert to array and sort by group number
         subBundleSession.groups = Array.from(groupMap.values()).sort((a, b) => a.groupNumber - b.groupNumber);
@@ -1428,24 +1417,37 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
           group.toneAbbreviation = commonMetadata.toneAbbreviation;
           group.exemplarWord = commonMetadata.exemplarWord;
         });
+      } else {
+        // No grouping field selected, just import user spelling
+        dataForms.forEach(record => {
+          const ref = normalizeRefString(record.Reference);
+          if (record[userSpellingKey]) {
+            if (!sessionData.records[ref]) {
+              sessionData.records[ref] = {};
+            }
+            sessionData.records[ref].userSpelling = record[userSpellingKey];
+          }
+        });
       }
       
       // Try to load images from images/ folder if present (regardless of grouping)
       const imagesPath = path.join(subBundle.fullPath, 'images');
-        if (fs.existsSync(imagesPath)) {
-          subBundleSession.groups.forEach(group => {
-            // Look for image files matching group number pattern
-            const files = fs.readdirSync(imagesPath);
-            const groupImageFile = files.find(f => 
-              f.match(new RegExp(`^(group[_\\s-]?)?${group.groupNumber}[._]`, 'i'))
-            );
-            if (groupImageFile) {
-              group.image = path.join(imagesPath, groupImageFile);
-            }
-          });
-        }
-        
+      if (fs.existsSync(imagesPath) && subBundleSession.groups.length > 0) {
+        subBundleSession.groups.forEach(group => {
+          // Look for image files matching group number pattern
+          const files = fs.readdirSync(imagesPath);
+          const groupImageFile = files.find(f => 
+            f.match(new RegExp(`^(group[_\\s-]?)?${group.groupNumber}[._]`, 'i'))
+          );
+          if (groupImageFile) {
+            group.image = path.join(imagesPath, groupImageFile);
+          }
+        });
+      }
+      
+      if (subBundleSession.groups.length > 0) {
         console.log(`[desktop_matching] Loaded ${subBundleSession.groups.length} existing tone groups for sub-bundle`);
+      }
       }
       
       // Update assigned count
