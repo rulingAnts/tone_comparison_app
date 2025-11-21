@@ -43,6 +43,18 @@ coverage/
 # Flutter/Gradle build outputs
 build/
 **/build/
+# Exception: Allow installer assets in electron app build dirs
+!bundler_app/build/installer*.{ico,png,nsh}
+!comparison_app/build/installer*.{ico,png,nsh}
+!desktop_matching_app/build/installer*.{ico,png,nsh}
+# But block all executables and large files
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+*.snap
+*.msi
 
 # Android / Gradle
 .gradle/
