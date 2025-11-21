@@ -1330,13 +1330,16 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
     
     // Check if this sub-bundle has been loaded before
     if (!subBundleSession.queue || subBundleSession.queue.length === 0) {
-      // First time loading - initialize queue and groups
+      // First time loading - initialize queue
       const queue = dataForms.map(df => normalizeRefString(df.Reference));
       subBundleSession.queue = queue;
+    }
+    
+    // Pre-populate groups from XML if grouping field is configured AND no groups exist yet
+    // This works for both fresh bundles and re-imports, and handles session restoration
+    if (!subBundleSession.groups || subBundleSession.groups.length === 0) {
       subBundleSession.groups = [];
       
-      // Pre-populate groups from XML if grouping field is configured
-      // This works for both fresh bundles and re-imports
       {
         const settings = bundleData.settings;
         const tgKey = settings.toneGroupElement || 'SurfaceMelodyGroup';
@@ -1482,11 +1485,11 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
         console.log(`[desktop_matching] Loaded ${subBundleSession.groups.length} existing tone groups for sub-bundle`);
       }
       }
-      
-      // Update assigned count
-      const assignedCount = dataForms.length - subBundleSession.queue.length;
-      subBundleSession.assignedCount = assignedCount;
     }
+    
+    // Update assigned count
+    const assignedCount = dataForms.length - subBundleSession.queue.length;
+    subBundleSession.assignedCount = assignedCount;
     
     // Set current sub-bundle in session
     sessionData.currentSubBundle = subBundlePath;
