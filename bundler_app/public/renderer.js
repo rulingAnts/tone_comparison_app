@@ -300,6 +300,7 @@ function restoreTreeNode(node) {
   
   const restored = {
     field: node.field || '',
+    isOrganizational: node.isOrganizational || false, // Preserve organizational flag
     values: (node.values || []).map(value => ({
       value: value.value,
       count: value.count || 0,
