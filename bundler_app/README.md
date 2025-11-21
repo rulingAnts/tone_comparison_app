@@ -14,6 +14,18 @@ Electron desktop application for creating data bundles for the Tone Matching mob
 
 - Node.js 18 or higher
 - npm
+- **Windows builds only**: FFmpeg static binaries (see below)
+
+### FFmpeg for Windows Builds
+
+If you're building the Windows installer, you'll need to provide FFmpeg binaries:
+
+1. Download the ffmpeg-static zip from: https://github.com/eugeneware/ffmpeg-static/releases
+   - Get the Windows x64 build (e.g., `ffmpeg-4.4.1-win32-x64.zip`)
+2. Create a `win32-resources` folder in the project root if it doesn't exist
+3. Rename the downloaded file to `ffmpeg-static.zip` and place it in `win32-resources/`
+
+This file is excluded from git due to its size (28MB). The Mac and Linux builds use the `ffmpeg-static` npm package automatically.
 
 ## Getting Started
 

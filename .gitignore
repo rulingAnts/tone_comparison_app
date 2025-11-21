@@ -56,6 +56,9 @@ build/
 *.snap
 *.msi
 
+# Large binary dependencies (>25MB)
+win32-resources/ffmpeg-static.zip
+
 # Android / Gradle
 .gradle/
 **/.gradle/
