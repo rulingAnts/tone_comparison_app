@@ -312,6 +312,42 @@ function restoreTreeNode(node) {
     }))
   };
   
+  // Preserve organizational group data
+  if (node.organizationalBaseField) {
+    restored.organizationalBaseField = node.organizationalBaseField;
+  }
+  
+  if (node.organizationalGroups && Array.isArray(node.organizationalGroups)) {
+    restored.organizationalGroups = node.organizationalGroups.map(group => ({
+      name: group.name,
+      included: group.included !== false,
+      children: group.children ? {
+        field: group.children.field || '',
+        values: (group.children.values || []).map(value => ({
+          value: value.value,
+          count: value.count || 0,
+          included: value.included !== false,
+          label: value.label || value.value,
+          audioVariants: Array.isArray(value.audioVariants) ? value.audioVariants : audioVariants.map((_, i) => i),
+          parentAudioVariants: Array.isArray(value.parentAudioVariants) ? value.parentAudioVariants : null,
+          children: value.children ? restoreTreeNode(value.children) : null
+        }))
+      } : null
+    }));
+  }
+  
+  if (node.unassignedValues && Array.isArray(node.unassignedValues)) {
+    restored.unassignedValues = node.unassignedValues.map(value => ({
+      value: value.value,
+      count: value.count || 0,
+      included: value.included !== false,
+      label: value.label || value.value,
+      audioVariants: Array.isArray(value.audioVariants) ? value.audioVariants : audioVariants.map((_, i) => i),
+      parentAudioVariants: Array.isArray(value.parentAudioVariants) ? value.parentAudioVariants : null,
+      children: value.children ? restoreTreeNode(value.children) : null
+    }));
+  }
+  
   return restored;
 }
 

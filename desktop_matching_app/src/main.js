@@ -671,7 +671,7 @@ async function loadLegacyBundle(filePath) {
       recordCount: dataForms.length,
       session: sessionData,
       isReimport,
-      importedGroups: isReimport ? sessionData.groups.length : 0,
+      importedGroups: sessionData.groups.length,
     };
   } catch (error) {
     return {
@@ -1475,7 +1475,7 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
       recordCount: dataForms.length,
       session: sessionData,
       isReimport,
-      importedGroups: isReimport ? subBundleSession.groups.length : 0,
+      importedGroups: subBundleSession.groups.length,
     };
   } catch (error) {
     return {
