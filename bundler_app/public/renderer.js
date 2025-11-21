@@ -3111,8 +3111,9 @@ async function checkConflicts() {
   
   try {
     // Get current settings
-    const settings = collectCurrentSettings();
-    const xmlPath = document.getElementById('xmlPath').value;
+    const config = collectCurrentSettings();
+    const xmlPath = config.xmlPath || document.getElementById('xmlPath').value;
+    const settings = config.settings;
     
     if (!xmlPath) {
       resultDiv.style.display = 'block';
