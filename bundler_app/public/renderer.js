@@ -243,13 +243,10 @@ async function loadPersistedSettings() {
   
   // Audio processing defaults
   const ap = s.audioProcessing || {};
-  const apAutoTrim = !!ap.autoTrim;
   const apAutoNorm = !!ap.autoNormalize;
   const apFlac = !!ap.convertToFlac;
-  const autoTrimEl = document.getElementById('autoTrim');
   const autoNormEl = document.getElementById('autoNormalize');
   const flacEl = document.getElementById('convertToFlac');
-  if (autoTrimEl) autoTrimEl.checked = apAutoTrim;
   if (autoNormEl) autoNormEl.checked = apAutoNorm;
   if (flacEl) flacEl.checked = apFlac;
   const refs = Array.isArray(s.referenceNumbers) ? s.referenceNumbers : [];
@@ -357,7 +354,7 @@ function attachChangePersistence() {
   [
     'showWrittenForm', 'showGloss', 'requireUserSpelling', 'showReferenceNumbers',
     'userSpellingElement', 'toneGroupElement', 'referenceNumbers', 'glossElement', 'bundleDescription',
-    'autoTrim', 'autoNormalize', 'convertToFlac', 'compressionLevel',
+    'autoNormalize', 'convertToFlac', 'compressionLevel',
     'toneGroupIdField', 'pitchField', 'abbreviationField', 'exemplarField',
   ].forEach((id) => {
     const el = byId(id);
@@ -442,7 +439,7 @@ function collectCurrentSettings() {
       bundleDescription: document.getElementById('bundleDescription').value.trim(),
       hierarchyTree: hierarchyTree, // Save hierarchy tree configuration
       audioProcessing: {
-        autoTrim: !!document.getElementById('autoTrim')?.checked,
+        autoTrim: false, // Always disabled - trimming was removing important audio
         autoNormalize: !!document.getElementById('autoNormalize')?.checked,
         convertToFlac: !!document.getElementById('convertToFlac')?.checked,
       },
