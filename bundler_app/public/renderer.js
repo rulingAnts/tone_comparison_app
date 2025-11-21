@@ -3095,3 +3095,144 @@ function updateCreateButtonText() {
     btn.textContent = 'Create Bundle (.tncmp)';
   }
 }
+
+// Check for conflicts in source data
+async function checkConflicts() {
+  const resultDiv = document.getElementById('conflictCheckResult');
+  const btn = document.getElementById('checkConflictsBtn');
+  
+  // Clear previous results
+  resultDiv.style.display = 'none';
+  resultDiv.innerHTML = '';
+  
+  // Disable button during check
+  btn.disabled = true;
+  btn.textContent = '🔍 Checking...';
+  
+  try {
+    // Get current settings
+    const settings = await collectSettings();
+    const xmlPath = document.getElementById('xmlPath').value;
+    
+    if (!xmlPath) {
+      resultDiv.style.display = 'block';
+      resultDiv.style.background = '#fff3cd';
+      resultDiv.style.border = '1px solid #ffc107';
+      resultDiv.style.padding = '12px';
+      resultDiv.style.borderRadius = '4px';
+      resultDiv.innerHTML = '<strong>⚠️ No XML file selected.</strong> Please select a Dekereke XML file first.';
+      return;
+    }
+    
+    const result = await ipcRenderer.invoke('check-conflicts', { xmlPath, settings });
+    
+    if (!result.success) {
+      resultDiv.style.display = 'block';
+      resultDiv.style.background = '#f8d7da';
+      resultDiv.style.border = '1px solid #f5c6cb';
+      resultDiv.style.padding = '12px';
+      resultDiv.style.borderRadius = '4px';
+      resultDiv.innerHTML = `<strong>❌ Error:</strong> ${result.error}`;
+      return;
+    }
+    
+    if (result.message) {
+      // Info message (no grouping field configured, etc.)
+      resultDiv.style.display = 'block';
+      resultDiv.style.background = '#d1ecf1';
+      resultDiv.style.border = '1px solid #bee5eb';
+      resultDiv.style.padding = '12px';
+      resultDiv.style.borderRadius = '4px';
+      resultDiv.innerHTML = `<strong>ℹ️ Info:</strong> ${result.message}`;
+      return;
+    }
+    
+    if (!result.hasConflicts) {
+      // No conflicts found
+      resultDiv.style.display = 'block';
+      resultDiv.style.background = '#d4edda';
+      resultDiv.style.border = '1px solid #c3e6cb';
+      resultDiv.style.padding = '12px';
+      resultDiv.style.borderRadius = '4px';
+      resultDiv.innerHTML = `
+        <strong>✅ No conflicts detected!</strong><br>
+        <div style="margin-top: 8px; font-size: 13px;">
+          All words grouped by <strong>${result.groupingField}</strong> have consistent values 
+          across all configured fields. Your data is ready to export without any overwrites.
+        </div>
+      `;
+      return;
+    }
+    
+    // Conflicts found - show detailed report
+    let html = `
+      <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 12px; border-radius: 4px;">
+        <strong>⚠️ ${result.conflicts.length} group(s) with conflicts detected!</strong>
+        <div style="margin-top: 8px; font-size: 13px;">
+          These words will be <strong>overwritten</strong> during export to match their group's majority values:
+        </div>
+      </div>
+    `;
+    
+    result.conflicts.forEach(conflict => {
+      html += `
+        <div style="border: 1px solid #ddd; padding: 10px; margin-top: 10px; border-radius: 4px; background: #f9f9f9;">
+          <h4 style="margin: 0 0 8px 0; font-size: 14px;">Group ${conflict.groupNumber}${conflict.groupId ? ` (${conflict.groupId})` : ''}</h4>
+      `;
+      
+      if (conflict.pitchConflicts && conflict.pitchConflicts.length > 0) {
+        html += `<div style="margin-bottom: 6px;"><strong>Pitch (${result.fieldNames.pitch}):</strong><ul style="margin: 2px 0 0 20px; font-size: 12px;">`;
+        conflict.pitchConflicts.forEach(c => {
+          html += `<li>Ref ${c.reference}: "${c.currentValue}" → "${c.willBecome}"</li>`;
+        });
+        html += `</ul></div>`;
+      }
+      
+      if (conflict.abbreviationConflicts && conflict.abbreviationConflicts.length > 0) {
+        html += `<div style="margin-bottom: 6px;"><strong>Abbreviation (${result.fieldNames.abbreviation}):</strong><ul style="margin: 2px 0 0 20px; font-size: 12px;">`;
+        conflict.abbreviationConflicts.forEach(c => {
+          html += `<li>Ref ${c.reference}: "${c.currentValue}" → "${c.willBecome}"</li>`;
+        });
+        html += `</ul></div>`;
+      }
+      
+      if (conflict.exemplarConflicts && conflict.exemplarConflicts.length > 0) {
+        html += `<div style="margin-bottom: 6px;"><strong>Exemplar (${result.fieldNames.exemplar}):</strong><ul style="margin: 2px 0 0 20px; font-size: 12px;">`;
+        conflict.exemplarConflicts.forEach(c => {
+          html += `<li>Ref ${c.reference}: "${c.currentValue}" → "${c.willBecome}"</li>`;
+        });
+        html += `</ul></div>`;
+      }
+      
+      html += `</div>`;
+    });
+    
+    html += `
+      <div style="background: #d1ecf1; border: 1px solid #bee5eb; padding: 10px; margin-top: 10px; border-radius: 4px; font-size: 12px;">
+        <strong>What this means:</strong>
+        <ul style="margin: 6px 0 0 20px;">
+          <li>You can still create this bundle and use it normally</li>
+          <li>When exporting from the matching app, you'll see this same report</li>
+          <li>You can choose to approve the overwrites or cancel to fix your source data first</li>
+          <li>To avoid conflicts: ensure all words in each group have matching values, or configure different output field names</li>
+        </ul>
+      </div>
+    `;
+    
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = html;
+    
+  } catch (error) {
+    resultDiv.style.display = 'block';
+    resultDiv.style.background = '#f8d7da';
+    resultDiv.style.border = '1px solid #f5c6cb';
+    resultDiv.style.padding = '12px';
+    resultDiv.style.borderRadius = '4px';
+    resultDiv.innerHTML = `<strong>❌ Error:</strong> ${error.message}`;
+  } finally {
+    // Re-enable button
+    btn.disabled = false;
+    btn.textContent = '🔍 Check for Conflicts Now';
+  }
+}
+

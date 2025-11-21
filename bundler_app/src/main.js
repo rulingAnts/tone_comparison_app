@@ -279,6 +279,252 @@ ipcMain.handle('parse-xml', async (event, xmlPath) => {
   }
 });
 
+// Helper function: Find most common values for group metadata
+function findMostCommonGroupMetadata(members, dataForms, pitchKey, abbreviationKey, exemplarKey) {
+  const pitchCounts = new Map();
+  const abbrevCounts = new Map();
+  const exemplarCounts = new Map();
+  
+  members.forEach(ref => {
+    const record = dataForms.find(df => normalizeRefString(df.Reference) === ref);
+    if (!record) return;
+    
+    if (pitchKey && record[pitchKey]) {
+      const val = record[pitchKey];
+      pitchCounts.set(val, (pitchCounts.get(val) || 0) + 1);
+    }
+    if (abbreviationKey && record[abbreviationKey]) {
+      const val = record[abbreviationKey];
+      abbrevCounts.set(val, (abbrevCounts.get(val) || 0) + 1);
+    }
+    if (exemplarKey && record[exemplarKey]) {
+      const val = record[exemplarKey];
+      exemplarCounts.set(val, (exemplarCounts.get(val) || 0) + 1);
+    }
+  });
+  
+  const getMostCommon = (countMap) => {
+    if (countMap.size === 0) return undefined;
+    let maxCount = 0;
+    let mostCommon = undefined;
+    countMap.forEach((count, value) => {
+      if (count > maxCount) {
+        maxCount = count;
+        mostCommon = value;
+      }
+    });
+    return mostCommon;
+  };
+  
+  return {
+    pitchTranscription: getMostCommon(pitchCounts),
+    toneAbbreviation: getMostCommon(abbrevCounts),
+    exemplarWord: getMostCommon(exemplarCounts),
+  };
+}
+
+// Helper function: Detect conflicts in group metadata
+function detectGroupConflicts(groups, dataForms, pitchKey, abbreviationKey, exemplarKey) {
+  const conflicts = [];
+  
+  groups.forEach(group => {
+    const groupConflicts = {
+      groupNumber: group.groupNumber,
+      groupId: group.id,
+      groupingValue: group.groupingValue,
+      pitchConflicts: [],
+      abbreviationConflicts: [],
+      exemplarConflicts: [],
+    };
+    
+    group.members.forEach(ref => {
+      const record = dataForms.find(df => normalizeRefString(df.Reference) === ref);
+      if (!record) return;
+      
+      if (pitchKey && group.pitchTranscription !== undefined) {
+        const recordValue = record[pitchKey];
+        if (recordValue && recordValue !== group.pitchTranscription) {
+          groupConflicts.pitchConflicts.push({
+            reference: ref,
+            currentValue: recordValue,
+            willBecome: group.pitchTranscription,
+          });
+        }
+      }
+      
+      if (abbreviationKey && group.toneAbbreviation !== undefined) {
+        const recordValue = record[abbreviationKey];
+        if (recordValue && recordValue !== group.toneAbbreviation) {
+          groupConflicts.abbreviationConflicts.push({
+            reference: ref,
+            currentValue: recordValue,
+            willBecome: group.toneAbbreviation,
+          });
+        }
+      }
+      
+      if (exemplarKey && group.exemplarWord !== undefined) {
+        const recordValue = record[exemplarKey];
+        if (recordValue && recordValue !== group.exemplarWord) {
+          groupConflicts.exemplarConflicts.push({
+            reference: ref,
+            currentValue: recordValue,
+            willBecome: group.exemplarWord,
+          });
+        }
+      }
+    });
+    
+    if (groupConflicts.pitchConflicts.length > 0 ||
+        groupConflicts.abbreviationConflicts.length > 0 ||
+        groupConflicts.exemplarConflicts.length > 0) {
+      conflicts.push(groupConflicts);
+    }
+  });
+  
+  return conflicts;
+}
+
+// Check for conflicts in source XML data
+ipcMain.handle('check-conflicts', async (event, { xmlPath, settings }) => {
+  try {
+    if (!xmlPath || !fs.existsSync(xmlPath)) {
+      return { success: false, error: 'XML file not selected or not found' };
+    }
+    
+    if (!settings.groupingField || settings.groupingField === 'none') {
+      return { 
+        success: true, 
+        hasConflicts: false, 
+        message: 'No grouping field selected. Groups will not be pre-populated from existing data.' 
+      };
+    }
+    
+    // Parse XML
+    const xmlBuffer = fs.readFileSync(xmlPath);
+    const probe = xmlBuffer.slice(0, 200).toString('utf8');
+    const declMatch = probe.match(/encoding\s*=\s*"([^"]+)"/i);
+    const declared = declMatch ? declMatch[1].toLowerCase() : null;
+    let xmlData;
+    if ((declared && declared.includes('utf-16')) || probe.includes('\u0000')) {
+      xmlData = xmlBuffer.toString('utf16le');
+    } else {
+      xmlData = xmlBuffer.toString('utf8');
+    }
+    
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: '@_',
+      trimValues: true,
+      parseAttributeValue: false,
+      parseTagValue: false,
+    });
+    const xmlResult = parser.parse(xmlData);
+    const phonData = xmlResult.phon_data;
+    const dataForms = Array.isArray(phonData.data_form) 
+      ? phonData.data_form 
+      : [phonData.data_form];
+    
+    // Get field keys
+    const tgIdKey = settings.toneGroupIdElement || settings.toneGroupIdField || 'SurfaceMelodyGroupId';
+    const pitchKey = settings.pitchField;
+    const abbreviationKey = settings.abbreviationField;
+    const exemplarKey = settings.exemplarField;
+    
+    // Determine grouping key
+    const groupingField = settings.groupingField;
+    let groupingKey = null;
+    
+    if (groupingField === 'id' && tgIdKey) {
+      groupingKey = tgIdKey;
+    } else if (groupingField === 'pitch' && pitchKey) {
+      groupingKey = pitchKey;
+    } else if (groupingField === 'abbreviation' && abbreviationKey) {
+      groupingKey = abbreviationKey;
+    } else if (groupingField === 'exemplar' && exemplarKey) {
+      groupingKey = exemplarKey;
+    }
+    
+    if (!groupingKey) {
+      return {
+        success: true,
+        hasConflicts: false,
+        message: `Grouping field "${groupingField}" is selected but the corresponding XML field is not configured.`
+      };
+    }
+    
+    // Build groups based on single field
+    const groupMap = new Map();
+    
+    dataForms.forEach(record => {
+      const ref = normalizeRefString(record.Reference);
+      const groupValue = record[groupingKey];
+      
+      if (groupValue) {
+        if (!groupMap.has(groupValue)) {
+          const groupId = (groupingField === 'id') 
+            ? groupValue 
+            : `group_${groupValue.replace(/[^a-zA-Z0-9]/g, '_')}`;
+          
+          groupMap.set(groupValue, {
+            id: groupId,
+            groupNumber: groupMap.size + 1,
+            members: [],
+            groupingValue: groupValue,
+          });
+        }
+        
+        groupMap.get(groupValue).members.push(ref);
+      }
+    });
+    
+    // Convert to array
+    const groups = Array.from(groupMap.values()).sort((a, b) => a.groupNumber - b.groupNumber);
+    
+    // Determine most common metadata for each group
+    groups.forEach(group => {
+      const commonMetadata = findMostCommonGroupMetadata(
+        group.members,
+        dataForms,
+        pitchKey,
+        abbreviationKey,
+        exemplarKey
+      );
+      
+      group.pitchTranscription = commonMetadata.pitchTranscription;
+      group.toneAbbreviation = commonMetadata.toneAbbreviation;
+      group.exemplarWord = commonMetadata.exemplarWord;
+    });
+    
+    // Detect conflicts
+    const conflicts = detectGroupConflicts(
+      groups,
+      dataForms,
+      pitchKey,
+      abbreviationKey,
+      exemplarKey
+    );
+    
+    return {
+      success: true,
+      hasConflicts: conflicts.length > 0,
+      conflicts: conflicts,
+      groupCount: groups.size,
+      fieldNames: {
+        pitch: pitchKey,
+        abbreviation: abbreviationKey,
+        exemplar: exemplarKey,
+      },
+      groupingField: groupingField,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+});
+
 ipcMain.handle('create-bundle', async (event, config) => {
   try {
     const {

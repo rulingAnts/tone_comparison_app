@@ -698,11 +698,16 @@
           </div>
         </div>
         
-        <div style="background: #d1ecf1; border: 1px solid #bee5eb; border-radius: 4px; padding: 12px;">
+        <div style="background: #d1ecf1; border: 1px solid #bee5eb; border-radius: 4px; padding: 12px; margin-bottom: 12px;">
           <strong>ℹ️ Conflict Detection:</strong> Before export, the matching app will analyze all configured 
           fields and report any inconsistencies within groups. You'll see which words have conflicting values 
           and can choose whether to overwrite them with the group's majority values or cancel to fix the data manually.
         </div>
+        
+        <button id="checkConflictsBtn" onclick="checkConflicts()" style="width: 100%; padding: 10px; background: #17a2b8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
+          🔍 Check for Conflicts Now
+        </button>
+        <div id="conflictCheckResult" style="margin-top: 12px; display: none;"></div>
       </div>
     </div>
 
