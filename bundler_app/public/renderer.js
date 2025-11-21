@@ -223,6 +223,27 @@ async function loadPersistedSettings() {
     }
   }
   
+  // Restore group pre-population settings
+  if (s.loadGroupsFromId !== undefined) {
+    const cb = document.getElementById('loadGroupsFromId');
+    if (cb) cb.checked = s.loadGroupsFromId;
+  }
+  if (s.loadGroupsFromPitch !== undefined) {
+    const cb = document.getElementById('loadGroupsFromPitch');
+    if (cb) cb.checked = s.loadGroupsFromPitch;
+  }
+  if (s.loadGroupsFromAbbreviation !== undefined) {
+    const cb = document.getElementById('loadGroupsFromAbbreviation');
+    if (cb) cb.checked = s.loadGroupsFromAbbreviation;
+  }
+  if (s.loadGroupsFromExemplar !== undefined) {
+    const cb = document.getElementById('loadGroupsFromExemplar');
+    if (cb) cb.checked = s.loadGroupsFromExemplar;
+  }
+  
+  // Update group loading checkbox states based on field availability
+  updateGroupLoadingCheckboxes();
+  
   document.getElementById('bundleDescription').value = s.bundleDescription || '';
   
   // Compression level
@@ -365,6 +386,12 @@ function collectCurrentSettings() {
     ? document.getElementById('exemplarField')?.value?.trim()
     : null;
   
+  // Collect group pre-population settings
+  const loadGroupsFromId = document.getElementById('loadGroupsFromId')?.checked || false;
+  const loadGroupsFromPitch = document.getElementById('loadGroupsFromPitch')?.checked || false;
+  const loadGroupsFromAbbreviation = document.getElementById('loadGroupsFromAbbreviation')?.checked || false;
+  const loadGroupsFromExemplar = document.getElementById('loadGroupsFromExemplar')?.checked || false;
+  
   return {
     xmlPath: xmlFilePath,
     audioFolder: audioFolderPath,
@@ -384,6 +411,10 @@ function collectCurrentSettings() {
       pitchField: pitchField || undefined,
       abbreviationField: abbreviationField || undefined,
       exemplarField: exemplarField || undefined,
+      loadGroupsFromId: loadGroupsFromId,
+      loadGroupsFromPitch: loadGroupsFromPitch,
+      loadGroupsFromAbbreviation: loadGroupsFromAbbreviation,
+      loadGroupsFromExemplar: loadGroupsFromExemplar,
       showGloss: document.getElementById('showGloss').checked,
       glossElement: (document.getElementById('showGloss').checked
         ? (document.getElementById('glossElement').value || null)
@@ -694,10 +725,53 @@ function setupToneFieldToggles() {
     if (checkboxEl && selectEl) {
       checkboxEl.addEventListener('change', () => {
         selectEl.disabled = !checkboxEl.checked;
+        updateGroupLoadingCheckboxes();
         persistSettings();
       });
     }
   });
+  
+  // Add listeners to group loading checkboxes for persistence
+  ['loadGroupsFromId', 'loadGroupsFromPitch', 'loadGroupsFromAbbreviation', 'loadGroupsFromExemplar'].forEach(id => {
+    const cb = document.getElementById(id);
+    if (cb) {
+      cb.addEventListener('change', () => persistSettings());
+    }
+  });
+}
+
+// Update enabled/disabled state of group loading checkboxes based on field configuration
+function updateGroupLoadingCheckboxes() {
+  const idEnabled = document.getElementById('enableToneGroupId')?.checked && 
+                     document.getElementById('toneGroupIdField')?.value;
+  const pitchEnabled = document.getElementById('enablePitchField')?.checked && 
+                        document.getElementById('pitchField')?.value;
+  const abbrevEnabled = document.getElementById('enableAbbreviationField')?.checked && 
+                         document.getElementById('abbreviationField')?.value;
+  const exemplarEnabled = document.getElementById('enableExemplarField')?.checked && 
+                           document.getElementById('exemplarField')?.value;
+  
+  const loadIdCb = document.getElementById('loadGroupsFromId');
+  const loadPitchCb = document.getElementById('loadGroupsFromPitch');
+  const loadAbbrevCb = document.getElementById('loadGroupsFromAbbreviation');
+  const loadExemplarCb = document.getElementById('loadGroupsFromExemplar');
+  
+  if (loadIdCb) {
+    loadIdCb.disabled = !idEnabled;
+    if (!idEnabled) loadIdCb.checked = false;
+  }
+  if (loadPitchCb) {
+    loadPitchCb.disabled = !pitchEnabled;
+    if (!pitchEnabled) loadPitchCb.checked = false;
+  }
+  if (loadAbbrevCb) {
+    loadAbbrevCb.disabled = !abbrevEnabled;
+    if (!abbrevEnabled) loadAbbrevCb.checked = false;
+  }
+  if (loadExemplarCb) {
+    loadExemplarCb.disabled = !exemplarEnabled;
+    if (!exemplarEnabled) loadExemplarCb.checked = false;
+  }
 }
 
 // Hierarchy Tree Builder Functions

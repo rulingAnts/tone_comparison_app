@@ -423,30 +423,64 @@ async function loadLegacyBundle(filePath) {
       // If reimporting, reconstruct groups from XML tone assignments
       if (isReimport) {
         const tgKey = settings.toneGroupElement || 'SurfaceMelodyGroup';
-        const tgIdKey = settings.toneGroupIdElement || 'SurfaceMelodyGroupId';
+        const tgIdKey = settings.toneGroupIdElement || settings.toneGroupIdField || 'SurfaceMelodyGroupId';
         const userSpellingKey = settings.userSpellingElement || 'Orthographic';
+        const pitchKey = settings.pitchField;
+        const abbreviationKey = settings.abbreviationField;
+        const exemplarKey = settings.exemplarField;
+        
+        // Check which fields to use for grouping
+        const useIdField = settings.loadGroupsFromId && tgIdKey;
+        const usePitchField = settings.loadGroupsFromPitch && pitchKey;
+        const useAbbreviationField = settings.loadGroupsFromAbbreviation && abbreviationKey;
+        const useExemplarField = settings.loadGroupsFromExemplar && exemplarKey;
         
         // Build group map from records
-        const groupMap = new Map(); // groupNumber -> { id, members[], image }
+        const groupMap = new Map(); // composite key -> { id, members[], metadata }
         
         dataForms.forEach(record => {
           const ref = normalizeRefString(record.Reference);
-          const toneGroup = record[tgKey];
-          const groupId = record[tgIdKey];
           
-          if (toneGroup) {
-            const groupNum = parseInt(toneGroup);
-            if (!groupMap.has(groupNum)) {
-              groupMap.set(groupNum, {
-                id: groupId || `group_reimport_${groupNum}`,
-                groupNumber: groupNum,
+          // Build composite key from selected fields
+          const keyParts = [];
+          if (useIdField && record[tgIdKey]) {
+            keyParts.push(`id:${record[tgIdKey]}`);
+          }
+          if (usePitchField && record[pitchKey]) {
+            keyParts.push(`pitch:${record[pitchKey]}`);
+          }
+          if (useAbbreviationField && record[abbreviationKey]) {
+            keyParts.push(`abbrev:${record[abbreviationKey]}`);
+          }
+          if (useExemplarField && record[exemplarKey]) {
+            keyParts.push(`exemplar:${record[exemplarKey]}`);
+          }
+          
+          // Only group if we have at least one non-empty field
+          if (keyParts.length > 0) {
+            const compositeKey = keyParts.join('|');
+            
+            if (!groupMap.has(compositeKey)) {
+              // Determine group ID: prefer existing ID field, fallback to generated
+              const groupId = (useIdField && record[tgIdKey]) 
+                ? record[tgIdKey] 
+                : `group_${compositeKey.replace(/[^a-zA-Z0-9]/g, '_')}`;
+              
+              groupMap.set(compositeKey, {
+                id: groupId,
+                groupNumber: groupMap.size + 1,
                 members: [],
                 image: null,
                 additionsSinceReview: 0,
                 requiresReview: false,
+                // Store metadata if available
+                pitchTranscription: usePitchField ? record[pitchKey] : undefined,
+                toneAbbreviation: useAbbreviationField ? record[abbreviationKey] : undefined,
+                exemplarWord: useExemplarField ? record[exemplarKey] : undefined,
               });
             }
-            groupMap.get(groupNum).members.push(ref);
+            
+            groupMap.get(compositeKey).members.push(ref);
             
             // Remove from queue
             const qIdx = sessionData.queue.indexOf(ref);
@@ -466,6 +500,13 @@ async function loadLegacyBundle(filePath) {
         // Convert to array and sort by group number
         sessionData.groups = Array.from(groupMap.values()).sort((a, b) => a.groupNumber - b.groupNumber);
         
+        // Set exemplarWordRef for each group (first member)
+        sessionData.groups.forEach(group => {
+          if (group.members.length > 0 && !group.exemplarWordRef) {
+            group.exemplarWordRef = group.members[0];
+          }
+        });
+        
         // Try to load images from images/ folder if present
         const imagesPath = path.join(extractedPath, 'images');
         if (fs.existsSync(imagesPath)) {
@@ -480,6 +521,8 @@ async function loadLegacyBundle(filePath) {
             }
           });
         }
+        
+        console.log(`[desktop_matching] Loaded ${sessionData.groups.length} existing tone groups`);
       }
       
       saveSession();
@@ -1136,32 +1179,71 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
       subBundleSession.groups = [];
       
       // If reimporting, reconstruct groups from XML tone assignments
+      // Can use multiple field sources for grouping
       if (isReimport) {
-        const tgKey = bundleData.settings.toneGroupElement || 'SurfaceMelodyGroup';
-        const tgIdKey = bundleData.settings.toneGroupIdElement || 'SurfaceMelodyGroupId';
-        const userSpellingKey = bundleData.settings.userSpellingElement || 'Orthographic';
+        const settings = bundleData.settings;
+        const tgKey = settings.toneGroupElement || 'SurfaceMelodyGroup';
+        const tgIdKey = settings.toneGroupIdElement || settings.toneGroupIdField || 'SurfaceMelodyGroupId';
+        const userSpellingKey = settings.userSpellingElement || 'Orthographic';
+        const pitchKey = settings.pitchField;
+        const abbreviationKey = settings.abbreviationField;
+        const exemplarKey = settings.exemplarField;
+        
+        // Check which fields to use for grouping
+        const useIdField = settings.loadGroupsFromId && tgIdKey;
+        const usePitchField = settings.loadGroupsFromPitch && pitchKey;
+        const useAbbreviationField = settings.loadGroupsFromAbbreviation && abbreviationKey;
+        const useExemplarField = settings.loadGroupsFromExemplar && exemplarKey;
         
         // Build group map from records
-        const groupMap = new Map();
+        // Strategy: Create composite keys from selected fields to group words
+        const groupMap = new Map(); // composite key -> { id, members[], metadata }
+        const refToGroupKey = new Map(); // ref -> composite key
         
         dataForms.forEach(record => {
           const ref = normalizeRefString(record.Reference);
-          const toneGroup = record[tgKey];
-          const groupId = record[tgIdKey];
           
-          if (toneGroup) {
-            const groupNum = parseInt(toneGroup);
-            if (!groupMap.has(groupNum)) {
-              groupMap.set(groupNum, {
-                id: groupId || `group_reimport_${subBundlePath}_${groupNum}`,
-                groupNumber: groupNum,
+          // Build composite key from selected fields
+          const keyParts = [];
+          if (useIdField && record[tgIdKey]) {
+            keyParts.push(`id:${record[tgIdKey]}`);
+          }
+          if (usePitchField && record[pitchKey]) {
+            keyParts.push(`pitch:${record[pitchKey]}`);
+          }
+          if (useAbbreviationField && record[abbreviationKey]) {
+            keyParts.push(`abbrev:${record[abbreviationKey]}`);
+          }
+          if (useExemplarField && record[exemplarKey]) {
+            keyParts.push(`exemplar:${record[exemplarKey]}`);
+          }
+          
+          // Only group if we have at least one non-empty field
+          if (keyParts.length > 0) {
+            const compositeKey = keyParts.join('|');
+            
+            if (!groupMap.has(compositeKey)) {
+              // Determine group ID: prefer existing ID field, fallback to generated
+              const groupId = (useIdField && record[tgIdKey]) 
+                ? record[tgIdKey] 
+                : `group_${compositeKey.replace(/[^a-zA-Z0-9]/g, '_')}`;
+              
+              groupMap.set(compositeKey, {
+                id: groupId,
+                groupNumber: groupMap.size + 1,
                 members: [],
                 image: null,
                 additionsSinceReview: 0,
                 requiresReview: false,
+                // Store metadata if available
+                pitchTranscription: usePitchField ? record[pitchKey] : undefined,
+                toneAbbreviation: useAbbreviationField ? record[abbreviationKey] : undefined,
+                exemplarWord: useExemplarField ? record[exemplarKey] : undefined,
               });
             }
-            groupMap.get(groupNum).members.push(ref);
+            
+            groupMap.get(compositeKey).members.push(ref);
+            refToGroupKey.set(ref, compositeKey);
             
             // Remove from queue
             const qIdx = subBundleSession.queue.indexOf(ref);
@@ -1182,6 +1264,13 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
         // Convert to array and sort by group number
         subBundleSession.groups = Array.from(groupMap.values()).sort((a, b) => a.groupNumber - b.groupNumber);
         
+        // Set exemplarWordRef for each group (first member)
+        subBundleSession.groups.forEach(group => {
+          if (group.members.length > 0 && !group.exemplarWordRef) {
+            group.exemplarWordRef = group.members[0];
+          }
+        });
+        
         // Try to load images from images/ folder if present
         const imagesPath = path.join(subBundle.fullPath, 'images');
         if (fs.existsSync(imagesPath)) {
@@ -1196,6 +1285,8 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
             }
           });
         }
+        
+        console.log(`[desktop_matching] Loaded ${subBundleSession.groups.length} existing tone groups for sub-bundle`);
       }
       
       // Update assigned count
@@ -1401,9 +1492,13 @@ async function exportHierarchicalBundle() {
 
 // Build data_updated.xml for a sub-bundle with tone group assignments
 function buildSubBundleDataXml(subBundle) {
-  const tgKey = bundleData.settings.toneGroupElement || 'SurfaceMelodyGroup';
-  const tgIdKey = bundleData.settings.toneGroupIdElement || 'SurfaceMelodyGroupId';
-  const userSpellingKey = bundleData.settings.userSpellingElement || 'Orthographic';
+  const settings = bundleData.settings;
+  const tgKey = settings.toneGroupElement || 'SurfaceMelodyGroup';
+  const tgIdKey = settings.toneGroupIdElement || settings.toneGroupIdField || 'SurfaceMelodyGroupId';
+  const userSpellingKey = settings.userSpellingElement || 'Orthographic';
+  const pitchKey = settings.pitchField;
+  const abbreviationKey = settings.abbreviationField;
+  const exemplarKey = settings.exemplarField;
   
   // Create map of ref -> tone group data
   const refToGroup = new Map();
@@ -1444,15 +1539,15 @@ function buildSubBundleDataXml(subBundle) {
       updated[tgKey] = String(groupData.groupNumber);
       updated[tgIdKey] = groupData.groupId;
       
-      // Add enhanced fields if present
-      if (groupData.pitchTranscription) {
-        updated['SurfaceMelodyPitch'] = groupData.pitchTranscription;
+      // Add metadata fields using configured field names
+      if (groupData.pitchTranscription && pitchKey) {
+        updated[pitchKey] = groupData.pitchTranscription;
       }
-      if (groupData.toneAbbreviation) {
-        updated['SurfaceMelody'] = groupData.toneAbbreviation;
+      if (groupData.toneAbbreviation && abbreviationKey) {
+        updated[abbreviationKey] = groupData.toneAbbreviation;
       }
-      if (groupData.exemplarWord) {
-        updated['SurfaceMelodyEx'] = groupData.exemplarWord;
+      if (groupData.exemplarWord && exemplarKey) {
+        updated[exemplarKey] = groupData.exemplarWord;
       }
     }
     
@@ -1505,9 +1600,13 @@ async function exportLegacyBundle() {
     const outputPath = result.filePath;
     
     // Build updated XML
-    const tgKey = bundleData.settings.toneGroupElement || 'SurfaceMelodyGroup';
-    const tgIdKey = bundleData.settings.toneGroupIdElement || 'SurfaceMelodyGroupId';
-    const userSpellingKey = bundleData.settings.userSpellingElement || 'Orthographic';
+    const settings = bundleData.settings;
+    const tgKey = settings.toneGroupElement || 'SurfaceMelodyGroup';
+    const tgIdKey = settings.toneGroupIdElement || settings.toneGroupIdField || 'SurfaceMelodyGroupId';
+    const userSpellingKey = settings.userSpellingElement || 'Orthographic';
+    const pitchKey = settings.pitchField;
+    const abbreviationKey = settings.abbreviationField;
+    const exemplarKey = settings.exemplarField;
     
     // Create a map of ref -> tone group data
     const refToGroup = new Map();
@@ -1516,6 +1615,9 @@ async function exportLegacyBundle() {
         refToGroup.set(ref, {
           groupNumber: group.groupNumber,
           groupId: group.id,
+          pitchTranscription: group.pitchTranscription,
+          toneAbbreviation: group.toneAbbreviation,
+          exemplarWord: group.exemplarWord,
         });
       });
     });
@@ -1536,6 +1638,17 @@ async function exportLegacyBundle() {
       if (groupData) {
         updated[tgKey] = String(groupData.groupNumber);
         updated[tgIdKey] = groupData.groupId;
+        
+        // Add metadata fields using configured field names
+        if (groupData.pitchTranscription && pitchKey) {
+          updated[pitchKey] = groupData.pitchTranscription;
+        }
+        if (groupData.toneAbbreviation && abbreviationKey) {
+          updated[abbreviationKey] = groupData.toneAbbreviation;
+        }
+        if (groupData.exemplarWord && exemplarKey) {
+          updated[exemplarKey] = groupData.exemplarWord;
+        }
       }
       
       return updated;
