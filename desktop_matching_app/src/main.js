@@ -336,6 +336,52 @@ ipcMain.handle('load-bundle', async (event, filePath) => {
   }
 });
 
+// Find most common metadata values in a group
+function findMostCommonGroupMetadata(members, dataForms, pitchKey, abbreviationKey, exemplarKey) {
+  // Count occurrences of each value for each field
+  const pitchCounts = new Map();
+  const abbrevCounts = new Map();
+  const exemplarCounts = new Map();
+  
+  members.forEach(ref => {
+    const record = dataForms.find(df => normalizeRefString(df.Reference) === ref);
+    if (!record) return;
+    
+    if (pitchKey && record[pitchKey]) {
+      const val = record[pitchKey];
+      pitchCounts.set(val, (pitchCounts.get(val) || 0) + 1);
+    }
+    if (abbreviationKey && record[abbreviationKey]) {
+      const val = record[abbreviationKey];
+      abbrevCounts.set(val, (abbrevCounts.get(val) || 0) + 1);
+    }
+    if (exemplarKey && record[exemplarKey]) {
+      const val = record[exemplarKey];
+      exemplarCounts.set(val, (exemplarCounts.get(val) || 0) + 1);
+    }
+  });
+  
+  // Find most common value for each field
+  const getMostCommon = (countMap) => {
+    if (countMap.size === 0) return undefined;
+    let maxCount = 0;
+    let mostCommon = undefined;
+    countMap.forEach((count, value) => {
+      if (count > maxCount) {
+        maxCount = count;
+        mostCommon = value;
+      }
+    });
+    return mostCommon;
+  };
+  
+  return {
+    pitchTranscription: getMostCommon(pitchCounts),
+    toneAbbreviation: getMostCommon(abbrevCounts),
+    exemplarWord: getMostCommon(exemplarCounts),
+  };
+}
+
 async function loadLegacyBundle(filePath) {
   try {
     const zip = new AdmZip(filePath);
@@ -500,10 +546,39 @@ async function loadLegacyBundle(filePath) {
         // Convert to array and sort by group number
         sessionData.groups = Array.from(groupMap.values()).sort((a, b) => a.groupNumber - b.groupNumber);
         
-        // Set exemplarWordRef for each group (first member)
+        // Determine most common metadata values for each group
         sessionData.groups.forEach(group => {
-          if (group.members.length > 0 && !group.exemplarWordRef) {
-            group.exemplarWordRef = group.members[0];
+          const commonMetadata = findMostCommonGroupMetadata(
+            group.members,
+            dataForms,
+            usePitchField ? pitchKey : null,
+            useAbbreviationField ? abbreviationKey : null,
+            useExemplarField ? exemplarKey : null
+          );
+          
+          // Update group with most common values (overwrite initial first-member values)
+          if (commonMetadata.pitchTranscription !== undefined) {
+            group.pitchTranscription = commonMetadata.pitchTranscription;
+          }
+          if (commonMetadata.toneAbbreviation !== undefined) {
+            group.toneAbbreviation = commonMetadata.toneAbbreviation;
+          }
+          if (commonMetadata.exemplarWord !== undefined) {
+            group.exemplarWord = commonMetadata.exemplarWord;
+          }
+          
+          // Set exemplarWordRef: prefer member with exemplar word if available, else first member
+          if (group.members.length > 0) {
+            if (group.exemplarWord && exemplarKey) {
+              // Find member that has this exemplar value
+              const exemplarMember = group.members.find(ref => {
+                const record = dataForms.find(df => normalizeRefString(df.Reference) === ref);
+                return record && record[exemplarKey] === group.exemplarWord;
+              });
+              group.exemplarWordRef = exemplarMember || group.members[0];
+            } else {
+              group.exemplarWordRef = group.members[0];
+            }
           }
         });
         
@@ -1264,10 +1339,39 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
         // Convert to array and sort by group number
         subBundleSession.groups = Array.from(groupMap.values()).sort((a, b) => a.groupNumber - b.groupNumber);
         
-        // Set exemplarWordRef for each group (first member)
+        // Determine most common metadata values for each group
         subBundleSession.groups.forEach(group => {
-          if (group.members.length > 0 && !group.exemplarWordRef) {
-            group.exemplarWordRef = group.members[0];
+          const commonMetadata = findMostCommonGroupMetadata(
+            group.members,
+            dataForms,
+            usePitchField ? pitchKey : null,
+            useAbbreviationField ? abbreviationKey : null,
+            useExemplarField ? exemplarKey : null
+          );
+          
+          // Update group with most common values (overwrite initial first-member values)
+          if (commonMetadata.pitchTranscription !== undefined) {
+            group.pitchTranscription = commonMetadata.pitchTranscription;
+          }
+          if (commonMetadata.toneAbbreviation !== undefined) {
+            group.toneAbbreviation = commonMetadata.toneAbbreviation;
+          }
+          if (commonMetadata.exemplarWord !== undefined) {
+            group.exemplarWord = commonMetadata.exemplarWord;
+          }
+          
+          // Set exemplarWordRef: prefer member with exemplar word if available, else first member
+          if (group.members.length > 0) {
+            if (group.exemplarWord && exemplarKey) {
+              // Find member that has this exemplar value
+              const exemplarMember = group.members.find(ref => {
+                const record = dataForms.find(df => normalizeRefString(df.Reference) === ref);
+                return record && record[exemplarKey] === group.exemplarWord;
+              });
+              group.exemplarWordRef = exemplarMember || group.members[0];
+            } else {
+              group.exemplarWordRef = group.members[0];
+            }
           }
         });
         

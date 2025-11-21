@@ -62,11 +62,25 @@ When you load a bundle with existing XML data:
    Word 3: "id:def456|pitch:─────"  ← Different ID, different group
    ```
 3. **Create Groups** - Words with matching keys go into the same group
-4. **Load Metadata** - Group inherits metadata from first member:
-   - Pitch transcription (if pitch field used)
-   - Tone abbreviation (if abbreviation field used)
-   - Exemplar word (if exemplar field used)
+4. **Determine Most Common Metadata** - For each group, analyze all members:
+   - Count occurrences of each pitch value → pick most common
+   - Count occurrences of each abbreviation value → pick most common
+   - Count occurrences of each exemplar value → pick most common
 5. **Initialize Queue** - Words with empty values in ALL selected fields → unsorted queue
+
+**Example of metadata determination:**
+```
+Group with 5 members:
+Member 1: pitch="─────", abbrev="LHL"
+Member 2: pitch="─────", abbrev="LHL"  
+Member 3: pitch="───",   abbrev="LHL"
+Member 4: pitch="─────", abbrev="LH"
+Member 5: pitch="─────", abbrev="LHL"
+
+Result:
+- Group pitch = "─────" (appears 4 times vs 1)
+- Group abbreviation = "LHL" (appears 4 times vs 1)
+```
 
 ### Export Process
 
@@ -183,13 +197,25 @@ All field names are **user-configurable** in the bundler:
 
 ### Group Metadata Priority
 
-When loading groups from multiple fields:
-1. **Group ID** - If present, becomes the group's GUID
-2. **Pitch** - First member's pitch becomes group's pitch
-3. **Abbreviation** - First member's abbreviation becomes group's
-4. **Exemplar** - First member's exemplar becomes group's
+When loading groups from multiple fields, the system determines **most common values** across all group members:
+1. **Group ID** - If present and used for grouping, becomes the group's GUID
+2. **Pitch** - Most frequently occurring pitch transcription becomes group's pitch
+3. **Abbreviation** - Most frequently occurring abbreviation becomes group's
+4. **Exemplar** - Most frequently occurring exemplar becomes group's
 
-All other members inherit these values on export.
+**Example:**
+```
+Group has 5 members:
+- 3 members have pitch: "─────"
+- 2 members have pitch: "───"
+→ Group pitch = "─────" (most common)
+
+- 4 members have abbreviation: "LHL"
+- 1 member has abbreviation: "LH"
+→ Group abbreviation = "LHL" (most common)
+```
+
+All members inherit these most-common values on export, ensuring consistency while respecting the majority pattern in your data.
 
 ## Limitations & Considerations
 
@@ -224,7 +250,8 @@ All other members inherit these values on export.
 - **Solution:** Check XML to verify field names and values exist
 
 ### "Groups have wrong metadata"
-- **Expected:** First member's values become group's values
+- **Expected:** Most common values across members become group's canonical values
+- **Example:** If 3 words have "LHL" and 2 have "LH", group gets "LHL"
 - **To fix:** Edit the group in matching app to set correct values
 - **On export:** All members will get the corrected values
 
