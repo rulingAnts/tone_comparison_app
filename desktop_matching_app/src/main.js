@@ -1323,9 +1323,18 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
     currentSubBundlePath = subBundlePath;
     
     // Update or create session data for this sub-bundle
-    const subBundleSession = sessionData.subBundles.find(sb => sb.path === subBundlePath);
+    let subBundleSession = sessionData.subBundles.find(sb => sb.path === subBundlePath);
     if (!subBundleSession) {
-      throw new Error('Sub-bundle session not found');
+      // Create session for this sub-bundle if it doesn't exist
+      console.log('[load-sub-bundle] Creating new session for sub-bundle:', subBundlePath);
+      subBundleSession = {
+        path: subBundlePath,
+        queue: dataForms.map(df => normalizeRefString(df.Reference)),
+        groups: [],
+        recordCount: dataForms.length,
+        assignedCount: 0,
+      };
+      sessionData.subBundles.push(subBundleSession);
     }
     
     // Check if this sub-bundle has been loaded before
@@ -1467,7 +1476,8 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
       }
       
       // Try to load images from images/ folder if present (regardless of grouping)
-      const imagesPath = path.join(subBundle.fullPath, 'images');
+      // Images are stored at bundle root level, not per sub-bundle
+      const imagesPath = path.join(bundleData.extractedPath, 'images');
       if (fs.existsSync(imagesPath) && subBundleSession.groups.length > 0) {
         subBundleSession.groups.forEach(group => {
           // Look for image files matching group number pattern
@@ -1522,6 +1532,7 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
       importedGroups: subBundleSession.groups.length,
     };
   } catch (error) {
+    console.error('[load-sub-bundle] Error loading sub-bundle:', subBundlePath, error);
     return {
       success: false,
       error: error.message,
