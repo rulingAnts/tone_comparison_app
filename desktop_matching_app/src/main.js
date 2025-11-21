@@ -382,6 +382,72 @@ function findMostCommonGroupMetadata(members, dataForms, pitchKey, abbreviationK
   };
 }
 
+// Detect conflicts in group metadata
+function detectGroupConflicts(groups, dataForms, pitchKey, abbreviationKey, exemplarKey) {
+  const conflicts = [];
+  
+  groups.forEach(group => {
+    const groupConflicts = {
+      groupNumber: group.groupNumber,
+      groupId: group.id,
+      groupingValue: group.groupingValue,
+      pitchConflicts: [],
+      abbreviationConflicts: [],
+      exemplarConflicts: [],
+    };
+    
+    group.members.forEach(ref => {
+      const record = dataForms.find(df => normalizeRefString(df.Reference) === ref);
+      if (!record) return;
+      
+      // Check pitch conflicts
+      if (pitchKey && group.pitchTranscription !== undefined) {
+        const recordValue = record[pitchKey];
+        if (recordValue && recordValue !== group.pitchTranscription) {
+          groupConflicts.pitchConflicts.push({
+            reference: ref,
+            currentValue: recordValue,
+            willBecome: group.pitchTranscription,
+          });
+        }
+      }
+      
+      // Check abbreviation conflicts
+      if (abbreviationKey && group.toneAbbreviation !== undefined) {
+        const recordValue = record[abbreviationKey];
+        if (recordValue && recordValue !== group.toneAbbreviation) {
+          groupConflicts.abbreviationConflicts.push({
+            reference: ref,
+            currentValue: recordValue,
+            willBecome: group.toneAbbreviation,
+          });
+        }
+      }
+      
+      // Check exemplar conflicts
+      if (exemplarKey && group.exemplarWord !== undefined) {
+        const recordValue = record[exemplarKey];
+        if (recordValue && recordValue !== group.exemplarWord) {
+          groupConflicts.exemplarConflicts.push({
+            reference: ref,
+            currentValue: recordValue,
+            willBecome: group.exemplarWord,
+          });
+        }
+      }
+    });
+    
+    // Only include groups that have conflicts
+    if (groupConflicts.pitchConflicts.length > 0 ||
+        groupConflicts.abbreviationConflicts.length > 0 ||
+        groupConflicts.exemplarConflicts.length > 0) {
+      conflicts.push(groupConflicts);
+    }
+  });
+  
+  return conflicts;
+}
+
 async function loadLegacyBundle(filePath) {
   try {
     const zip = new AdmZip(filePath);

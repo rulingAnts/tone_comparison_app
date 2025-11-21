@@ -649,46 +649,59 @@
       <div class="form-group hierarchical-only">
         <label style="font-weight: bold; margin-bottom: 8px; display: block;">Pre-populate Tone Groups from Existing Data</label>
         <div class="info" style="margin-bottom: 12px;">
-          If your XML already has tone group data, the matching app can load existing groups. 
-          Select which fields to use for grouping. Words with matching values will be grouped together.
+          If your XML already has tone group data, select which field to use as the primary basis for grouping. 
+          Words with matching values in this field will be grouped together. The matching app will then check 
+          for inconsistencies in other fields and report conflicts before allowing export.
         </div>
         
-        <div style="display: flex; align-items: center; margin-bottom: 8px;">
-          <input type="checkbox" id="loadGroupsFromId" style="width: auto; margin-right: 8px;">
-          <label for="loadGroupsFromId" style="flex: 0 0 180px; margin: 0;">Use Group ID field</label>
-          <div class="info" style="flex: 1; margin: 0; font-size: 11px;">
-            Group by unique identifier (recommended if available)
+        <div style="margin-bottom: 12px;">
+          <label style="font-weight: 500; margin-bottom: 6px; display: block;">Group words by:</label>
+          
+          <div style="display: flex; align-items: center; margin-bottom: 6px;">
+            <input type="radio" name="groupingField" id="loadGroupsFromNone" value="none" style="width: auto; margin-right: 8px;" checked>
+            <label for="loadGroupsFromNone" style="flex: 0 0 180px; margin: 0;">Don't pre-populate</label>
+            <div class="info" style="flex: 1; margin: 0; font-size: 11px;">
+              Start with empty groups (default)
+            </div>
+          </div>
+          
+          <div style="display: flex; align-items: center; margin-bottom: 6px;">
+            <input type="radio" name="groupingField" id="loadGroupsFromId" value="id" style="width: auto; margin-right: 8px;">
+            <label for="loadGroupsFromId" style="flex: 0 0 180px; margin: 0;">Group ID field</label>
+            <div class="info" style="flex: 1; margin: 0; font-size: 11px;">
+              Group by unique identifier (most reliable)
+            </div>
+          </div>
+          
+          <div style="display: flex; align-items: center; margin-bottom: 6px;">
+            <input type="radio" name="groupingField" id="loadGroupsFromPitch" value="pitch" style="width: auto; margin-right: 8px;">
+            <label for="loadGroupsFromPitch" style="flex: 0 0 180px; margin: 0;">Pitch field</label>
+            <div class="info" style="flex: 1; margin: 0; font-size: 11px;">
+              Group words with identical pitch transcriptions
+            </div>
+          </div>
+          
+          <div style="display: flex; align-items: center; margin-bottom: 6px;">
+            <input type="radio" name="groupingField" id="loadGroupsFromAbbreviation" value="abbreviation" style="width: auto; margin-right: 8px;">
+            <label for="loadGroupsFromAbbreviation" style="flex: 0 0 180px; margin: 0;">Abbreviation field</label>
+            <div class="info" style="flex: 1; margin: 0; font-size: 11px;">
+              Group words with identical tone abbreviations
+            </div>
+          </div>
+          
+          <div style="display: flex; align-items: center; margin-bottom: 6px;">
+            <input type="radio" name="groupingField" id="loadGroupsFromExemplar" value="exemplar" style="width: auto; margin-right: 8px;">
+            <label for="loadGroupsFromExemplar" style="flex: 0 0 180px; margin: 0;">Exemplar field</label>
+            <div class="info" style="flex: 1; margin: 0; font-size: 11px;">
+              Group words with matching exemplar values
+            </div>
           </div>
         </div>
         
-        <div style="display: flex; align-items: center; margin-bottom: 8px;">
-          <input type="checkbox" id="loadGroupsFromPitch" style="width: auto; margin-right: 8px;">
-          <label for="loadGroupsFromPitch" style="flex: 0 0 180px; margin: 0;">Use Pitch field</label>
-          <div class="info" style="flex: 1; margin: 0; font-size: 11px;">
-            Group words with identical pitch transcriptions
-          </div>
-        </div>
-        
-        <div style="display: flex; align-items: center; margin-bottom: 8px;">
-          <input type="checkbox" id="loadGroupsFromAbbreviation" style="width: auto; margin-right: 8px;">
-          <label for="loadGroupsFromAbbreviation" style="flex: 0 0 180px; margin: 0;">Use Abbreviation field</label>
-          <div class="info" style="flex: 1; margin: 0; font-size: 11px;">
-            Group words with identical tone abbreviations
-          </div>
-        </div>
-        
-        <div style="display: flex; align-items: center; margin-bottom: 8px;">
-          <input type="checkbox" id="loadGroupsFromExemplar" style="width: auto; margin-right: 8px;">
-          <label for="loadGroupsFromExemplar" style="flex: 0 0 180px; margin: 0;">Use Exemplar field</label>
-          <div class="info" style="flex: 1; margin: 0; font-size: 11px;">
-            Group words with matching exemplar values
-          </div>
-        </div>
-        
-        <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 12px; margin-top: 12px;">
-          <strong>⚠️ Warning:</strong> If you select grouping sources, existing values in your configured tone fields 
-          will be <strong>overwritten</strong> to match the group settings during export. This ensures consistency 
-          within each group. If you don't want existing data overwritten, configure new field names for fields you want to preserve.
+        <div style="background: #d1ecf1; border: 1px solid #bee5eb; border-radius: 4px; padding: 12px;">
+          <strong>ℹ️ Conflict Detection:</strong> Before export, the matching app will analyze all configured 
+          fields and report any inconsistencies within groups. You'll see which words have conflicting values 
+          and can choose whether to overwrite them with the group's majority values or cancel to fix the data manually.
         </div>
       </div>
     </div>
