@@ -532,48 +532,46 @@ async function loadLegacyBundle(filePath) {
         locale: sessionData?.locale || 'en',
       };
       
-      // If reimporting, reconstruct groups from XML tone assignments
-      if (isReimport) {
-        const tgKey = settings.toneGroupElement || 'SurfaceMelodyGroup';
-        const tgIdKey = settings.toneGroupIdElement || settings.toneGroupIdField || 'SurfaceMelodyGroupId';
-        const userSpellingKey = settings.userSpellingElement || 'Orthographic';
-        const pitchKey = settings.pitchField;
-        const abbreviationKey = settings.abbreviationField;
-        const exemplarKey = settings.exemplarField;
-        
-        // Backward compatibility: migrate old multi-field settings to new single-field
-        if (settings.groupingField === undefined) {
-          if (settings.loadGroupsFromId) {
-            settings.groupingField = 'id';
-          } else if (settings.loadGroupsFromPitch) {
-            settings.groupingField = 'pitch';
-          } else if (settings.loadGroupsFromAbbreviation) {
-            settings.groupingField = 'abbreviation';
-          } else if (settings.loadGroupsFromExemplar) {
-            settings.groupingField = 'exemplar';
-          } else {
-            settings.groupingField = 'none';
-          }
+      // Pre-populate groups from XML if grouping field is configured
+      // This works for both fresh bundles (data.xml) and re-imports (data_updated.xml)
+      const tgKey = settings.toneGroupElement || 'SurfaceMelodyGroup';
+      const tgIdKey = settings.toneGroupIdElement || settings.toneGroupIdField || 'SurfaceMelodyGroupId';
+      const userSpellingKey = settings.userSpellingElement || 'Orthographic';
+      const pitchKey = settings.pitchField;
+      const abbreviationKey = settings.abbreviationField;
+      const exemplarKey = settings.exemplarField;
+      
+      // Backward compatibility: migrate old multi-field settings to new single-field
+      if (settings.groupingField === undefined) {
+        if (settings.loadGroupsFromId) {
+          settings.groupingField = 'id';
+        } else if (settings.loadGroupsFromPitch) {
+          settings.groupingField = 'pitch';
+        } else if (settings.loadGroupsFromAbbreviation) {
+          settings.groupingField = 'abbreviation';
+        } else if (settings.loadGroupsFromExemplar) {
+          settings.groupingField = 'exemplar';
+        } else {
+          settings.groupingField = 'none';
         }
-        
-        // Determine which single field to use for grouping
-        const groupingField = settings.groupingField || 'none';
-        let groupingKey = null;
-        
-        if (groupingField === 'id' && tgIdKey) {
-          groupingKey = tgIdKey;
-        } else if (groupingField === 'pitch' && pitchKey) {
-          groupingKey = pitchKey;
-        } else if (groupingField === 'abbreviation' && abbreviationKey) {
-          groupingKey = abbreviationKey;
-        } else if (groupingField === 'exemplar' && exemplarKey) {
-          groupingKey = exemplarKey;
-        }
-        
-        // Build group map from records using single field
-        const groupMap = new Map(); // field value -> { id, members[], groupingValue }
-        
-        if (groupingKey) {
+      }
+      
+      // Determine which single field to use for grouping
+      const groupingField = settings.groupingField || 'none';
+      let groupingKey = null;
+      
+      if (groupingField === 'id' && tgIdKey) {
+        groupingKey = tgIdKey;
+      } else if (groupingField === 'pitch' && pitchKey) {
+        groupingKey = pitchKey;
+      } else if (groupingField === 'abbreviation' && abbreviationKey) {
+        groupingKey = abbreviationKey;
+      } else if (groupingField === 'exemplar' && exemplarKey) {
+        groupingKey = exemplarKey;
+      }
+      
+      // Build group map from records using single field (if configured)
+      if (groupingKey) {
           dataForms.forEach(record => {
             const ref = normalizeRefString(record.Reference);
             const groupValue = record[groupingKey];
@@ -642,23 +640,25 @@ async function loadLegacyBundle(filePath) {
           group.toneAbbreviation = commonMetadata.toneAbbreviation;
           group.exemplarWord = commonMetadata.exemplarWord;
         });
-        
-        // Try to load images from images/ folder if present
-        const imagesPath = path.join(extractedPath, 'images');
-        if (fs.existsSync(imagesPath)) {
-          sessionData.groups.forEach(group => {
-            // Look for image files matching group number pattern
-            const files = fs.readdirSync(imagesPath);
-            const groupImageFile = files.find(f => 
-              f.match(new RegExp(`^(group[_\\s-]?)?${group.groupNumber}[._]`, 'i'))
-            );
-            if (groupImageFile) {
-              group.image = path.join(imagesPath, groupImageFile);
-            }
-          });
-        }
-        
-        console.log(`[desktop_matching] Loaded ${sessionData.groups.length} existing tone groups`);
+      }
+      
+      // Try to load images from images/ folder if present (regardless of grouping)
+      const imagesPath = path.join(extractedPath, 'images');
+      if (fs.existsSync(imagesPath) && sessionData.groups.length > 0) {
+        sessionData.groups.forEach(group => {
+          // Look for image files matching group number pattern
+          const files = fs.readdirSync(imagesPath);
+          const groupImageFile = files.find(f => 
+            f.match(new RegExp(`^(group[_\\s-]?)?${group.groupNumber}[._]`, 'i'))
+          );
+          if (groupImageFile) {
+            group.image = path.join(imagesPath, groupImageFile);
+          }
+        });
+      }
+      
+      if (sessionData.groups.length > 0) {
+        console.log(`[desktop_matching] Loaded ${sessionData.groups.length} pre-populated tone groups from ${groupingField} field`);
       }
       
       saveSession();
@@ -1314,8 +1314,9 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
       subBundleSession.queue = queue;
       subBundleSession.groups = [];
       
-      // If reimporting, reconstruct groups from XML tone assignments
-      if (isReimport) {
+      // Pre-populate groups from XML if grouping field is configured
+      // This works for both fresh bundles and re-imports
+      {
         const settings = bundleData.settings;
         const tgKey = settings.toneGroupElement || 'SurfaceMelodyGroup';
         const tgIdKey = settings.toneGroupIdElement || settings.toneGroupIdField || 'SurfaceMelodyGroupId';
@@ -1427,9 +1428,10 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
           group.toneAbbreviation = commonMetadata.toneAbbreviation;
           group.exemplarWord = commonMetadata.exemplarWord;
         });
-        
-        // Try to load images from images/ folder if present
-        const imagesPath = path.join(subBundle.fullPath, 'images');
+      }
+      
+      // Try to load images from images/ folder if present (regardless of grouping)
+      const imagesPath = path.join(subBundle.fullPath, 'images');
         if (fs.existsSync(imagesPath)) {
           subBundleSession.groups.forEach(group => {
             // Look for image files matching group number pattern
