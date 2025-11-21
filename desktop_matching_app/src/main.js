@@ -558,6 +558,13 @@ async function loadLegacyBundle(filePath) {
       
       // Determine which single field to use for grouping
       const groupingField = settings.groupingField || 'none';
+      console.log('[desktop_matching] Legacy bundle grouping config:', {
+        groupingField,
+        tgIdKey,
+        pitchKey,
+        abbreviationKey,
+        exemplarKey
+      });
       let groupingKey = null;
       
       if (groupingField === 'id' && tgIdKey) {
@@ -570,10 +577,13 @@ async function loadLegacyBundle(filePath) {
         groupingKey = exemplarKey;
       }
       
+      console.log('[desktop_matching] Selected grouping key:', groupingKey);
+      
       // Build group map from records using single field (if configured)
       const groupMap = new Map(); // field value -> { id, members[], groupingValue }
       
       if (groupingKey) {
+        console.log('[desktop_matching] Starting group building from', dataForms.length, 'records');
           dataForms.forEach(record => {
             const ref = normalizeRefString(record.Reference);
             const groupValue = record[groupingKey];
@@ -613,8 +623,11 @@ async function loadLegacyBundle(filePath) {
             }
           });
         
+        console.log('[desktop_matching] Built', groupMap.size, 'groups from grouping key:', groupingKey);
+        
         // Convert to array and sort by group number
         sessionData.groups = Array.from(groupMap.values()).sort((a, b) => a.groupNumber - b.groupNumber);
+        console.log('[desktop_matching] Converted to array:', sessionData.groups.length, 'groups');
         
         // Determine most common metadata values for ALL fields (not just grouping field)
         // This ensures group has representative values even if grouped by ID only
@@ -664,6 +677,13 @@ async function loadLegacyBundle(filePath) {
       
       saveSession();
     }
+    
+    console.log('[desktop_matching] Legacy bundle returning:', {
+      recordCount: dataForms.length,
+      groupsCount: sessionData.groups.length,
+      isReimport,
+      importedGroups: sessionData.groups.length
+    });
     
     return {
       success: true,
@@ -1343,6 +1363,13 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
         
         // Determine which single field to use for grouping
         const groupingField = settings.groupingField || 'none';
+        console.log('[desktop_matching] Hierarchical sub-bundle grouping config:', {
+          groupingField,
+          tgIdKey,
+          pitchKey,
+          abbreviationKey,
+          exemplarKey
+        });
         let groupingKey = null;
         
         if (groupingField === 'id' && tgIdKey) {
@@ -1355,10 +1382,13 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
           groupingKey = exemplarKey;
         }
         
+        console.log('[desktop_matching] Selected grouping key for sub-bundle:', groupingKey);
+        
         // Build group map from records using single field
         const groupMap = new Map(); // field value -> { id, members[], groupingValue }
         
         if (groupingKey) {
+          console.log('[desktop_matching] Starting sub-bundle group building from', dataForms.length, 'records');
           dataForms.forEach(record => {
             const ref = normalizeRefString(record.Reference);
             const groupValue = record[groupingKey];
@@ -1399,8 +1429,11 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
             }
           });
         
+        console.log('[desktop_matching] Built', groupMap.size, 'groups in sub-bundle from grouping key:', groupingKey);
+        
         // Convert to array and sort by group number
         subBundleSession.groups = Array.from(groupMap.values()).sort((a, b) => a.groupNumber - b.groupNumber);
+        console.log('[desktop_matching] Converted to sub-bundle array:', subBundleSession.groups.length, 'groups');
         
         // Determine most common metadata values for ALL fields (not just grouping field)
         // This ensures group has representative values even if grouped by ID only
@@ -1463,6 +1496,14 @@ ipcMain.handle('load-sub-bundle', async (event, subBundlePath) => {
     sessionData.groups = subBundleSession.groups.map(g => ({ ...g }));
     
     saveSession();
+    
+    console.log('[desktop_matching] Hierarchical sub-bundle returning:', {
+      path: subBundlePath,
+      recordCount: dataForms.length,
+      groupsCount: subBundleSession.groups.length,
+      isReimport,
+      importedGroups: subBundleSession.groups.length
+    });
     
     return {
       success: true,

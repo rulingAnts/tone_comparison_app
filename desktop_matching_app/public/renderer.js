@@ -192,8 +192,16 @@ async function loadBundle() {
     }
     
     // Legacy bundle or returning from sub-bundle
+    console.log('[renderer] Bundle load result:', {
+      isReimport: result.isReimport,
+      importedGroups: result.importedGroups,
+      sessionGroupsLength: session?.groups?.length,
+      settingsGroupingField: result.settings?.groupingField
+    });
+    
     // Notify user if groups were pre-populated
     if (result.importedGroups > 0) {
+      console.log('[renderer] Showing group notification for', result.importedGroups, 'groups, isReimport:', result.isReimport);
       if (result.isReimport) {
         alert(window.i18n.t('tm_reimport_success', { 
           count: result.importedGroups 
@@ -203,6 +211,8 @@ async function loadBundle() {
           count: result.importedGroups 
         }));
       }
+    } else {
+      console.log('[renderer] No groups to notify about, importedGroups:', result.importedGroups);
     }
     
     // Initialize UI
@@ -456,13 +466,22 @@ async function selectSubBundle(subBundlePath) {
     session = result.session;
     // Note: bundleSettings remains from the initial bundle load
     
+    console.log('[renderer] Sub-bundle load result:', {
+      isReimport: result.isReimport,
+      importedGroups: result.importedGroups,
+      sessionGroupsLength: session?.groups?.length
+    });
+    
     // Notify if groups were pre-populated
     if (result.importedGroups > 0) {
+      console.log('[renderer] Showing sub-bundle notification for', result.importedGroups, 'groups, isReimport:', result.isReimport);
       if (result.isReimport) {
         alert(`Re-import successful! Loaded ${result.importedGroups} tone groups.`);
       } else {
         alert(`Pre-populated ${result.importedGroups} tone groups from existing XML data.`);
       }
+    } else {
+      console.log('[renderer] No sub-bundle groups to notify about, importedGroups:', result.importedGroups);
     }
     
     // Initialize UI
