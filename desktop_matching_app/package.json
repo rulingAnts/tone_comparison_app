@@ -49,6 +49,13 @@
         }
       ]
     },
+    "nsis": {
+      "installerIcon": "build/installer-icon.ico",
+      "uninstallerIcon": "build/installer-icon.ico",
+      "installerHeaderIcon": "build/installer-icon.ico",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
     "mac": {
       "icon": "build/icon.icns",
       "target": [
