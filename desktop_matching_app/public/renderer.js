@@ -192,11 +192,17 @@ async function loadBundle() {
     }
     
     // Legacy bundle or returning from sub-bundle
-    // Notify user if this is a re-import
-    if (result.isReimport && result.importedGroups > 0) {
-      alert(window.i18n.t('tm_reimport_success', { 
-        count: result.importedGroups 
-      }));
+    // Notify user if groups were pre-populated
+    if (result.importedGroups > 0) {
+      if (result.isReimport) {
+        alert(window.i18n.t('tm_reimport_success', { 
+          count: result.importedGroups 
+        }));
+      } else {
+        alert(window.i18n.t('tm_prepopulate_success', { 
+          count: result.importedGroups 
+        }));
+      }
     }
     
     // Initialize UI
@@ -450,9 +456,13 @@ async function selectSubBundle(subBundlePath) {
     session = result.session;
     // Note: bundleSettings remains from the initial bundle load
     
-    // Notify if re-import
-    if (result.isReimport && result.importedGroups > 0) {
-      alert(`Re-import successful! Loaded ${result.importedGroups} tone groups.`);
+    // Notify if groups were pre-populated
+    if (result.importedGroups > 0) {
+      if (result.isReimport) {
+        alert(`Re-import successful! Loaded ${result.importedGroups} tone groups.`);
+      } else {
+        alert(`Pre-populated ${result.importedGroups} tone groups from existing XML data.`);
+      }
     }
     
     // Initialize UI

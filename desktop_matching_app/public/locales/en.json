@@ -51,5 +51,6 @@
   "tm_redo": "Redo",
   "tm_reset_success": "Session has been reset",
   "tm_reset_failed": "Failed to reset session: {error}",
-  "tm_reimport_success": "Re-imported {count} tone groups from previous export. You can continue reviewing and editing."
+  "tm_reimport_success": "Re-imported {count} tone groups from previous export. You can continue reviewing and editing.",
+  "tm_prepopulate_success": "Pre-populated {count} tone groups from existing XML data. You can continue reviewing and editing."
 }
