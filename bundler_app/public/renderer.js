@@ -3100,7 +3100,6 @@ async function loadProfile() {
   const s = profile.settings || {};
   document.getElementById('showWrittenForm').checked = !!s.showWrittenForm;
   document.getElementById('showGloss').checked = !!s.showGloss;
-  document.getElementById('audioSuffix').value = s.audioFileSuffix || '';
   document.getElementById('requireUserSpelling').checked = !!s.requireUserSpelling;
   document.getElementById('userSpellingElement').value = s.userSpellingElement || 'Orthographic';
   document.getElementById('toneGroupElement').value = s.toneGroupElement || 'SurfaceMelodyGroup';
@@ -3110,6 +3109,57 @@ async function loadProfile() {
   if (s.glossElement) {
     const glossSel = document.getElementById('glossElement');
     if (glossSel) glossSel.value = s.glossElement;
+  }
+
+  // Restore audio variants
+  audioVariants = Array.isArray(s.audioFileVariants) && s.audioFileVariants.length > 0
+    ? s.audioFileVariants.map((v) => ({
+        description: String(v.description || ''),
+        suffix: (v.suffix == null || v.suffix === '') ? '' : String(v.suffix),
+      }))
+    : [{ description: 'Default', suffix: (s.audioFileSuffix || '') }];
+  renderAudioVariants();
+
+  // Restore audio processing
+  const ap = s.audioProcessing || {};
+  const flacEl = document.getElementById('convertToFlac');
+  if (flacEl) flacEl.checked = !!ap.convertToFlac;
+
+  // Restore compression level
+  const compressionLevel = s.compressionLevel !== undefined ? s.compressionLevel : 6;
+  const compressionSlider = document.getElementById('compressionLevel');
+  if (compressionSlider) compressionSlider.value = compressionLevel;
+
+  // Restore bundle type
+  if (s.bundleType) {
+    bundleType = s.bundleType;
+    const radioToCheck = document.querySelector(`input[name="bundleType"][value="${bundleType}"]`);
+    if (radioToCheck) {
+      radioToCheck.checked = true;
+      handleBundleTypeChange();
+    }
+  }
+
+  // Restore hierarchy tree from profile (supports both new hierarchyTree and legacy hierarchyLevels)
+  if (s.hierarchyTree) {
+    hierarchyTree = restoreTreeNode(s.hierarchyTree);
+    renderHierarchyTree();
+  } else if (Array.isArray(s.hierarchyLevels) && s.hierarchyLevels.length > 0) {
+    // Migrate old format to new tree format (best effort - first level only)
+    const firstLevel = s.hierarchyLevels[0];
+    hierarchyTree = {
+      field: firstLevel.field,
+      values: (firstLevel.values || []).map(value => ({
+        value: value.value,
+        count: value.count || 0,
+        included: value.included !== false,
+        label: value.label || value.value,
+        audioVariants: Array.isArray(value.audioVariants) ? value.audioVariants : audioVariants.map((_, i) => i),
+        parentAudioVariants: null,
+        children: null
+      }))
+    };
+    renderHierarchyTree();
   }
 
   await persistSettings();
