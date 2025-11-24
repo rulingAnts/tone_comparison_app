@@ -22,14 +22,25 @@ pnpm-debug.log*
 .parcel-cache/
 .next/
 .nuxt/
-dist/
-**/dist/
+# Electron builder outputs in individual app folders (use root dist/ instead)
+bundler_app/dist/
+comparison_app/dist/
+desktop_matching_app/dist/
 out/
 **/out/
 *.asar
 # Electron builder outputs
 release/
 **/release/
+
+# Root dist folder structure (only final installers)
+dist/
+# But track the folder structure
+!dist/.gitkeep
+!dist/bundler/.gitkeep
+!dist/comparison/.gitkeep
+!dist/desktop-matching/.gitkeep
+!dist/mobile/.gitkeep
 
 # Flutter / Dart
 .dart_tool/

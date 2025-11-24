@@ -34,8 +34,11 @@
     "appId": "com.tonematching.desktop",
     "productName": "Tone Matching Desktop",
     "directories": {
-      "output": "dist"
+      "output": "../dist/desktop-matching"
     },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "generateUpdatesFilesForAllChannels": false,
+    "removePackageScripts": true,
     "files": [
       "src/**/*",
       "public/**/*"

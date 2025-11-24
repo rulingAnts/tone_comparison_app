@@ -31,10 +31,13 @@
   },
   "build": {
     "appId": "com.tonematching.comparison",
-    "productName": "Tone Matching Comparison",
+    "productName": "Tone Comparison",
     "directories": {
-      "output": "dist"
+      "output": "../dist/comparison"
     },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "generateUpdatesFilesForAllChannels": false,
+    "removePackageScripts": true,
     "files": [
       "src/**/*",
       "public/**/*"

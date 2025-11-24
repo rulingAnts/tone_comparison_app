@@ -25,7 +25,7 @@ DO_ANALYZE=1
 UNINSTALL_FIRST=0
 DEVICE_ID=""
 PACKAGE_OVERRIDE=""
-OUT_DIR=""
+OUT_DIR="$ROOT_DIR/dist/mobile"
 OUT_NAME=""
 
 log() { echo -e "\033[1;36m[apk]\033[0m $*"; }

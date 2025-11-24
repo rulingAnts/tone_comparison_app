@@ -34,8 +34,11 @@
     "appId": "com.tonematching.bundler",
     "productName": "Tone Matching Bundler",
     "directories": {
-      "output": "dist"
+      "output": "../dist/bundler"
     },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "generateUpdatesFilesForAllChannels": false,
+    "removePackageScripts": true,
     "files": [
       "src/**/*",
       "public/**/*",

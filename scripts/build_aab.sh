@@ -9,7 +9,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
 APP_DIR="$ROOT_DIR/mobile_app"
 ANDROID_DIR="$APP_DIR/android"
-OUT_DIR="$ROOT_DIR/dist"
+OUT_DIR="$ROOT_DIR/dist/mobile"
 OUT_NAME=""
 DO_ANALYZE=1
 
