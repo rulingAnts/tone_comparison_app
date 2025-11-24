@@ -987,31 +987,65 @@ async function createHierarchicalBundle(config, event) {
     }
     
     // Collect sound files ONLY from records in sub-bundles (after hierarchy filtering)
+    // Track which files exist and which are missing
     const soundFiles = new Set();
+    const missingSoundFiles = []; // Array of { file, ref, suffix }
     const audioVariantConfigs = settingsWithMeta.audioFileVariants || [];
     
+    // Count records included vs total
+    const includedRecords = new Set();
     for (const subBundle of subBundles) {
       for (const record of subBundle.records) {
+        const ref = normalizeRefString(record.Reference);
+        if (ref) includedRecords.add(ref);
+        
         if (record.SoundFile) {
           const baseSoundFile = record.SoundFile;
           const lastDot = baseSoundFile.lastIndexOf('.');
           const basename = lastDot !== -1 ? baseSoundFile.substring(0, lastDot) : baseSoundFile;
           const ext = lastDot !== -1 ? baseSoundFile.substring(lastDot) : '';
+          const refNum = record.Ref || ref || 'unknown';
           
-          // Add base file
-          soundFiles.add(baseSoundFile);
+          // Check base file
+          const baseFilePath = path.join(audioFolder, baseSoundFile);
+          if (fs.existsSync(baseFilePath)) {
+            soundFiles.add(baseSoundFile);
+          } else {
+            missingSoundFiles.push({
+              file: baseSoundFile,
+              ref: refNum,
+              suffix: '(no suffix)'
+            });
+          }
           
-          // Add variant files
+          // Check variant files
           for (const variant of audioVariantConfigs) {
             if (variant.suffix) {
-              soundFiles.add(`${basename}${variant.suffix}${ext}`);
+              const variantFile = `${basename}${variant.suffix}${ext}`;
+              const variantPath = path.join(audioFolder, variantFile);
+              if (fs.existsSync(variantPath)) {
+                soundFiles.add(variantFile);
+              } else {
+                missingSoundFiles.push({
+                  file: variantFile,
+                  ref: refNum,
+                  suffix: variant.suffix
+                });
+              }
             }
           }
         }
       }
     }
     
-    console.log('[hierarchical] Found', soundFiles.size, 'audio files needed for', subBundles.length, 'sub-bundles');
+    const recordsIncluded = includedRecords.size;
+    const recordsExcluded = filteredRecords.length - recordsIncluded;
+    
+    console.log('[hierarchical] Records: included=', recordsIncluded, ', excluded=', recordsExcluded, ', total=', filteredRecords.length);
+    console.log('[hierarchical] Audio files: found=', soundFiles.size, ', missing=', missingSoundFiles.length);
+    if (missingSoundFiles.length > 0) {
+      console.log('[hierarchical] First 5 missing:', missingSoundFiles.slice(0, 5));
+    }
     
     // Optionally process audio (trim/normalize/convert)
     const ap = settingsWithMeta.audioProcessing || {};
@@ -1412,8 +1446,11 @@ async function createHierarchicalBundle(config, event) {
     
     return {
       success: true,
-      recordCount: filteredRecords.length,
+      recordCount: filteredRecords.length, // Total records in XML
+      recordsIncluded: recordsIncluded, // Records actually included in hierarchy
+      recordsExcluded: recordsExcluded, // Records excluded by hierarchy configuration
       audioFileCount: soundFiles.size,
+      missingSoundFiles: missingSoundFiles.length > 0 ? missingSoundFiles : null,
       subBundleCount: subBundles.length,
       hierarchicalBundle: true,
     };

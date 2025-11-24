@@ -2901,16 +2901,57 @@ async function createBundle() {
   document.getElementById('createBtn').textContent = 'Create Bundle';
   
   if (result.success) {
-    let message = `Bundle created successfully!\n\n` +
-                  `Records: ${result.recordCount}\n` +
-                  `Audio files: ${result.audioFileCount}`;
+    let message = `Bundle created successfully!\n\n`;
     
-    if (result.missingSoundFiles) {
-      showStatus('warning', 
-        message + `\n\nWarning: ${result.missingSoundFiles.length} audio files not found:\n` +
-        result.missingSoundFiles.slice(0, 10).join('\n') +
-        (result.missingSoundFiles.length > 10 ? `\n...and ${result.missingSoundFiles.length - 10} more` : '')
-      );
+    // Show hierarchical or legacy record counts
+    if (result.hierarchicalBundle && result.recordsIncluded !== undefined) {
+      message += `Records included: ${result.recordsIncluded}\n`;
+      message += `Records excluded: ${result.recordsExcluded}\n`;
+      message += `Total records: ${result.recordCount}\n`;
+    } else {
+      message += `Records: ${result.recordCount}\n`;
+    }
+    
+    message += `Audio files: ${result.audioFileCount}`;
+    
+    if (result.missingSoundFiles && Array.isArray(result.missingSoundFiles)) {
+      // Show detailed missing files list with scrolling
+      const statusEl = document.getElementById('status');
+      statusEl.className = 'status warning';
+      statusEl.style.display = 'block';
+      statusEl.style.maxHeight = '500px';
+      statusEl.style.overflowY = 'auto';
+      
+      // Build HTML content with proper formatting
+      let html = `<div style="font-weight: bold; margin-bottom: 10px;">${message}</div>`;
+      html += `<div style="margin-top: 15px; padding-top: 15px; border-top: 2px solid #856404;">`;
+      html += `<strong>⚠ Warning: ${result.missingSoundFiles.length} audio files not found</strong>`;
+      html += `</div>`;
+      
+      // Group by reference for better organization
+      const missingByRef = {};
+      result.missingSoundFiles.forEach(item => {
+        const ref = typeof item === 'string' ? 'unknown' : (item.ref || 'unknown');
+        if (!missingByRef[ref]) missingByRef[ref] = [];
+        missingByRef[ref].push(item);
+      });
+      
+      const uniqueRefs = Object.keys(missingByRef).sort();
+      html += `<div style="margin-top: 10px; margin-bottom: 5px;">Unique references affected: ${uniqueRefs.length}</div>`;
+      html += `<div style="margin-top: 10px; font-family: monospace; font-size: 12px; line-height: 1.6;">`;
+      
+      uniqueRefs.forEach(ref => {
+        const items = missingByRef[ref];
+        html += `<div style="margin-top: 8px; margin-bottom: 4px;"><strong>Ref ${ref}:</strong></div>`;
+        items.forEach(item => {
+          const fileName = typeof item === 'string' ? item : item.file;
+          const suffix = typeof item === 'string' ? '' : item.suffix;
+          html += `<div style="margin-left: 20px; color: #721c24;">  suffix '${suffix}': ${fileName}</div>`;
+        });
+      });
+      
+      html += `</div>`;
+      statusEl.innerHTML = html;
     } else {
       showStatus('success', message);
     }
@@ -2999,7 +3040,11 @@ function showStatus(type, message) {
   const statusEl = document.getElementById('status');
   statusEl.className = `status ${type}`;
   statusEl.textContent = message;
+  statusEl.innerHTML = ''; // Clear any HTML
+  statusEl.textContent = message; // Set as plain text
   statusEl.style.display = 'block';
+  statusEl.style.maxHeight = ''; // Reset max height
+  statusEl.style.overflowY = ''; // Reset overflow
 }
 
 // Save Profile flow using an in-app modal instead of prompt
@@ -3101,9 +3146,55 @@ async function loadProfile() {
   document.getElementById('showWrittenForm').checked = !!s.showWrittenForm;
   document.getElementById('showGloss').checked = !!s.showGloss;
   document.getElementById('requireUserSpelling').checked = !!s.requireUserSpelling;
+  document.getElementById('showReferenceNumbers').checked = !!s.showReferenceNumbers;
   document.getElementById('userSpellingElement').value = s.userSpellingElement || 'Orthographic';
   document.getElementById('toneGroupElement').value = s.toneGroupElement || 'SurfaceMelodyGroup';
   document.getElementById('bundleDescription').value = s.bundleDescription || '';
+  
+  // Restore optional tone fields
+  if (s.toneGroupIdField) {
+    const cb = document.getElementById('enableToneGroupId');
+    const sel = document.getElementById('toneGroupIdField');
+    if (cb) cb.checked = true;
+    if (sel) {
+      sel.disabled = false;
+      sel.value = s.toneGroupIdField;
+    }
+  }
+  if (s.pitchField) {
+    const cb = document.getElementById('enablePitchField');
+    const sel = document.getElementById('pitchField');
+    if (cb) cb.checked = true;
+    if (sel) {
+      sel.disabled = false;
+      sel.value = s.pitchField;
+    }
+  }
+  if (s.abbreviationField) {
+    const cb = document.getElementById('enableAbbreviationField');
+    const sel = document.getElementById('abbreviationField');
+    if (cb) cb.checked = true;
+    if (sel) {
+      sel.disabled = false;
+      sel.value = s.abbreviationField;
+    }
+  }
+  if (s.exemplarField) {
+    const cb = document.getElementById('enableExemplarField');
+    const sel = document.getElementById('exemplarField');
+    if (cb) cb.checked = true;
+    if (sel) {
+      sel.disabled = false;
+      sel.value = s.exemplarField;
+    }
+  }
+  
+  // Restore group pre-population setting
+  if (s.groupingField) {
+    const radio = document.querySelector(`input[name="groupingField"][value="${s.groupingField}"]`);
+    if (radio) radio.checked = true;
+  }
+  
   const refs = Array.isArray(s.referenceNumbers) ? s.referenceNumbers : [];
   document.getElementById('referenceNumbers').value = refs.join('\n');
   if (s.glossElement) {

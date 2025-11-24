@@ -1,5 +1,13 @@
 # Remaining Implementation Tasks for Desktop Matching App
 
+## Known Issues
+
+### Audio Variant Assignment in Hierarchy
+**Status**: Not working correctly in bundler_app  
+**Description**: Associating different audio file variants with different parts of the hierarchy tree is not functioning as expected. Currently, all hierarchy nodes inherit the global audio variants configuration rather than respecting per-node variant assignments.  
+**Impact**: Low - Current work focuses on nouns only with consistent audio variant requirements across all hierarchy branches.  
+**Priority**: Deferred - Save for future enhancement when working with more complex hierarchies requiring different audio variants per category.
+
 ## 1. Simplified move-word-to-sub-bundle Handler
 
 ### Current Status
