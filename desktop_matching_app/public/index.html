@@ -1080,6 +1080,36 @@
     </div>
   </div>
 
+  <!-- Move Flagged Words Modal -->
+  <div id="moveFlaggedModal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="moveFlaggedTitle">Move Flagged Words</h2>
+        <button class="modal-close" onclick="closeMoveFlaggedModal()">&times;</button>
+      </div>
+      
+      <div class="modal-body">
+        <p style="margin-bottom: 15px;">
+          Move <strong id="moveFlaggedCount"></strong> flagged word(s) to:
+        </p>
+        
+        <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 10px;">
+          <div id="targetGroupsList"></div>
+        </div>
+        
+        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
+          <button onclick="moveFlaggedToNewGroup()" style="width: 100%;">
+            + Create New Group for Flagged Words
+          </button>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="secondary" onclick="closeMoveFlaggedModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Move Word Modal (Hierarchical bundles only) -->
   <div id="moveWordModal" class="modal-overlay hidden">
     <div class="modal-content">

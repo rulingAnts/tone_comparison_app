@@ -1156,6 +1156,24 @@ async function renderGroups() {
     };
     headerActions.appendChild(editBtn);
     
+    // Move flagged words button (only show if group has flagged members)
+    const flaggedMembers = group.members?.filter(ref => session.records[ref]?.flagged) || [];
+    if (flaggedMembers.length > 0) {
+      const moveFlaggedBtn = document.createElement('button');
+      moveFlaggedBtn.textContent = `🚩 ${flaggedMembers.length}`;
+      moveFlaggedBtn.className = 'secondary';
+      moveFlaggedBtn.style.fontSize = '12px';
+      moveFlaggedBtn.style.padding = '4px 8px';
+      moveFlaggedBtn.style.background = '#fff3cd';
+      moveFlaggedBtn.style.borderColor = '#ffc107';
+      moveFlaggedBtn.title = `Move ${flaggedMembers.length} flagged word(s)`;
+      moveFlaggedBtn.onclick = (e) => {
+        e.stopPropagation();
+        openMoveFlaggedModal(group.id);
+      };
+      headerActions.appendChild(moveFlaggedBtn);
+    }
+    
     if (group.requiresReview) {
       const reviewBadge = document.createElement('button');
   reviewBadge.textContent = `✓ ${window.i18n.t('tm_markReviewed')}`;
@@ -1643,6 +1661,173 @@ function closeEditGroupModal() {
   document.getElementById('exemplarWordInput').value = '';
   document.getElementById('exemplarWordRefInput').value = '';
   document.getElementById('markReviewedCheckbox').checked = false;
+}
+
+// Move Flagged Words Modal Functions
+
+let moveFlaggedSourceGroupId = null;
+
+function openMoveFlaggedModal(groupId) {
+  moveFlaggedSourceGroupId = groupId;
+  
+  const sourceGroup = session.groups.find(g => g.id === groupId);
+  if (!sourceGroup) return;
+  
+  const flaggedMembers = sourceGroup.members?.filter(ref => session.records[ref]?.flagged) || [];
+  
+  document.getElementById('moveFlaggedCount').textContent = flaggedMembers.length;
+  
+  // Build list of target groups (all groups except source)
+  const targetGroupsList = document.getElementById('targetGroupsList');
+  targetGroupsList.innerHTML = '';
+  
+  const otherGroups = session.groups.filter(g => g.id !== groupId);
+  
+  if (otherGroups.length === 0) {
+    targetGroupsList.innerHTML = '<div style="color: #999; padding: 10px;">No other groups available. Create a new group below.</div>';
+  } else {
+    otherGroups.forEach(group => {
+      const groupItem = document.createElement('div');
+      groupItem.style.padding = '10px';
+      groupItem.style.border = '1px solid #ddd';
+      groupItem.style.borderRadius = '4px';
+      groupItem.style.marginBottom = '8px';
+      groupItem.style.cursor = 'pointer';
+      groupItem.style.transition = 'background 0.2s';
+      groupItem.style.display = 'flex';
+      groupItem.style.alignItems = 'center';
+      groupItem.style.gap = '10px';
+      
+      // Build group info HTML
+      let groupInfoHTML = '';
+      
+      // Add image if available
+      if (group.image) {
+        groupInfoHTML += `<img src="${group.image}" alt="Group image" style="width: 40px; height: 40px; object-fit: cover; border-radius: 4px; flex-shrink: 0;">`;
+      }
+      
+      // Build text content
+      let groupTextHTML = `<div style="flex: 1;">`;
+      groupTextHTML += `<div style="font-weight: 500;">Group ${group.groupNumber}`;
+      
+      // Add pitch transcription if available
+      if (group.pitchTranscription) {
+        groupTextHTML += ` - ${group.pitchTranscription}`;
+      }
+      
+      // Add abbreviation if available
+      if (group.toneAbbreviation) {
+        groupTextHTML += ` (${group.toneAbbreviation})`;
+      }
+      
+      groupTextHTML += `</div>`;
+      
+      // Add exemplar word if available
+      if (group.exemplarWord) {
+        groupTextHTML += `<div style="font-size: 12px; color: #666;">Exemplar: ${group.exemplarWord}</div>`;
+      }
+      
+      groupTextHTML += `<div style="font-size: 12px; color: #666;">${group.members?.length || 0} members</div>`;
+      groupTextHTML += `</div>`;
+      
+      groupInfoHTML += groupTextHTML;
+      
+      groupItem.innerHTML = groupInfoHTML;
+      
+      groupItem.addEventListener('mouseenter', () => {
+        groupItem.style.background = '#f0f0f0';
+      });
+      
+      groupItem.addEventListener('mouseleave', () => {
+        groupItem.style.background = 'transparent';
+      });
+      
+      groupItem.onclick = () => {
+        moveFlaggedToGroup(groupId, group.id);
+      };
+      
+      targetGroupsList.appendChild(groupItem);
+    });
+  }
+  
+  document.getElementById('moveFlaggedModal').classList.remove('hidden');
+}
+
+function closeMoveFlaggedModal() {
+  document.getElementById('moveFlaggedModal').classList.add('hidden');
+  moveFlaggedSourceGroupId = null;
+}
+
+async function moveFlaggedToGroup(sourceGroupId, targetGroupId) {
+  const sourceGroup = session.groups.find(g => g.id === sourceGroupId);
+  const targetGroup = session.groups.find(g => g.id === targetGroupId);
+  
+  if (!sourceGroup || !targetGroup) return;
+  
+  const flaggedMembers = sourceGroup.members?.filter(ref => session.records[ref]?.flagged) || [];
+  
+  if (flaggedMembers.length === 0) {
+    closeMoveFlaggedModal();
+    return;
+  }
+  
+  // Move each flagged word
+  for (const ref of flaggedMembers) {
+    // Remove from source group
+    sourceGroup.members = sourceGroup.members.filter(m => m !== ref);
+    
+    // Add to target group
+    if (!targetGroup.members) targetGroup.members = [];
+    if (!targetGroup.members.includes(ref)) {
+      targetGroup.members.push(ref);
+    }
+    
+    // Unflag the word
+    if (session.records[ref]) {
+      session.records[ref].flagged = false;
+    }
+    
+    // Notify backend
+    await ipcRenderer.invoke('remove-word-from-group', ref, sourceGroupId);
+    await ipcRenderer.invoke('add-word-to-group', ref, targetGroupId);
+    await ipcRenderer.invoke('toggle-word-flag', ref, false);
+  }
+  
+  // Delete source group if now empty
+  if (sourceGroup.members.length === 0) {
+    session.groups = session.groups.filter(g => g.id !== sourceGroupId);
+    if (currentGroupId === sourceGroupId) {
+      currentGroupId = null;
+    }
+  }
+  
+  closeMoveFlaggedModal();
+  updateProgressIndicator();
+  renderGroups();
+}
+
+async function moveFlaggedToNewGroup() {
+  const sourceGroupId = moveFlaggedSourceGroupId;
+  const sourceGroup = session.groups.find(g => g.id === sourceGroupId);
+  
+  if (!sourceGroup) return;
+  
+  const flaggedMembers = sourceGroup.members?.filter(ref => session.records[ref]?.flagged) || [];
+  
+  if (flaggedMembers.length === 0) {
+    closeMoveFlaggedModal();
+    return;
+  }
+  
+  // Create new group
+  const newGroup = await ipcRenderer.invoke('create-group', { image: null });
+  session.groups.push(newGroup);
+  
+  // Move flagged words to new group
+  await moveFlaggedToGroup(sourceGroupId, newGroup.id);
+  
+  // Set new group as current
+  currentGroupId = newGroup.id;
 }
 
 async function saveGroupEdits() {
