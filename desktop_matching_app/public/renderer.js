@@ -731,15 +731,7 @@ function updateAddWordButton() {
   const needsSpelling = bundleSettings.requireUserSpelling;
   const ref = currentWord?.Reference;
   const hasSpelling = ref && session.records[ref]?.userSpelling;
-  
-  // Verify the current group actually exists in the session
-  const groupExists = currentGroupId != null && session.groups.some(g => g.id === currentGroupId);
-  const hasCurrentGroup = groupExists;
-  
-  // If currentGroupId is set but group doesn't exist, clear it
-  if (currentGroupId != null && !groupExists) {
-    currentGroupId = null;
-  }
+  const hasCurrentGroup = currentGroupId != null;
   
   const canAdd = (!needsSpelling || hasSpelling) && hasCurrentGroup;
   
@@ -893,11 +885,6 @@ async function removeWordFromGroup(ref, groupId) {
     if (group.members.length === 0) {
       session.groups = session.groups.filter(g => g.id !== groupId);
       console.log(`Deleted empty group ${groupId}`);
-      
-      // Clear currentGroupId if this was the selected group
-      if (currentGroupId === groupId) {
-        currentGroupId = null;
-      }
     } else {
       // Auto-unmark if group was reviewed (only if group still exists)
       if (group.additionsSinceReview !== undefined) {
