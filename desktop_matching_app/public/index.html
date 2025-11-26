@@ -886,7 +886,10 @@
             <h2 data-i18n="tm_selectSubBundle">Select Sub-Bundle</h2>
             <p class="subtitle" data-i18n="tm_selectSubBundle_subtitle">Choose a category to begin sorting tone groups</p>
           </div>
-          <button onclick="clearBundle()" class="danger" data-i18n="tm_loadDifferentBundle">Load Different Bundle</button>
+          <div style="display: flex; gap: 10px;">
+            <button onclick="exportHierarchicalBundle()" data-i18n="tm_exportCompleteSession">Export Complete Session</button>
+            <button class="danger" onclick="clearBundle()" data-i18n="tm_loadDifferentBundle">Load Different Bundle</button>
+          </div>
         </div>
         
         <div id="hierarchyTree" class="hierarchy-tree">
