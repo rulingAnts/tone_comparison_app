@@ -321,6 +321,17 @@
       background: #f9f9f9;
       border-radius: 4px;
       margin-bottom: 5px;
+      cursor: move;
+      transition: background 0.2s, transform 0.2s;
+    }
+
+    .member-item:hover {
+      background: #f0f0f0;
+    }
+
+    .member-item.dragging {
+      opacity: 0.5;
+      transform: scale(0.98);
     }
 
     .member-text {

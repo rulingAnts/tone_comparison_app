@@ -1246,6 +1246,58 @@ async function renderGroups() {
         const record = memberRecords[i];
         const memberItem = document.createElement('div');
         memberItem.className = 'member-item';
+        memberItem.draggable = true;
+        memberItem.dataset.ref = ref;
+        memberItem.dataset.groupId = group.id;
+        
+        // Drag and drop handlers for reordering within group
+        memberItem.addEventListener('dragstart', (e) => {
+          e.stopPropagation(); // Prevent bubbling to card
+          memberItem.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', ref);
+          e.dataTransfer.setData('application/group-id', group.id);
+        });
+        
+        memberItem.addEventListener('dragend', (e) => {
+          memberItem.classList.remove('dragging');
+        });
+        
+        memberItem.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          const draggingItem = membersList.querySelector('.dragging');
+          if (!draggingItem || draggingItem === memberItem) return;
+          
+          // Only allow drop if same group
+          const dragGroupId = draggingItem.dataset.groupId;
+          if (dragGroupId !== group.id) return;
+          
+          e.dataTransfer.dropEffect = 'move';
+          
+          // Determine if we should insert before or after
+          const rect = memberItem.getBoundingClientRect();
+          const midpoint = rect.top + rect.height / 2;
+          
+          if (e.clientY < midpoint) {
+            membersList.insertBefore(draggingItem, memberItem);
+          } else {
+            membersList.insertBefore(draggingItem, memberItem.nextSibling);
+          }
+        });
+        
+        memberItem.addEventListener('drop', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          // Update the members array based on new DOM order
+          const newOrder = Array.from(membersList.querySelectorAll('.member-item'))
+            .map(item => item.dataset.ref);
+          
+          group.members = newOrder;
+          
+          // Save to session
+          ipcRenderer.invoke('update-group', group.id, { members: newOrder });
+        });
         
         const memberText = document.createElement('div');
         memberText.className = 'member-text';
