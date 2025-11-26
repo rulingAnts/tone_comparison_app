@@ -1032,6 +1032,36 @@ ipcMain.handle('add-word-to-group', async (event, ref, groupId) => {
       group.members.push(ref);
       group.additionsSinceReview = (group.additionsSinceReview || 0) + 1;
     }
+    
+    // Update the record's tone group fields immediately
+    const record = bundleData.records?.find(r => normalizeRefString(r.Reference) === normalizeRefString(ref));
+    if (record) {
+      const settings = bundleData.settings;
+      const tgKey = settings.toneGroupElement || 'SurfaceMelodyGroup';
+      const tgIdKey = settings.toneGroupIdElement || settings.toneGroupIdField || 'SurfaceMelodyGroupId';
+      const pitchKey = settings.pitchField;
+      const abbreviationKey = settings.abbreviationField;
+      const exemplarKey = settings.exemplarField;
+      
+      // Set tone group number and ID
+      record[tgKey] = String(group.groupNumber);
+      record[tgIdKey] = group.id;
+      
+      // Set or clear pitch transcription
+      if (pitchKey) {
+        record[pitchKey] = group.pitchTranscription || '';
+      }
+      
+      // Set or clear abbreviation
+      if (abbreviationKey) {
+        record[abbreviationKey] = group.toneAbbreviation || '';
+      }
+      
+      // Set or clear exemplar word
+      if (exemplarKey) {
+        record[exemplarKey] = group.exemplarWord || '';
+      }
+    }
   }
   
   // Track the assignment (for hierarchical bundles)
@@ -1068,6 +1098,33 @@ ipcMain.handle('remove-word-from-group', async (event, ref, groupId) => {
           subBundleSession.groups = subBundleSession.groups.filter(g => g.id !== groupId);
         }
       }
+    }
+  }
+  
+  // Clear the record's tone group fields
+  const record = bundleData.records?.find(r => normalizeRefString(r.Reference) === normalizeRefString(ref));
+  if (record) {
+    const settings = bundleData.settings;
+    const tgKey = settings.toneGroupElement || 'SurfaceMelodyGroup';
+    const tgIdKey = settings.toneGroupIdElement || settings.toneGroupIdField || 'SurfaceMelodyGroupId';
+    const pitchKey = settings.pitchField;
+    const abbreviationKey = settings.abbreviationField;
+    const exemplarKey = settings.exemplarField;
+    
+    // Clear tone group fields
+    record[tgKey] = '';
+    record[tgIdKey] = '';
+    
+    if (pitchKey) {
+      record[pitchKey] = '';
+    }
+    
+    if (abbreviationKey) {
+      record[abbreviationKey] = '';
+    }
+    
+    if (exemplarKey) {
+      record[exemplarKey] = '';
     }
   }
   
