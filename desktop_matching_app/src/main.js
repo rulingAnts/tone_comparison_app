@@ -1694,6 +1694,137 @@ ipcMain.handle('export-bundle', async () => {
   }
 });
 
+// Update working_data.xml with all changes from sessionData (hierarchical bundles)
+async function updateWorkingXmlWithSessionData() {
+  if (!bundleData || !sessionData || bundleType !== 'hierarchical') {
+    return;
+  }
+
+  const xmlFolder = path.join(extractedPath, 'xml');
+  const workingXmlPath = path.join(xmlFolder, 'working_data.xml');
+
+  if (!fs.existsSync(workingXmlPath)) {
+    console.warn('[updateWorkingXmlWithSessionData] working_data.xml not found');
+    return;
+  }
+
+  console.log('[updateWorkingXmlWithSessionData] Updating working_data.xml with session changes');
+
+  // Read and parse XML with UTF-16 encoding
+  const xmlBuffer = fs.readFileSync(workingXmlPath);
+  const xmlData = xmlBuffer.toString('utf16le');
+
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    trimValues: true,
+    parseAttributeValue: false,
+    parseTagValue: false,
+  });
+
+  const xmlResult = parser.parse(xmlData);
+  const phonData = xmlResult.phon_data;
+  let dataForms = Array.isArray(phonData.data_form)
+    ? phonData.data_form
+    : [phonData.data_form];
+
+  // Get field names from settings
+  const settings = bundleData.settings;
+  const tgKey = settings.toneGroupElement || 'SurfaceMelodyGroup';
+  const tgIdKey = settings.toneGroupIdElement || settings.toneGroupIdField || 'SurfaceMelodyGroupId';
+  const userSpellingKey = settings.userSpellingElement || 'Orthographic';
+  const pitchKey = settings.pitchField;
+  const abbreviationKey = settings.abbreviationField;
+  const exemplarKey = settings.exemplarField;
+
+  // Build a map of all group assignments from all sub-bundles
+  const refToGroup = new Map();
+  
+  if (sessionData.subBundles && Array.isArray(sessionData.subBundles)) {
+    sessionData.subBundles.forEach(subBundleSession => {
+      if (subBundleSession.groups && subBundleSession.groups.length > 0) {
+        subBundleSession.groups.forEach(group => {
+          (group.members || []).forEach(ref => {
+            refToGroup.set(normalizeRefString(ref), {
+              groupNumber: group.groupNumber,
+              groupId: group.id,
+              pitchTranscription: group.pitchTranscription,
+              toneAbbreviation: group.toneAbbreviation,
+              exemplarWord: group.exemplarWord,
+            });
+          });
+        });
+      }
+    });
+  }
+
+  console.log(`[updateWorkingXmlWithSessionData] Found ${refToGroup.size} group assignments to apply`);
+
+  // Update each data form
+  let updatedCount = 0;
+  dataForms.forEach(record => {
+    const ref = normalizeRefString(record.Reference);
+    let wasUpdated = false;
+
+    // Apply user spelling if present
+    const edits = sessionData.records[ref];
+    if (edits && edits.userSpelling && userSpellingKey) {
+      record[userSpellingKey] = edits.userSpelling;
+      wasUpdated = true;
+    }
+
+    // Apply tone group assignment if present
+    const groupData = refToGroup.get(ref);
+    if (groupData) {
+      record[tgKey] = String(groupData.groupNumber);
+      record[tgIdKey] = groupData.groupId;
+
+      // Add metadata fields using configured field names
+      if (groupData.pitchTranscription && pitchKey) {
+        record[pitchKey] = groupData.pitchTranscription;
+      }
+      if (groupData.toneAbbreviation && abbreviationKey) {
+        record[abbreviationKey] = groupData.toneAbbreviation;
+      }
+      if (groupData.exemplarWord && exemplarKey) {
+        record[exemplarKey] = groupData.exemplarWord;
+      }
+      wasUpdated = true;
+    }
+
+    if (wasUpdated) {
+      updatedCount++;
+    }
+  });
+
+  console.log(`[updateWorkingXmlWithSessionData] Updated ${updatedCount} records in working_data.xml`);
+
+  // Build XML
+  const builder = new XMLBuilder({
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    format: true,
+    indentBy: '  ',
+  });
+
+  let updatedXml = builder.build(xmlResult);
+
+  // Ensure XML declaration with UTF-16
+  if (!updatedXml.startsWith('<?xml')) {
+    updatedXml = '<?xml version="1.0" encoding="utf-16"?>\n' + updatedXml;
+  } else {
+    // Replace existing declaration to ensure UTF-16
+    updatedXml = updatedXml.replace(
+      /<\?xml[^?]*\?>/,
+      '<?xml version="1.0" encoding="utf-16"?>'
+    );
+  }
+
+  // Write with UTF-16 encoding
+  fs.writeFileSync(workingXmlPath, updatedXml, 'utf16le');
+  console.log('[updateWorkingXmlWithSessionData] Successfully wrote updated working_data.xml');
+}
+
 // Export hierarchical bundle (.tnset)
 async function exportHierarchicalBundle() {
   const { dialog } = require('electron');
@@ -1710,6 +1841,12 @@ async function exportHierarchicalBundle() {
   try {
     const outputPath = result.filePath;
     
+    // FIRST: Update working_data.xml with all changes from sessionData
+    if (bundleData.usesNewStructure) {
+      console.log('[export-bundle] Updating working_data.xml with session changes');
+      await updateWorkingXmlWithSessionData();
+    }
+    
     // Create archive
     const output = fs.createWriteStream(outputPath);
     const archive = archiver('zip', { zlib: { level: 9 } });
@@ -1720,7 +1857,7 @@ async function exportHierarchicalBundle() {
     if (bundleData.usesNewStructure) {
       console.log('[export-bundle] Exporting new structure bundle');
       
-      // Add xml/ folder with working_data.xml
+      // Add xml/ folder with working_data.xml (now updated)
       const xmlFolder = path.join(extractedPath, 'xml');
       if (fs.existsSync(xmlFolder)) {
         archive.directory(xmlFolder, 'xml');
