@@ -1043,6 +1043,20 @@ ipcMain.handle('remove-word-from-group', async (event, ref, groupId) => {
   const group = sessionData.groups.find(g => g.id === groupId);
   if (group) {
     group.members = (group.members || []).filter(m => m !== ref);
+    
+    // Delete group if it's now empty
+    if (group.members.length === 0) {
+      sessionData.groups = sessionData.groups.filter(g => g.id !== groupId);
+      console.log(`[remove-word-from-group] Deleted empty group ${groupId}`);
+      
+      // Also remove from sub-bundle session if hierarchical
+      if (bundleType === 'hierarchical' && sessionData.currentSubBundle) {
+        const subBundleSession = sessionData.subBundles.find(sb => sb.path === sessionData.currentSubBundle);
+        if (subBundleSession) {
+          subBundleSession.groups = subBundleSession.groups.filter(g => g.id !== groupId);
+        }
+      }
+    }
   }
   
   // Track the removal (for hierarchical bundles)

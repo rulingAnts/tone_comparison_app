@@ -880,9 +880,16 @@ async function removeWordFromGroup(ref, groupId) {
   const group = session.groups.find(g => g.id === groupId);
   if (group) {
     group.members = (group.members || []).filter(m => m !== ref);
-    // Auto-unmark if group was reviewed
-    if (group.additionsSinceReview !== undefined) {
-      group.additionsSinceReview++;
+    
+    // Delete group if it's now empty
+    if (group.members.length === 0) {
+      session.groups = session.groups.filter(g => g.id !== groupId);
+      console.log(`Deleted empty group ${groupId}`);
+    } else {
+      // Auto-unmark if group was reviewed (only if group still exists)
+      if (group.additionsSinceReview !== undefined) {
+        group.additionsSinceReview++;
+      }
     }
   }
   
