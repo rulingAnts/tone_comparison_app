@@ -1118,6 +1118,7 @@ ipcMain.handle('update-group', async (event, groupId, updates) => {
     if (updates.image !== undefined) group.image = updates.image;
     if (updates.additionsSinceReview !== undefined) group.additionsSinceReview = updates.additionsSinceReview;
     if (updates.requiresReview !== undefined) group.requiresReview = updates.requiresReview;
+    if (updates.members !== undefined) group.members = updates.members;
     
     // Enhanced group fields with tracking
     if (updates.pitchTranscription !== undefined) {
@@ -1134,6 +1135,18 @@ ipcMain.handle('update-group', async (event, groupId, updates) => {
     }
     if (updates.exemplarWordRef !== undefined) {
       group.exemplarWordRef = updates.exemplarWordRef;
+    }
+    
+    // For hierarchical bundles, also update the sub-bundle session
+    if (bundleType === 'hierarchical' && sessionData.currentSubBundle) {
+      const subBundleSession = sessionData.subBundles.find(sb => sb.path === sessionData.currentSubBundle);
+      if (subBundleSession && subBundleSession.groups) {
+        const subGroup = subBundleSession.groups.find(g => g.id === groupId);
+        if (subGroup) {
+          // Update the sub-bundle's copy of this group
+          Object.assign(subGroup, updates);
+        }
+      }
     }
   }
   
