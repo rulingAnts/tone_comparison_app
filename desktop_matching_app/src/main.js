@@ -1002,6 +1002,18 @@ ipcMain.handle('confirm-spelling', async (event, ref, userSpelling) => {
   return sessionData;
 });
 
+ipcMain.handle('toggle-word-flag', async (event, ref, flagged) => {
+  if (!sessionData) return null;
+  
+  if (!sessionData.records[ref]) {
+    sessionData.records[ref] = {};
+  }
+  sessionData.records[ref].flagged = flagged;
+  
+  saveSession();
+  return sessionData;
+});
+
 ipcMain.handle('add-word-to-group', async (event, ref, groupId) => {
   if (!sessionData) return null;
   

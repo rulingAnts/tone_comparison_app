@@ -880,6 +880,21 @@ async function addWordToCurrentGroup() {
   updateMoveWordButton();
 }
 
+async function toggleWordFlag(ref, groupId) {
+  if (!session.records[ref]) {
+    session.records[ref] = {};
+  }
+  
+  const wasFlagged = session.records[ref].flagged === true;
+  session.records[ref].flagged = !wasFlagged;
+  
+  // Save to backend
+  await ipcRenderer.invoke('toggle-word-flag', ref, session.records[ref].flagged);
+  
+  // Re-render to show updated flag state
+  renderGroups();
+}
+
 async function removeWordFromGroup(ref, groupId) {
   await ipcRenderer.invoke('remove-word-from-group', ref, groupId);
   
@@ -887,6 +902,12 @@ async function removeWordFromGroup(ref, groupId) {
   const group = session.groups.find(g => g.id === groupId);
   if (group) {
     group.members = (group.members || []).filter(m => m !== ref);
+    
+    // Clear flag when removing from group
+    if (session.records[ref]?.flagged) {
+      session.records[ref].flagged = false;
+      await ipcRenderer.invoke('toggle-word-flag', ref, false);
+    }
     
     // Delete group if it's now empty
     if (group.members.length === 0) {
@@ -1355,8 +1376,27 @@ async function renderGroups() {
         
         memberItem.appendChild(memberText);
         
+        // Check if this word is flagged
+        const isFlagged = session.records[ref]?.flagged === true;
+        if (isFlagged) {
+          memberItem.style.borderLeft = '4px solid #ffc107';
+          memberItem.style.background = '#fff9e6';
+        }
+        
         const actions = document.createElement('div');
         actions.className = 'member-actions';
+        
+        // Flag button
+        const flagBtn = document.createElement('button');
+        flagBtn.className = 'icon-button';
+        flagBtn.textContent = isFlagged ? '🚩' : '⚑';
+        flagBtn.title = isFlagged ? 'Unflag for review' : 'Flag for review';
+        flagBtn.style.color = isFlagged ? '#ffc107' : '#999';
+        flagBtn.onclick = (e) => {
+          e.stopPropagation();
+          toggleWordFlag(ref, group.id);
+        };
+        actions.appendChild(flagBtn);
         
         const playBtn = document.createElement('button');
         playBtn.className = 'icon-button';
