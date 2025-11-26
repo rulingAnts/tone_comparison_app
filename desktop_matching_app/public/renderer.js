@@ -731,13 +731,20 @@ function updateAddWordButton() {
   const needsSpelling = bundleSettings.requireUserSpelling;
   const ref = currentWord?.Reference;
   const hasSpelling = ref && session.records[ref]?.userSpelling;
-  const hasCurrentGroup = currentGroupId != null;
   
-  const canAdd = (!needsSpelling || hasSpelling) && hasCurrentGroup;
+  // Verify the group actually exists in session
+  const groupExists = currentGroupId && session.groups?.some(g => g.id === currentGroupId);
+  
+  // Clear currentGroupId if the group no longer exists
+  if (currentGroupId && !groupExists) {
+    currentGroupId = null;
+  }
+  
+  const canAdd = (!needsSpelling || hasSpelling) && groupExists;
   
   addWordBtn.disabled = !canAdd;
   
-  if (!hasCurrentGroup) {
+  if (!groupExists) {
     addWordHint.textContent = window.i18n.t('tm_addWord_hint_needGroup');
     addWordHint.classList.remove('hidden');
   } else if (needsSpelling && !hasSpelling) {
@@ -885,6 +892,11 @@ async function removeWordFromGroup(ref, groupId) {
     if (group.members.length === 0) {
       session.groups = session.groups.filter(g => g.id !== groupId);
       console.log(`Deleted empty group ${groupId}`);
+      
+      // Clear currentGroupId if we just deleted the selected group
+      if (currentGroupId === groupId) {
+        currentGroupId = null;
+      }
     } else {
       // Auto-unmark if group was reviewed (only if group still exists)
       if (group.additionsSinceReview !== undefined) {
@@ -974,6 +986,42 @@ async function markGroupReviewed(groupId) {
   renderGroups();
 }
 
+// Move group up in the list
+function moveGroupUp(index) {
+  if (index <= 0 || index >= session.groups.length) return;
+  
+  // Swap with previous group
+  const temp = session.groups[index - 1];
+  session.groups[index - 1] = session.groups[index];
+  session.groups[index] = temp;
+  
+  // Update group numbers
+  session.groups[index - 1].groupNumber = index;
+  session.groups[index].groupNumber = index + 1;
+  
+  // Save and re-render
+  ipcRenderer.invoke('update-session', { groups: session.groups });
+  renderGroups();
+}
+
+// Move group down in the list
+function moveGroupDown(index) {
+  if (index < 0 || index >= session.groups.length - 1) return;
+  
+  // Swap with next group
+  const temp = session.groups[index + 1];
+  session.groups[index + 1] = session.groups[index];
+  session.groups[index] = temp;
+  
+  // Update group numbers
+  session.groups[index].groupNumber = index + 1;
+  session.groups[index + 1].groupNumber = index + 2;
+  
+  // Save and re-render
+  ipcRenderer.invoke('update-session', { groups: session.groups });
+  renderGroups();
+}
+
 function getMemberDisplayLines(ref) {
   // Priority: gloss > user spelling > written form
   const record = session.records[ref] || {};
@@ -1042,6 +1090,37 @@ async function renderGroups() {
     const headerActions = document.createElement('div');
     headerActions.style.display = 'flex';
     headerActions.style.gap = '8px';
+    headerActions.style.alignItems = 'center';
+    
+    // Move up button
+    const moveUpBtn = document.createElement('button');
+    moveUpBtn.textContent = '↑';
+    moveUpBtn.className = 'secondary';
+    moveUpBtn.style.fontSize = '14px';
+    moveUpBtn.style.padding = '4px 10px';
+    moveUpBtn.style.fontWeight = 'bold';
+    moveUpBtn.title = 'Move group up';
+    moveUpBtn.disabled = idx === 0; // Disable if first group
+    moveUpBtn.onclick = (e) => {
+      e.stopPropagation();
+      moveGroupUp(idx);
+    };
+    headerActions.appendChild(moveUpBtn);
+    
+    // Move down button
+    const moveDownBtn = document.createElement('button');
+    moveDownBtn.textContent = '↓';
+    moveDownBtn.className = 'secondary';
+    moveDownBtn.style.fontSize = '14px';
+    moveDownBtn.style.padding = '4px 10px';
+    moveDownBtn.style.fontWeight = 'bold';
+    moveDownBtn.title = 'Move group down';
+    moveDownBtn.disabled = idx === session.groups.length - 1; // Disable if last group
+    moveDownBtn.onclick = (e) => {
+      e.stopPropagation();
+      moveGroupDown(idx);
+    };
+    headerActions.appendChild(moveDownBtn);
     
     // Edit button
     const editBtn = document.createElement('button');
