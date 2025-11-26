@@ -2209,6 +2209,50 @@ async function exportLegacyBundle() {
   }
 }
 
+// Export just the working_data.xml file
+ipcMain.handle('export-working-xml-only', async () => {
+  if (!bundleData || !sessionData || bundleType !== 'hierarchical') {
+    return { success: false, error: 'No hierarchical bundle loaded' };
+  }
+
+  if (!bundleData.usesNewStructure) {
+    return { success: false, error: 'Export requires new hierarchical bundle structure' };
+  }
+
+  const { dialog } = require('electron');
+  const result = await dialog.showSaveDialog({
+    title: 'Export Working XML',
+    defaultPath: 'working_data.xml',
+    filters: [{ name: 'XML Files', extensions: ['xml'] }],
+  });
+
+  if (result.canceled || !result.filePath) {
+    return { success: false, error: 'Export cancelled' };
+  }
+
+  try {
+    // Update working_data.xml with all changes from sessionData
+    await updateWorkingXmlWithSessionData();
+
+    // Copy the updated working_data.xml to the selected location
+    const workingXmlPath = path.join(extractedPath, 'xml', 'working_data.xml');
+    
+    if (!fs.existsSync(workingXmlPath)) {
+      return { success: false, error: 'working_data.xml not found' };
+    }
+
+    fs.copyFileSync(workingXmlPath, result.filePath);
+
+    return {
+      success: true,
+      path: result.filePath,
+    };
+  } catch (error) {
+    console.error('[export-working-xml-only] Error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 // Export single sub-bundle as legacy format (.zip)
 ipcMain.handle('export-sub-bundle', async (event, { subBundlePath }) => {
   if (!bundleData || !sessionData || bundleType !== 'hierarchical') {

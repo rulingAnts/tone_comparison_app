@@ -1512,6 +1512,20 @@ async function exportCurrentSubBundle() {
   }
 }
 
+async function exportWorkingXmlOnly() {
+  if (bundleType !== 'hierarchical') {
+    alert('This feature is only available for hierarchical bundles');
+    return;
+  }
+  
+  const result = await ipcRenderer.invoke('export-working-xml-only');
+  if (result.success) {
+    alert(`Working XML exported successfully!\n\nLocation: ${result.path}`);
+  } else {
+    alert(`Export failed: ${result.error}`);
+  }
+}
+
 // Conflict resolution functions
 function showConflictModal(conflictData) {
   const modal = document.getElementById('conflictModal');
