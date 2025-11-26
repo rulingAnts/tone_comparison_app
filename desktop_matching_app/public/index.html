@@ -334,6 +334,66 @@
       transform: scale(0.98);
     }
 
+    .queue-item {
+      padding: 10px;
+      margin-bottom: 8px;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      cursor: move;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .queue-item:hover {
+      background: #f8f9fa;
+      border-color: #007bff;
+    }
+
+    .queue-item.dragging {
+      opacity: 0.5;
+    }
+
+    .queue-item.current-word {
+      background: #e7f3ff;
+      border-color: #007bff;
+      font-weight: 500;
+    }
+
+    .queue-item .drag-handle {
+      color: #999;
+      font-size: 18px;
+      cursor: grab;
+    }
+
+    .queue-item .queue-position {
+      color: #666;
+      font-size: 12px;
+      min-width: 30px;
+    }
+
+    .queue-item .word-info {
+      flex: 1;
+    }
+
+    .queue-item .word-ref {
+      font-weight: 500;
+      color: #333;
+    }
+
+    .queue-item .word-text {
+      font-size: 12px;
+      color: #666;
+      margin-top: 2px;
+    }
+
+    .queue-item button {
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+
     .member-text {
       flex: 1;
     }
@@ -938,7 +998,12 @@
 
         <!-- Current Word Panel -->
         <div class="word-panel">
-          <h2 style="margin-bottom: 15px;" data-i18n="tm_currentWord">Current Word</h2>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
+            <h2 style="margin: 0;" data-i18n="tm_currentWord">Current Word</h2>
+            <button id="manageQueueBtn" onclick="openQueueModal()" style="padding: 6px 12px; font-size: 13px;">
+              📋 Manage Queue (<span id="queueCount">0</span>)
+            </button>
+          </div>
           
           <div class="word-display" id="wordDisplay">
             <div class="word-line" id="writtenFormLine"></div>
@@ -1106,6 +1171,36 @@
 
       <div class="modal-footer">
         <button class="secondary" onclick="closeMoveFlaggedModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Queue Management Modal -->
+  <div id="queueModal" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2>Queue Management</h2>
+        <button class="modal-close" onclick="closeQueueModal()">&times;</button>
+      </div>
+      
+      <div class="modal-body">
+        <p style="margin-bottom: 15px; color: #666;">
+          <strong id="queueModalCount"></strong> words remaining in queue. Click to jump to any word, or drag to reorder.
+        </p>
+        
+        <div style="margin-bottom: 15px;">
+          <button onclick="moveCurrentWordToEnd()" style="width: 100%;" id="moveToEndBtn">
+            ⬇️ Move Current Word to End of Queue
+          </button>
+        </div>
+        
+        <div style="max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 10px;">
+          <div id="queueList"></div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="secondary" onclick="closeQueueModal()">Close</button>
       </div>
     </div>
   </div>

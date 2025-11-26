@@ -584,6 +584,18 @@ function updateProgressIndicator() {
   const total = session.queue.length + getTotalAssignedWords();
   const completed = getTotalAssignedWords();
   document.getElementById('progressIndicator').textContent = window.i18n.t('tm_progressFormat', { completed, total });
+  
+  // Update queue count in Manage Queue button
+  const queueCountEl = document.getElementById('queueCount');
+  if (queueCountEl) {
+    queueCountEl.textContent = session.queue.length;
+  }
+  
+  // Update Manage Queue button visibility
+  const manageQueueBtn = document.getElementById('manageQueueBtn');
+  if (manageQueueBtn) {
+    manageQueueBtn.style.display = session.queue.length > 0 ? 'inline-block' : 'none';
+  }
 }
 
 function getTotalAssignedWords() {
@@ -1828,6 +1840,215 @@ async function moveFlaggedToNewGroup() {
   
   // Set new group as current
   currentGroupId = newGroup.id;
+}
+
+// Queue Management Functions
+
+function openQueueModal() {
+  renderQueueList();
+  document.getElementById('queueModal').classList.remove('hidden');
+}
+
+function closeQueueModal() {
+  document.getElementById('queueModal').classList.add('hidden');
+}
+
+async function renderQueueList() {
+  const queueList = document.getElementById('queueList');
+  const queueModalCount = document.getElementById('queueModalCount');
+  const moveToEndBtn = document.getElementById('moveToEndBtn');
+  
+  queueModalCount.textContent = session.queue.length;
+  
+  // Show/hide Move to End button if current word is in queue
+  const currentRef = currentWord?.Reference;
+  const isCurrentInQueue = currentRef && session.queue.includes(currentRef);
+  if (moveToEndBtn) {
+    moveToEndBtn.style.display = isCurrentInQueue ? 'block' : 'none';
+  }
+  
+  if (session.queue.length === 0) {
+    queueList.innerHTML = '<div style="color: #999; padding: 20px; text-align: center;">Queue is empty</div>';
+    return;
+  }
+  
+  queueList.innerHTML = '';
+  
+  for (let i = 0; i < session.queue.length; i++) {
+    const ref = session.queue[i];
+    const record = await getCachedRecord(ref);
+    
+    const queueItem = document.createElement('div');
+    queueItem.className = 'queue-item';
+    queueItem.dataset.ref = ref;
+    queueItem.dataset.index = i;
+    queueItem.draggable = true;
+    
+    // Highlight current word
+    if (ref === currentRef) {
+      queueItem.classList.add('current-word');
+    }
+    
+    // Drag handle
+    const dragHandle = document.createElement('div');
+    dragHandle.className = 'drag-handle';
+    dragHandle.textContent = '☰';
+    queueItem.appendChild(dragHandle);
+    
+    // Position
+    const position = document.createElement('div');
+    position.className = 'queue-position';
+    position.textContent = `#${i + 1}`;
+    queueItem.appendChild(position);
+    
+    // Word info
+    const wordInfo = document.createElement('div');
+    wordInfo.className = 'word-info';
+    
+    const wordRef = document.createElement('div');
+    wordRef.className = 'word-ref';
+    wordRef.textContent = ref;
+    if (ref === currentRef) {
+      wordRef.textContent += ' (current)';
+    }
+    wordInfo.appendChild(wordRef);
+    
+    // Written form
+    if (record && bundleSettings.showWrittenForm && bundleSettings.writtenFormElements) {
+      const writtenParts = bundleSettings.writtenFormElements
+        .map(elem => record[elem])
+        .filter(val => val != null && val !== '');
+      if (writtenParts.length > 0) {
+        const wordText = document.createElement('div');
+        wordText.className = 'word-text';
+        wordText.textContent = writtenParts.join(' ');
+        wordInfo.appendChild(wordText);
+      }
+    }
+    
+    queueItem.appendChild(wordInfo);
+    
+    // Actions
+    const playBtn = document.createElement('button');
+    playBtn.textContent = '▶';
+    playBtn.title = 'Play';
+    playBtn.onclick = (e) => {
+      e.stopPropagation();
+      playMemberAudio(ref);
+    };
+    queueItem.appendChild(playBtn);
+    
+    const jumpBtn = document.createElement('button');
+    jumpBtn.textContent = 'Jump to';
+    jumpBtn.onclick = (e) => {
+      e.stopPropagation();
+      jumpToQueueWord(ref);
+    };
+    queueItem.appendChild(jumpBtn);
+    
+    // Drag events
+    queueItem.addEventListener('dragstart', (e) => {
+      queueItem.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', i.toString());
+    });
+    
+    queueItem.addEventListener('dragend', () => {
+      queueItem.classList.remove('dragging');
+    });
+    
+    queueItem.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      const dragging = document.querySelector('.queue-item.dragging');
+      if (dragging && dragging !== queueItem) {
+        const afterElement = getDragAfterElement(queueList, e.clientY);
+        if (afterElement == null) {
+          queueList.appendChild(dragging);
+        } else {
+          queueList.insertBefore(dragging, afterElement);
+        }
+      }
+    });
+    
+    queueItem.addEventListener('drop', (e) => {
+      e.preventDefault();
+      reorderQueue();
+    });
+    
+    queueList.appendChild(queueItem);
+  }
+}
+
+function getDragAfterElement(container, y) {
+  const draggableElements = [...container.querySelectorAll('.queue-item:not(.dragging)')];
+  
+  return draggableElements.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    
+    if (offset < 0 && offset > closest.offset) {
+      return { offset: offset, element: child };
+    } else {
+      return closest;
+    }
+  }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+async function reorderQueue() {
+  const queueList = document.getElementById('queueList');
+  const items = [...queueList.querySelectorAll('.queue-item')];
+  
+  // Build new queue order from DOM
+  const newQueue = items.map(item => item.dataset.ref);
+  
+  // Update session
+  session.queue = newQueue;
+  await ipcRenderer.invoke('update-session', session);
+  
+  // Re-render to update positions
+  await renderQueueList();
+  
+  // Update current word if queue head changed
+  await loadCurrentWord();
+}
+
+async function jumpToQueueWord(ref) {
+  // Find index in queue
+  const index = session.queue.indexOf(ref);
+  if (index === -1) return;
+  
+  // Move word to front of queue
+  session.queue.splice(index, 1);
+  session.queue.unshift(ref);
+  
+  await ipcRenderer.invoke('update-session', session);
+  
+  // Close modal and reload
+  closeQueueModal();
+  await loadCurrentWord();
+  updateProgressIndicator();
+  renderGroups();
+}
+
+async function moveCurrentWordToEnd() {
+  if (!currentWord) return;
+  
+  const ref = currentWord.Reference;
+  const index = session.queue.indexOf(ref);
+  
+  if (index === -1) return;
+  
+  // Move to end of queue
+  session.queue.splice(index, 1);
+  session.queue.push(ref);
+  
+  await ipcRenderer.invoke('update-session', session);
+  
+  // Close modal and reload next word
+  closeQueueModal();
+  await loadCurrentWord();
+  updateProgressIndicator();
+  renderGroups();
 }
 
 async function saveGroupEdits() {
