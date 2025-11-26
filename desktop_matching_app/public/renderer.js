@@ -1064,7 +1064,8 @@ async function renderGroups() {
   
   groupsList.innerHTML = '';
   
-  for (const group of session.groups) {
+  for (let idx = 0; idx < session.groups.length; idx++) {
+    const group = session.groups[idx];
     const card = document.createElement('div');
     card.className = 'group-card';
     if (group.id === currentGroupId) {
