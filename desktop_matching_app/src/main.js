@@ -2558,13 +2558,17 @@ ipcMain.handle('apply-merge-to-dekereke', async () => {
       }
     }
 
-    // Rotate backup in target directory
+    // Rotate backups in same directory as target (keep 3 copies)
     const targetDir = path.dirname(targetXmlPath);
-    const backupsDir = path.join(targetDir, 'backups');
-    fs.mkdirSync(backupsDir, { recursive: true });
-    const ts = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupPath = path.join(backupsDir, `dekereke_${ts}.xml`);
-    fs.copyFileSync(targetXmlPath, backupPath);
+    const targetBase = path.basename(targetXmlPath, path.extname(targetXmlPath));
+    const ext = path.extname(targetXmlPath) || '.xml';
+    const backup1 = path.join(targetDir, `${targetBase}-DekerekeBackup${ext}`);
+    const backup2 = path.join(targetDir, `${targetBase}-DekerekeBackup2${ext}`);
+    const backup3 = path.join(targetDir, `${targetBase}-DekerekeBackup3${ext}`);
+    try { if (fs.existsSync(backup3)) fs.rmSync(backup3, { force: true }); } catch {}
+    try { if (fs.existsSync(backup2)) fs.renameSync(backup2, backup3); } catch {}
+    try { if (fs.existsSync(backup1)) fs.renameSync(backup1, backup2); } catch {}
+    fs.copyFileSync(targetXmlPath, backup1);
 
     // Write merged target preserving original encoding
     const builder = new XMLBuilder({ ignoreAttributes: false, attributeNamePrefix: '@_', format: true, indentBy: '  ' });
@@ -2579,7 +2583,7 @@ ipcMain.handle('apply-merge-to-dekereke', async () => {
     const reportPath = path.join(targetDir, `dekereke_merge_report_${ts}.json`);
     fs.writeFileSync(reportPath, JSON.stringify({ changedCount: changed.length, changed, missingInTargetCount: missingInTarget.length, deletedFromWorking: deletedRefs }, null, 2), 'utf8');
 
-    return { success: true, backupPath, reportPath, targetXmlPath, changedCount: changed.length, missingInTargetCount: missingInTarget.length, deletedFromWorking: deletedRefs };
+    return { success: true, backupPath: backup1, reportPath, targetXmlPath, changedCount: changed.length, missingInTargetCount: missingInTarget.length, deletedFromWorking: deletedRefs };
   } catch (error) {
     console.error('[apply-merge-to-dekereke] Error:', error);
     return { success: false, error: error.message };
