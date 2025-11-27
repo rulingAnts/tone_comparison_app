@@ -11,6 +11,8 @@ let movingWordRef = null; // For move word modal
 let selectedTargetSubBundle = null; // For move word modal
 let bundleType = null; // Track bundle type (hierarchical vs legacy)
 let currentSubBundle = null; // Track current sub-bundle for hierarchical bundles
+let lastMergeReportPath = null; // Track last merge report path
+let lastMergeReportData = null; // Cached last report JSON
 
 const REVIEW_THRESHOLD = 5;
 
@@ -2462,4 +2464,211 @@ function updateReviewStatusDisplay() {
       markBtn.style.display = allReviewed ? 'none' : 'block';
     }
   }
+}
+
+// Export Modal controls
+function openExportModal() {
+  const modal = document.getElementById('exportModal');
+  if (!modal) return;
+  // Enable/disable sub-bundle export based on context
+  const subBtn = document.getElementById('exportSubBundleBtn');
+  if (subBtn) {
+    const canSubExport = bundleType === 'hierarchical' && !!currentSubBundle;
+    subBtn.disabled = !canSubExport;
+  }
+  modal.classList.remove('hidden');
+}
+
+function closeExportModal() {
+  const modal = document.getElementById('exportModal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+}
+
+// Placeholder: Merge to Dekereke entrypoint
+async function mergeToDekereke() {
+  // Deprecated: replaced by preview flow
+}
+
+// Merge preview flow
+async function openMergePreview() {
+  closeExportModal();
+  try {
+    const res = await ipcRenderer.invoke('prepare-merge-preview');
+    if (!res.success) {
+      alert(`Failed to prepare preview: ${res.error}`);
+      return;
+    }
+    const { preview, sanity } = res;
+    // Populate counts
+    const countsEl = document.getElementById('mergeCounts');
+    countsEl.textContent = `${preview.changedCount} changes across ${preview.totalRecords} records`;
+    // Sanity summary
+    const sanityEl = document.getElementById('mergeSanitySummary');
+    const warns = (sanity.warnings || []).map(w => `• ${w}`).join('<br>');
+    sanityEl.innerHTML = `Change ratio: ${(sanity.changeRatio * 100).toFixed(2)}%${warns ? '<br>' + warns : ''}`;
+    // Clear missing records summary (will be populated after apply step if any)
+    const missingEl = document.getElementById('missingRecordsSummary');
+    if (missingEl) missingEl.textContent = '';
+    // Changes list (truncate to 100 entries for display)
+    const listEl = document.getElementById('mergeChangesList');
+    listEl.innerHTML = '';
+    const maxShow = 100;
+    const items = preview.changed.slice(0, maxShow);
+    items.forEach(item => {
+      const div = document.createElement('div');
+      div.style.borderBottom = '1px solid #eee';
+      div.style.padding = '6px 0';
+      const diffsText = item.diffs.map(d => `${d.field}: "${d.from}" → "${d.to}"`).join('; ');
+      div.textContent = `Ref ${item.Reference}: ${diffsText}`;
+      listEl.appendChild(div);
+    });
+    if (preview.changed.length > maxShow) {
+      const more = document.createElement('div');
+      more.style.color = '#666';
+      more.style.marginTop = '8px';
+      more.textContent = `…and ${preview.changed.length - maxShow} more changes`;
+      listEl.appendChild(more);
+    }
+    // Show modal
+    document.getElementById('mergePreviewModal').classList.remove('hidden');
+  } catch (err) {
+    alert(`Preview error: ${err.message}`);
+  }
+}
+
+function closeMergePreview() {
+  document.getElementById('mergePreviewModal').classList.add('hidden');
+}
+
+async function applyMergeToDekereke() {
+  try {
+    const res = await ipcRenderer.invoke('apply-merge-to-dekereke');
+    if (res.success) {
+      closeMergePreview();
+      const missingInfo = (res.missingInTargetCount && res.missingInTargetCount > 0)
+        ? `\nMissing in target: ${res.missingInTargetCount}${res.deletedFromWorking && res.deletedFromWorking.length ? ` (deleted from our copy: ${res.deletedFromWorking.length})` : ''}`
+        : '';
+      alert(`Merge completed. Changes: ${res.changedCount}\nBackup: ${res.backupPath}\nReport: ${res.reportPath}${missingInfo}`);
+      // Store last report path
+      lastMergeReportPath = res.reportPath;
+      lastMergeReportData = null; // reset cache
+    } else {
+      alert(`Merge failed: ${res.error}`);
+    }
+  } catch (err) {
+    alert(`Merge error: ${err.message}`);
+  }
+}
+
+// Settings modal controls
+async function openSettingsModal() {
+  try {
+    const res = await ipcRenderer.invoke('get-merge-settings');
+    if (res.success) {
+      const s = res.settings;
+      document.getElementById('maxCountDeltaInput').value = (s.maxCountDelta ?? 0.02).toString();
+      document.getElementById('minChangeRatioInput').value = (s.minChangeRatio ?? 0.001).toString();
+      document.getElementById('maxChangeRatioInput').value = (s.maxChangeRatio ?? 0.8).toString();
+    }
+  } catch {}
+  document.getElementById('settingsModal').classList.remove('hidden');
+}
+
+function closeSettingsModal() {
+  document.getElementById('settingsModal').classList.add('hidden');
+}
+
+async function saveMergeSettings() {
+  const maxCountDelta = parseFloat(document.getElementById('maxCountDeltaInput').value);
+  const minChangeRatio = parseFloat(document.getElementById('minChangeRatioInput').value);
+  const maxChangeRatio = parseFloat(document.getElementById('maxChangeRatioInput').value);
+  const res = await ipcRenderer.invoke('update-merge-settings', { maxCountDelta, minChangeRatio, maxChangeRatio });
+  if (!res.success) {
+    alert(`Failed to save settings: ${res.error}`);
+    return;
+  }
+  closeSettingsModal();
+  // Re-open preview to reflect new thresholds
+  await openMergePreview();
+}
+
+// Gear menu
+function toggleGearMenu() {
+  const menu = document.getElementById('gearMenu');
+  if (menu) {
+    menu.classList.toggle('hidden');
+  }
+}
+
+// Close gear menu when clicking outside
+document.addEventListener('click', (e) => {
+  const container = document.getElementById('gearMenuContainer');
+  const menu = document.getElementById('gearMenu');
+  if (!container || !menu) return;
+  if (!container.contains(e.target)) {
+    menu.classList.add('hidden');
+  }
+});
+
+// Merge report viewer
+async function openLastMergeReport() {
+  const modal = document.getElementById('mergeReportModal');
+  if (!lastMergeReportPath) {
+    alert('No merge report available yet. Apply a merge first.');
+    return;
+  }
+  try {
+    // Lazy-load and cache
+    if (!lastMergeReportData) {
+      const res = await ipcRenderer.invoke('read-json-file', lastMergeReportPath);
+      if (!res.success) {
+        alert(`Failed to read report: ${res.error}`);
+        return;
+      }
+      lastMergeReportData = res.data;
+    }
+    const summaryEl = document.getElementById('mergeReportSummary');
+    const listEl = document.getElementById('mergeReportList');
+    const d = lastMergeReportData || {};
+    const changedCount = d.changedCount || 0;
+    const missingCount = d.missingInTargetCount || 0;
+    const deletedCount = (Array.isArray(d.deletedFromWorking) ? d.deletedFromWorking.length : 0);
+    summaryEl.textContent = `Changes: ${changedCount}${missingCount ? ` • Missing in target: ${missingCount}` : ''}${deletedCount ? ` • Deleted from our copy: ${deletedCount}` : ''}`;
+    listEl.innerHTML = '';
+    // Render first 100 change entries
+    const maxShow = 100;
+    const items = (d.changed || []).slice(0, maxShow);
+    items.forEach(item => {
+      const div = document.createElement('div');
+      div.style.borderBottom = '1px solid #eee';
+      div.style.padding = '6px 0';
+      const diffsText = (item.diffs || []).map(d => `${d.field}: "${d.from}" → "${d.to}"`).join('; ');
+      div.textContent = `Ref ${item.Reference}: ${diffsText}`;
+      listEl.appendChild(div);
+    });
+    if ((d.changed || []).length > maxShow) {
+      const more = document.createElement('div');
+      more.style.color = '#666';
+      more.style.marginTop = '8px';
+      more.textContent = `…and ${(d.changed || []).length - maxShow} more changes`;
+      listEl.appendChild(more);
+    }
+    modal.classList.remove('hidden');
+    // Hide gear dropdown after opening
+    const menu = document.getElementById('gearMenu');
+    if (menu) menu.classList.add('hidden');
+  } catch (err) {
+    alert(`Error opening report: ${err.message}`);
+  }
+}
+
+function closeMergeReportModal() {
+  const modal = document.getElementById('mergeReportModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function openMergeReportInFinder() {
+  if (!lastMergeReportPath) return;
+  await ipcRenderer.invoke('open-path', lastMergeReportPath);
 }

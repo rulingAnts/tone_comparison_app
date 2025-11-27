@@ -958,8 +958,7 @@
             <p class="subtitle" data-i18n="tm_selectSubBundle_subtitle">Choose a category to begin sorting tone groups</p>
           </div>
           <div style="display: flex; gap: 10px;">
-            <button onclick="exportHierarchicalBundle()" data-i18n="tm_exportCompleteSession">Export Complete Session</button>
-            <button class="secondary" onclick="exportWorkingXmlOnly()">Export XML Only</button>
+            <button onclick="openExportModal()">Export…</button>
             <button class="danger" onclick="clearBundle()" data-i18n="tm_loadDifferentBundle">Load Different Bundle</button>
           </div>
         </div>
@@ -1048,9 +1047,7 @@
           
           <!-- Hierarchical bundle exports -->
           <div id="hierarchicalExportSection" class="hidden">
-            <button onclick="exportHierarchicalBundle()" data-i18n="tm_exportCompleteSession">Export Complete Session</button>
-            <button class="secondary" onclick="exportCurrentSubBundle()" style="margin-left: 10px;" data-i18n="tm_exportSubBundle">Export Sub-Bundle</button>
-            <button class="secondary" onclick="exportWorkingXmlOnly()" style="margin-left: 10px;">Export XML Only</button>
+            <button onclick="openExportModal()">Export…</button>
             <button class="secondary" onclick="loadBundle()" style="margin-left: 10px;" data-i18n="tm_loadDifferentBundle">Load Different Bundle</button>
             <button class="danger" onclick="resetSession()" style="margin-left: 10px;" data-i18n="tm_resetSession">Reset Session</button>
           </div>
@@ -1228,6 +1225,118 @@
       <div class="modal-footer">
         <button class="secondary" onclick="closeMoveWordModal()">Cancel</button>
         <button id="confirmMoveBtn" onclick="confirmMoveWord()" disabled>Move Word</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export Modal -->
+  <div id="exportModal" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2>Export Options</h2>
+        <button class="modal-close" onclick="closeExportModal()">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <p style="margin-bottom: 12px; color: #666;">
+          Choose how you want to export or merge your session data.
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <button onclick="exportHierarchicalBundle()">✓ Export Complete Session (Hierarchical)</button>
+          <button id="exportSubBundleBtn" class="secondary" onclick="exportCurrentSubBundle()">Export Current Sub-Bundle</button>
+          <button class="secondary" onclick="exportWorkingXmlOnly()">Export XML Only</button>
+          <button class="danger" onclick="openMergePreview()">Merge to Dekereke…</button>
+        </div>
+        <div class="form-help" style="margin-top: 12px;">
+          Sub-Bundle export is enabled only when a sub-bundle is selected.
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="secondary" onclick="closeExportModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2>Merge Settings</h2>
+        <button class="modal-close" onclick="closeSettingsModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="maxCountDeltaInput">Max record count delta (fraction)</label>
+          <input type="text" id="maxCountDeltaInput" placeholder="e.g., 0.02">
+          <div class="form-help">If working vs original count differs more than this fraction (or 5), show warning.</div>
+        </div>
+        <div class="form-group">
+          <label for="minChangeRatioInput">Min change ratio</label>
+          <input type="text" id="minChangeRatioInput" placeholder="e.g., 0.001">
+          <div class="form-help">Warn if too few changes to justify merge.</div>
+        </div>
+        <div class="form-group">
+          <label for="maxChangeRatioInput">Max change ratio</label>
+          <input type="text" id="maxChangeRatioInput" placeholder="e.g., 0.8">
+          <div class="form-help">Warn if extremely high percentage of records will change.</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="secondary" onclick="closeSettingsModal()">Cancel</button>
+        <button onclick="saveMergeSettings()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Merge Preview Modal -->
+  <div id="mergePreviewModal" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 800px; max-height: 80vh; overflow-y: auto;">
+      <div class="modal-header">
+        <h2>Merge Preview</h2>
+        <button class="modal-close" onclick="closeMergePreview()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex; justify-content:flex-end; margin-bottom:8px; position:relative;">
+          <div id="gearMenuContainer">
+            <button class="secondary" onclick="toggleGearMenu()">⚙️</button>
+            <div id="gearMenu" class="hidden" style="position:absolute; right:0; top:36px; background:#fff; border:1px solid #ddd; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.15); min-width:180px; z-index:10;">
+              <button class="icon-button" style="width:100%; text-align:left; padding:8px 12px;" onclick="openSettingsModal()">Settings…</button>
+              <button class="icon-button" style="width:100%; text-align:left; padding:8px 12px;" onclick="openLastMergeReport()">Last Merge Report…</button>
+            </div>
+          </div>
+        </div>
+        <div id="mergeSanitySummary" style="margin-bottom: 12px; color: #555;"></div>
+        <div style="margin-bottom: 10px;">
+          <strong id="mergeCounts"></strong>
+        </div>
+        <div id="missingRecordsSummary" style="margin-bottom:10px; color:#a33;"></div>
+        <div id="mergeChangesList" style="max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 10px; background: #f9f9f9;"></div>
+        <div class="form-help" style="margin-top: 10px;">
+          This will update the selected Dekereke XML in place and create a backup in a local 'backups/' folder.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="secondary" onclick="closeMergePreview()">Cancel</button>
+        <button onclick="applyMergeToDekereke()" class="danger">Apply Merge</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Merge Report Modal -->
+  <div id="mergeReportModal" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 800px; max-height: 80vh; overflow-y:auto;">
+      <div class="modal-header">
+        <h2>Last Merge Report</h2>
+        <button class="modal-close" onclick="closeMergeReportModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="mergeReportSummary" style="margin-bottom:10px; color:#555;"></div>
+        <div id="mergeReportList" style="max-height: 400px; overflow-y:auto; border:1px solid #ddd; border-radius:4px; padding:10px; background:#f9f9f9;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="secondary" onclick="openMergeReportInFinder()">Show in Finder</button>
+        <button class="secondary" onclick="closeMergeReportModal()">Close</button>
       </div>
     </div>
   </div>

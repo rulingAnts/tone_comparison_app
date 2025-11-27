@@ -79,6 +79,28 @@ app.whenReady().then(() => {
   }
 });
 
+// Read JSON file (safe helper for renderer)
+ipcMain.handle('read-json-file', async (event, filePath) => {
+  try {
+    const content = fs.readFileSync(filePath, 'utf8');
+    const data = JSON.parse(content);
+    return { success: true, data };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+// Open a path with the OS (reveal/open)
+ipcMain.handle('open-path', async (event, filePath) => {
+  try {
+    const { shell } = require('electron');
+    await shell.openPath(filePath);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
 async function restoreBundleFromSession() {
   try {
     // Check if extracted bundle still exists
@@ -2310,6 +2332,366 @@ ipcMain.handle('export-working-xml-only', async () => {
   }
 });
 
+// Prepare merge preview between working_data.xml and original_data.xml
+ipcMain.handle('prepare-merge-preview', async () => {
+  if (!bundleData || !sessionData || bundleType !== 'hierarchical') {
+    return { success: false, error: 'No hierarchical bundle loaded' };
+  }
+  if (!bundleData.usesNewStructure) {
+    return { success: false, error: 'Merge requires new hierarchical bundle structure' };
+  }
+
+  try {
+    // Ensure working_data.xml is up to date
+    await updateWorkingXmlWithSessionData();
+
+    const xmlDir = path.join(extractedPath, 'xml');
+    const workingXmlPath = path.join(xmlDir, 'working_data.xml');
+    const originalXmlPath = path.join(xmlDir, 'original_data.xml');
+    if (!fs.existsSync(workingXmlPath) || !fs.existsSync(originalXmlPath)) {
+      return { success: false, error: 'Missing working or original XML' };
+    }
+
+    const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', trimValues: true, parseAttributeValue: false, parseTagValue: false });
+    const wBuf = fs.readFileSync(workingXmlPath);
+    const oBuf = fs.readFileSync(originalXmlPath);
+    const wData = parser.parse(wBuf.toString('utf16le'));
+    const oData = parser.parse(oBuf.toString('utf16le'));
+    const wForms = Array.isArray(wData.phon_data.data_form) ? wData.phon_data.data_form : [wData.phon_data.data_form];
+    const oForms = Array.isArray(oData.phon_data.data_form) ? oData.phon_data.data_form : [oData.phon_data.data_form];
+
+    const settings = bundleData.settings;
+    const tgKey = settings.toneGroupElement || 'SurfaceMelodyGroup';
+    const tgIdKey = settings.toneGroupIdElement || settings.toneGroupIdField || 'SurfaceMelodyGroupId';
+    const userSpellingKey = settings.userSpellingElement || 'Orthographic';
+    const pitchKey = settings.pitchField;
+    const abbreviationKey = settings.abbreviationField;
+    const exemplarKey = settings.exemplarField;
+
+    const indexByRef = (forms) => {
+      const m = new Map();
+      forms.forEach(df => m.set(String(df.Reference).trim(), df));
+      return m;
+    };
+    const wMap = indexByRef(wForms);
+    const oMap = indexByRef(oForms);
+    const changed = [];
+    const keysToCheck = [tgKey, tgIdKey, userSpellingKey].concat([pitchKey, abbreviationKey, exemplarKey].filter(Boolean));
+    wMap.forEach((wRec, ref) => {
+      const oRec = oMap.get(ref);
+      if (!oRec) return;
+      const diffs = [];
+      keysToCheck.forEach(k => {
+        const wVal = wRec[k] ?? '';
+        const oVal = oRec[k] ?? '';
+        if (wVal !== oVal) {
+          diffs.push({ field: k, from: oVal, to: wVal });
+        }
+      });
+      if (diffs.length > 0) {
+        changed.push({ Reference: ref, diffs });
+      }
+    });
+
+    const totalRecords = wForms.length;
+    const changedCount = changed.length;
+    const changeRatio = totalRecords > 0 ? changedCount / totalRecords : 0;
+    // Merge sanity thresholds (configurable)
+    const ms = (bundleData.mergeSettings || {
+      maxCountDelta: 0.02, // 2% or 5 minimum
+      minChangeRatio: 0.001,
+      maxChangeRatio: 0.8,
+    });
+    const sanity = { totalRecords, changedCount, changeRatio, warnings: [] };
+    const countDelta = Math.abs(wForms.length - oForms.length);
+    const countThreshold = Math.max(5, Math.ceil(totalRecords * ms.maxCountDelta));
+    if (countDelta > countThreshold) {
+      sanity.warnings.push('Record count mismatch exceeds threshold');
+    }
+    if (changeRatio < ms.minChangeRatio) {
+      sanity.warnings.push('Very few changes detected — merge may be unnecessary');
+    }
+    if (changeRatio > ms.maxChangeRatio) {
+      sanity.warnings.push('Extremely high change ratio — confirm target DB is correct');
+    }
+
+    return { success: true, preview: { changed, changedCount, totalRecords }, sanity };
+  } catch (error) {
+    console.error('[prepare-merge-preview] Error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Expose/get merge settings
+ipcMain.handle('get-merge-settings', async () => {
+  const defaults = {
+    maxCountDelta: 0.02,
+    minChangeRatio: 0.001,
+    maxChangeRatio: 0.8,
+  };
+  const settings = { ...defaults, ...(bundleData?.mergeSettings || {}) };
+  return { success: true, settings };
+});
+
+// Update merge settings
+ipcMain.handle('update-merge-settings', async (event, newSettings) => {
+  if (!bundleData) return { success: false, error: 'No bundle loaded' };
+  const sanitized = {};
+  if (typeof newSettings.maxCountDelta === 'number' && newSettings.maxCountDelta >= 0 && newSettings.maxCountDelta <= 1) {
+    sanitized.maxCountDelta = newSettings.maxCountDelta;
+  }
+  if (typeof newSettings.minChangeRatio === 'number' && newSettings.minChangeRatio >= 0 && newSettings.minChangeRatio <= 1) {
+    sanitized.minChangeRatio = newSettings.minChangeRatio;
+  }
+  if (typeof newSettings.maxChangeRatio === 'number' && newSettings.maxChangeRatio >= 0 && newSettings.maxChangeRatio <= 1) {
+    sanitized.maxChangeRatio = newSettings.maxChangeRatio;
+  }
+  bundleData.mergeSettings = { ...(bundleData.mergeSettings || {}), ...sanitized };
+  saveBundleData();
+  return { success: true, settings: bundleData.mergeSettings };
+});
+
+// Apply merge to selected Dekereke XML (in-place) with backup rotation
+ipcMain.handle('apply-merge-to-dekereke', async () => {
+  if (!bundleData || !sessionData || bundleType !== 'hierarchical') {
+    return { success: false, error: 'No hierarchical bundle loaded' };
+  }
+  if (!bundleData.usesNewStructure) {
+    return { success: false, error: 'Merge requires new hierarchical bundle structure' };
+  }
+
+  try {
+    // Warn user to save and close Dekereke before proceeding
+    const warn = await dialog.showMessageBox(mainWindow, {
+      type: 'warning', buttons: ['Cancel', 'Proceed'], defaultId: 1, cancelId: 0,
+      title: 'Close Dekereke Before Merge',
+      message: 'Please save your work and close Dekereke before merging.',
+      detail: 'Merging will modify the target XML file in place and create a backup.'
+    });
+    if (warn.response === 0) {
+      return { success: false, error: 'Merge cancelled by user' };
+    }
+
+    // Select target XML
+    const openRes = await dialog.showOpenDialog(mainWindow, {
+      title: 'Select Dekereke XML to Merge Into', properties: ['openFile'],
+      filters: [{ name: 'XML Files', extensions: ['xml'] }]
+    });
+    if (openRes.canceled || openRes.filePaths.length === 0) {
+      return { success: false, error: 'No target selected' };
+    }
+    const targetXmlPath = openRes.filePaths[0];
+
+    // Ensure working XML updated
+    const xmlDir = path.join(extractedPath, 'xml');
+    const workingXmlPath = path.join(xmlDir, 'working_data.xml');
+    await updateWorkingXmlWithSessionData();
+    const wBuf = fs.readFileSync(workingXmlPath);
+    const tBuf = fs.readFileSync(targetXmlPath);
+    const tProbe = tBuf.slice(0, 200).toString('utf8');
+    const declMatch = tProbe.match(/encoding\s*=\s*"([^"]+)"/i);
+    const targetDeclared = declMatch ? declMatch[1].toLowerCase() : null;
+    const targetIsUtf16 = (targetDeclared && targetDeclared.includes('utf-16')) || tProbe.includes('\u0000');
+
+    const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', trimValues: true, parseAttributeValue: false, parseTagValue: false });
+    const wData = parser.parse(wBuf.toString('utf16le'));
+    const tData = parser.parse(targetIsUtf16 ? tBuf.toString('utf16le') : tBuf.toString('utf8'));
+    const wForms = Array.isArray(wData.phon_data.data_form) ? wData.phon_data.data_form : [wData.phon_data.data_form];
+    const tForms = Array.isArray(tData.phon_data.data_form) ? tData.phon_data.data_form : [tData.phon_data.data_form];
+
+    const indexByRef = (forms) => { const m = new Map(); forms.forEach(df => m.set(String(df.Reference).trim(), df)); return m; };
+    const wMap = indexByRef(wForms);
+    const tMap = indexByRef(tForms);
+
+    const settings = bundleData.settings;
+    const tgKey = settings.toneGroupElement || 'SurfaceMelodyGroup';
+    const tgIdKey = settings.toneGroupIdElement || settings.toneGroupIdField || 'SurfaceMelodyGroupId';
+    const userSpellingKey = settings.userSpellingElement || 'Orthographic';
+    const pitchKey = settings.pitchField;
+    const abbreviationKey = settings.abbreviationField;
+    const exemplarKey = settings.exemplarField;
+    const keysToCheck = [tgKey, tgIdKey, userSpellingKey].concat([pitchKey, abbreviationKey, exemplarKey].filter(Boolean));
+
+    const changed = [];
+    const missingInTarget = [];
+    wMap.forEach((wRec, ref) => {
+      const tRec = tMap.get(ref);
+      if (!tRec) {
+        missingInTarget.push(ref);
+        return;
+      }
+      const diffs = [];
+      keysToCheck.forEach(k => {
+        const wVal = wRec[k] ?? '';
+        const tVal = tRec[k] ?? '';
+        if (wVal !== tVal) {
+          diffs.push({ field: k, from: tVal, to: wVal });
+          tRec[k] = wVal;
+        }
+      });
+      if (diffs.length > 0) {
+        changed.push({ Reference: ref, diffs });
+      }
+    });
+
+    // Handle records present in working but missing in target (likely deleted in Dekereke)
+    let deletedRefs = [];
+    if (missingInTarget.length > 0) {
+      const delPrompt = await dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        buttons: ['Keep in Our Copy', 'Delete from Our Copy'],
+        defaultId: 1,
+        cancelId: 0,
+        title: 'Records Missing in Target',
+        message: 'Some records exist in your working data but are missing in Dekereke.',
+        detail: `Count: ${missingInTarget.length}. If they were deleted in Dekereke, choose Delete to remove them from your working data, hierarchy, and session.`
+      });
+      if (delPrompt.response === 1) {
+        for (const ref of missingInTarget) {
+          try {
+            deleteRecordFromWorkingAndHierarchy(ref);
+            deletedRefs.push(ref);
+          } catch (e) {
+            console.warn('Failed to delete missing ref', ref, e.message);
+          }
+        }
+      }
+    }
+
+    // Rotate backup in target directory
+    const targetDir = path.dirname(targetXmlPath);
+    const backupsDir = path.join(targetDir, 'backups');
+    fs.mkdirSync(backupsDir, { recursive: true });
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupPath = path.join(backupsDir, `dekereke_${ts}.xml`);
+    fs.copyFileSync(targetXmlPath, backupPath);
+
+    // Write merged target preserving original encoding
+    const builder = new XMLBuilder({ ignoreAttributes: false, attributeNamePrefix: '@_', format: true, indentBy: '  ' });
+    let mergedXml = builder.build(tData);
+    const decl = targetIsUtf16 ? '<?xml version="1.0" encoding="utf-16"?>' : '<?xml version="1.0" encoding="utf-8"?>';
+    mergedXml = mergedXml.replace(/<\?xml[^?]*\?>/, decl);
+    if (!mergedXml.startsWith('<?xml')) {
+      mergedXml = decl + '\n' + mergedXml;
+    }
+    fs.writeFileSync(targetXmlPath, mergedXml, targetIsUtf16 ? 'utf16le' : 'utf8');
+
+    const reportPath = path.join(targetDir, `dekereke_merge_report_${ts}.json`);
+    fs.writeFileSync(reportPath, JSON.stringify({ changedCount: changed.length, changed, missingInTargetCount: missingInTarget.length, deletedFromWorking: deletedRefs }, null, 2), 'utf8');
+
+    return { success: true, backupPath, reportPath, targetXmlPath, changedCount: changed.length, missingInTargetCount: missingInTarget.length, deletedFromWorking: deletedRefs };
+  } catch (error) {
+    console.error('[apply-merge-to-dekereke] Error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Merge working_data.xml changes into Dekereke target (placeholder implementation)
+ipcMain.handle('merge-to-dekereke', async () => {
+  if (!bundleData || !sessionData || bundleType !== 'hierarchical') {
+    return { success: false, error: 'No hierarchical bundle loaded' };
+  }
+  if (!bundleData.usesNewStructure) {
+    return { success: false, error: 'Merge requires new hierarchical bundle structure' };
+  }
+
+  try {
+    // Ensure working_data.xml is up to date
+    await updateWorkingXmlWithSessionData();
+
+    const xmlDir = path.join(extractedPath, 'xml');
+    const workingXmlPath = path.join(xmlDir, 'working_data.xml');
+    const originalXmlPath = path.join(xmlDir, 'original_data.xml');
+    if (!fs.existsSync(workingXmlPath) || !fs.existsSync(originalXmlPath)) {
+      return { success: false, error: 'Missing working or original XML' };
+    }
+
+    // Basic sanity: size and record counts
+    const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', trimValues: true, parseAttributeValue: false, parseTagValue: false });
+    const wBuf = fs.readFileSync(workingXmlPath);
+    const oBuf = fs.readFileSync(originalXmlPath);
+    const wData = parser.parse(wBuf.toString('utf16le'));
+    const oData = parser.parse(oBuf.toString('utf16le'));
+    const wForms = Array.isArray(wData.phon_data.data_form) ? wData.phon_data.data_form : [wData.phon_data.data_form];
+    const oForms = Array.isArray(oData.phon_data.data_form) ? oData.phon_data.data_form : [oData.phon_data.data_form];
+    if (wForms.length !== oForms.length) {
+      console.warn('[merge-to-dekereke] Record count mismatch:', wForms.length, oForms.length);
+    }
+
+    // Backup rotation: create backups/ with timestamped copy of target
+    const backupsDir = path.join(xmlDir, 'backups');
+    fs.mkdirSync(backupsDir, { recursive: true });
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupPath = path.join(backupsDir, `original_data_${ts}.xml`);
+    fs.copyFileSync(originalXmlPath, backupPath);
+
+    // Choose Dekereke target file to merge into (for now export merged to user-chosen file)
+    const { dialog } = require('electron');
+    const saveResult = await dialog.showSaveDialog(mainWindow, {
+      title: 'Merge to Dekereke (export updated XML)',
+      defaultPath: 'dekereke_merged.xml',
+      filters: [{ name: 'XML Files', extensions: ['xml'] }]
+    });
+    if (saveResult.canceled || !saveResult.filePath) {
+      return { success: false, error: 'Merge cancelled' };
+    }
+
+    // Diff: count changed refs by comparing select fields
+    const settings = bundleData.settings;
+    const tgKey = settings.toneGroupElement || 'SurfaceMelodyGroup';
+    const tgIdKey = settings.toneGroupIdElement || settings.toneGroupIdField || 'SurfaceMelodyGroupId';
+    const userSpellingKey = settings.userSpellingElement || 'Orthographic';
+    const pitchKey = settings.pitchField;
+    const abbreviationKey = settings.abbreviationField;
+    const exemplarKey = settings.exemplarField;
+
+    const indexByRef = (forms) => {
+      const m = new Map();
+      forms.forEach(df => m.set(String(df.Reference).trim(), df));
+      return m;
+    };
+    const wMap = indexByRef(wForms);
+    const oMap = indexByRef(oForms);
+    const changed = [];
+    const keysToCheck = [tgKey, tgIdKey, userSpellingKey].concat([pitchKey, abbreviationKey, exemplarKey].filter(Boolean));
+    wMap.forEach((wRec, ref) => {
+      const oRec = oMap.get(ref);
+      if (!oRec) return;
+      const diffs = [];
+      keysToCheck.forEach(k => {
+        const wVal = wRec[k] ?? '';
+        const oVal = oRec[k] ?? '';
+        if (wVal !== oVal) {
+          diffs.push({ field: k, from: oVal, to: wVal });
+          // Apply exact-preserve update on a copy
+          oRec[k] = wVal;
+        }
+      });
+      if (diffs.length > 0) {
+        changed.push({ Reference: ref, diffs });
+      }
+    });
+
+    // Build merged XML from updated oData and write as UTF-16
+    const builder = new XMLBuilder({ ignoreAttributes: false, attributeNamePrefix: '@_', format: true, indentBy: '  ' });
+    let mergedXml = builder.build(oData);
+    mergedXml = mergedXml.replace(/<\?xml[^?]*\?>/, '<?xml version="1.0" encoding="utf-16"?>');
+    if (!mergedXml.startsWith('<?xml')) {
+      mergedXml = '<?xml version="1.0" encoding="utf-16"?>\n' + mergedXml;
+    }
+    fs.writeFileSync(saveResult.filePath, mergedXml, 'utf16le');
+
+    // Write a simple merge report next to output
+    const reportPath = saveResult.filePath.replace(/\.xml$/i, '_merge_report.json');
+    fs.writeFileSync(reportPath, JSON.stringify({ changedCount: changed.length, changed }, null, 2), 'utf8');
+
+    return { success: true, backupPath, outputPath: saveResult.filePath, reportPath };
+  } catch (error) {
+    console.error('[merge-to-dekereke] Error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 // Export single sub-bundle as legacy format (.zip)
 ipcMain.handle('export-sub-bundle', async (event, { subBundlePath }) => {
   if (!bundleData || !sessionData || bundleType !== 'hierarchical') {
@@ -2827,6 +3209,80 @@ function updateWorkingDataXmlFields(xmlPath, ref, fieldUpdates) {
   
   // Write with UTF-16 encoding
   fs.writeFileSync(xmlPath, updatedXml, 'utf16le');
+}
+
+// Helper: Delete a record from working_data.xml, hierarchy.json, and session data
+function deleteRecordFromWorkingAndHierarchy(ref) {
+  const normalizedRef = normalizeRefString(ref);
+  // 1) Remove from working_data.xml
+  const workingXmlPath = path.join(extractedPath, 'xml', 'working_data.xml');
+  const xmlBuffer = fs.readFileSync(workingXmlPath);
+  const xmlData = xmlBuffer.toString('utf16le');
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    trimValues: true,
+    parseAttributeValue: false,
+    parseTagValue: false,
+  });
+  const xmlResult = parser.parse(xmlData);
+  const phonData = xmlResult.phon_data;
+  let dataForms = Array.isArray(phonData.data_form) ? phonData.data_form : [phonData.data_form];
+  const idx = dataForms.findIndex(df => normalizeRefString(df.Reference) === normalizedRef);
+  if (idx !== -1) {
+    dataForms.splice(idx, 1);
+  }
+  phonData.data_form = dataForms.length === 1 ? dataForms[0] : dataForms;
+  const builder = new XMLBuilder({ ignoreAttributes: false, attributeNamePrefix: '@_', format: true, indentBy: '  ' });
+  let updatedXml = builder.build(xmlResult);
+  updatedXml = updatedXml.replace(/<\?xml[^?]*\?>/, '<?xml version="1.0" encoding="utf-16"?>');
+  if (!updatedXml.startsWith('<?xml')) {
+    updatedXml = '<?xml version="1.0" encoding="utf-16"?>\n' + updatedXml;
+  }
+  fs.writeFileSync(workingXmlPath, updatedXml, 'utf16le');
+
+  // 2) Remove from hierarchy.json references
+  const hierarchyPath = path.join(extractedPath, 'hierarchy.json');
+  if (fs.existsSync(hierarchyPath)) {
+    const hierarchy = JSON.parse(fs.readFileSync(hierarchyPath, 'utf8'));
+    function removeRef(node) {
+      if (!node || !node.values) return;
+      for (const valueNode of node.values) {
+        if (Array.isArray(valueNode.references)) {
+          valueNode.references = valueNode.references.filter(r => normalizeRefString(r) !== normalizedRef);
+          valueNode.recordCount = valueNode.references.length;
+        }
+        if (valueNode.children && valueNode.children.length > 0) {
+          const childField = valueNode.children[0]?.field;
+          removeRef({ field: childField, values: valueNode.children });
+        }
+      }
+    }
+    removeRef(hierarchy.tree);
+    fs.writeFileSync(hierarchyPath, JSON.stringify(hierarchy, null, 2), 'utf8');
+  }
+
+  // 3) Remove from session queues and groups
+  if (sessionData) {
+    sessionData.queue = (sessionData.queue || []).filter(r => normalizeRefString(r) !== normalizedRef);
+    for (const sb of (sessionData.subBundles || [])) {
+      sb.queue = (sb.queue || []).filter(r => normalizeRefString(r) !== normalizedRef);
+      sb.recordCount = Math.max(0, (sb.recordCount || 0) - 1);
+    }
+    for (const group of (sessionData.groups || [])) {
+      if (Array.isArray(group.members)) {
+        const before = group.members.length;
+        group.members = group.members.filter(m => normalizeRefString(m) !== normalizedRef);
+        if (group.additionsSinceReview !== undefined && before !== group.members.length) {
+          group.additionsSinceReview++;
+        }
+      }
+    }
+    saveSession();
+  }
+
+  // Track deletion
+  try { changeTracker.logDeletedFromWorking(ref); } catch {}
 }
 
 // Helper to extract category field information from hierarchy paths
