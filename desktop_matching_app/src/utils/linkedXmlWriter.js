@@ -21,7 +21,7 @@ const fs = require('fs');
 const path = require('path');
 
 /**
- * Safely convert value to string, handling null/undefined/NaN
+ * Safely convert value to string, handling null/undefined/NaN and XML escaping
  * @param {any} value - Value to convert
  * @returns {string|null} - String value or null for empty
  */
@@ -40,7 +40,20 @@ function safeStringValue(value) {
   const str = String(value).trim();
   
   // Return null for empty strings to use self-closing tags
-  return str.length > 0 ? str : null;
+  if (str.length === 0) {
+    return null;
+  }
+  
+  // XML escape special characters
+  // & must be escaped first to avoid double-escaping
+  const escaped = str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+  
+  return escaped;
 }
 
 /**
@@ -58,8 +71,13 @@ function normalizeRefString(ref) {
  * Preserves original structure, only extracts data_form records
  */
 function parseLinkedXml(xmlPath) {
-  // Read as UTF-16 LE
+  // Read as buffer to preserve BOM
   const xmlBuffer = fs.readFileSync(xmlPath);
+  
+  // Check for UTF-16 LE BOM (FF FE)
+  const hasBOM = xmlBuffer.length >= 2 && xmlBuffer[0] === 0xFF && xmlBuffer[1] === 0xFE;
+  
+  // Convert to text (BOM is automatically handled by toString)
   const xmlText = xmlBuffer.toString('utf16le');
   
   // Detect line ending style (preserve original)
@@ -78,6 +96,7 @@ function parseLinkedXml(xmlPath) {
     lines,
     lineEnding,
     xmlDeclaration,
+    hasBOM,
   };
 }
 
@@ -212,8 +231,21 @@ function updateLinkedXml(xmlPath, updates) {
     }
     
     // Write back with UTF-16 LE encoding
-    console.log('[linkedXmlWriter] Writing updated XML');
-    fs.writeFileSync(xmlPath, xmlText, 'utf16le');
+    console.log('[linkedXmlWriter] Writing updated XML with', lineEnding === '\r\n' ? 'CRLF' : 'LF', 'and', parsed.hasBOM ? 'BOM' : 'no BOM');
+    
+    // Convert to buffer with BOM if original had it
+    let outputBuffer;
+    if (parsed.hasBOM) {
+      // Write UTF-16 LE with BOM
+      const textBuffer = Buffer.from(xmlText, 'utf16le');
+      const bomBuffer = Buffer.from([0xFF, 0xFE]);
+      outputBuffer = Buffer.concat([bomBuffer, textBuffer]);
+    } else {
+      // Write UTF-16 LE without BOM
+      outputBuffer = Buffer.from(xmlText, 'utf16le');
+    }
+    
+    fs.writeFileSync(xmlPath, outputBuffer);
     
     console.log('[linkedXmlWriter] Successfully updated', updatedCount, 'records');
     
