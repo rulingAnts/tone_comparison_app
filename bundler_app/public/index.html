@@ -475,6 +475,119 @@
     .org-group-container:active {
       cursor: grabbing;
     }
+    
+    /* Filter styles */
+    .filter-group {
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      padding: 15px;
+      margin-bottom: 10px;
+      position: relative;
+    }
+    
+    .filter-group-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #dee2e6;
+    }
+    
+    .filter-group-logic {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    
+    .filter-group-logic select {
+      width: auto;
+      padding: 5px 10px;
+      font-weight: 600;
+    }
+    
+    .filter-remove-btn {
+      background: #dc3545;
+      padding: 5px 12px;
+      font-size: 12px;
+    }
+    
+    .filter-condition {
+      background: white;
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      padding: 12px;
+      margin-bottom: 8px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1.5fr auto;
+      gap: 10px;
+      align-items: start;
+    }
+    
+    .filter-condition select,
+    .filter-condition input {
+      width: 100%;
+      padding: 6px 10px;
+    }
+    
+    .filter-condition-not {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      grid-column: span 4;
+      font-size: 13px;
+      color: #666;
+    }
+    
+    .filter-condition-not input[type="checkbox"] {
+      width: auto;
+    }
+    
+    .filter-add-condition {
+      background: #28a745;
+      padding: 6px 12px;
+      font-size: 13px;
+      margin-top: 5px;
+    }
+    
+    .filter-value-container {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    
+    .filter-regex-link {
+      font-size: 11px;
+      color: #007bff;
+      text-decoration: none;
+      margin-top: 2px;
+    }
+    
+    .filter-regex-link:hover {
+      text-decoration: underline;
+    }
+    
+    .filter-list-container {
+      max-height: 150px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 8px;
+      background: white;
+    }
+    
+    .filter-list-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 0;
+      font-size: 13px;
+    }
+    
+    .filter-list-item input[type="checkbox"] {
+      width: auto;
+    }
   </style>
 </head>
 <body>
@@ -507,6 +620,32 @@
           <strong>Linked Bundle:</strong> Stores file paths to your XML and audio folder instead of copying the files into the bundle. 
           The desktop matching app will work directly on the original files, applying changes as you make them. 
           <strong>Note:</strong> The XML and audio folder must remain in their current locations and be accessible when using this bundle.
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Record Filters (Optional)</h2>
+      <div class="info" style="margin-bottom: 15px;">
+        Filter which records from the XML file are included in the bundle. Only records that pass these filters will be available for hierarchy setup and bundling. Leave empty to include all records.
+      </div>
+      
+      <div class="form-group">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <label style="margin: 0;">Filter Conditions</label>
+          <button onclick="addFilterGroup()" style="padding: 5px 15px;">Add Filter Group</button>
+        </div>
+        
+        <div id="filterContainer" style="background: white; padding: 15px; border-radius: 4px; border: 1px solid #ddd; min-height: 60px;">
+          <p class="info" style="color: #999; text-align: center; margin: 20px 0;">No filters configured - all records will be included</p>
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <button onclick="testFilters()" style="background: #28a745;">Test Filters</button>
+          <button onclick="clearAllFilters()" style="background: #dc3545;">Clear All Filters</button>
+          <span id="filterTestResult" style="color: #666; font-size: 14px;"></span>
         </div>
       </div>
     </div>
@@ -904,6 +1043,7 @@
     </div>
   </div>
 
+  <script src="filter-functions.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

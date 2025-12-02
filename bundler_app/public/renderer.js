@@ -10,6 +10,9 @@ let bundleType = 'legacy'; // 'legacy' or 'hierarchical'
 let hierarchyTree = null; // Root node: {field, values: [{value, label, count, included, audioVariants, children: [nodes], isOrganizational: bool}]}
 // isOrganizational: true means this is a virtual grouping node (not tied to XML field)
 let parsedXmlData = null; // Store full parsed XML data for hierarchy analysis
+let filterGroups = []; // Array of filter groups: [{logic: 'AND'|'OR', conditions: [{field, operator, value, not, valueType}]}]
+let nextFilterGroupId = 1;
+let nextFilterConditionId = 1;
 
 // Drag and drop state for reordering values
 let draggedValueContainer = null;
@@ -314,8 +317,75 @@ async function loadPersistedSettings() {
     };
     renderHierarchyTree();
   }
+  
+  // Restore filter groups
+  if (Array.isArray(s.filterGroups) && s.filterGroups.length > 0) {
+    filterGroups = s.filterGroups;
+    
+    // Migrate old format to new format if needed (conditions -> items)
+    filterGroups = filterGroups.map(group => migrateFilterGroup(group));
+    
+    // Ensure IDs are sequential
+    const allIds = collectAllFilterIds(filterGroups);
+    const maxGroupId = Math.max(...allIds.groupIds, 0);
+    const maxConditionId = Math.max(...allIds.conditionIds, 0);
+    nextFilterGroupId = maxGroupId + 1;
+    nextFilterConditionId = maxConditionId + 1;
+    renderFilterGroups();
+  }
 
   checkFormValid();
+}
+
+// Helper to migrate old filter group format to new nested format
+function migrateFilterGroup(group) {
+  if (group.items) {
+    // Already new format - recursively migrate nested groups
+    return {
+      ...group,
+      items: group.items.map(item => {
+        if (item.type === 'group') {
+          return migrateFilterGroup(item);
+        }
+        return item;
+      })
+    };
+  }
+  
+  // Old format with conditions array - convert to items
+  return {
+    id: group.id,
+    type: 'group',
+    logic: group.logic || 'AND',
+    items: (group.conditions || []).map(cond => ({
+      ...cond,
+      type: 'condition'
+    }))
+  };
+}
+
+// Helper to collect all IDs recursively
+function collectAllFilterIds(groups) {
+  const groupIds = [];
+  const conditionIds = [];
+  
+  function collectFromItems(items) {
+    for (const item of items) {
+      if (item.type === 'group') {
+        groupIds.push(item.id);
+        collectFromItems(item.items || []);
+      } else if (item.type === 'condition') {
+        conditionIds.push(item.id);
+      }
+    }
+  }
+  
+  for (const group of groups) {
+    groupIds.push(group.id);
+    collectFromItems(group.items || []);
+  }
+  
+  return { groupIds, conditionIds };
 }
 
 // Recursively restore tree node structure
@@ -466,6 +536,7 @@ function collectCurrentSettings() {
         : null),
       bundleDescription: document.getElementById('bundleDescription').value.trim(),
       hierarchyTree: hierarchyTree, // Save hierarchy tree configuration
+      filterGroups: filterGroups, // Save filter configuration
       audioProcessing: {
         autoTrim: false, // Always disabled
         autoNormalize: false, // Always disabled
@@ -498,6 +569,7 @@ async function selectXmlFile() {
       updateGlossOptions();
       updateToneFieldOptions();
       updateUserSpellingOptions();
+      renderFilterGroups(); // Initialize filter UI with available fields
       renderHierarchyTree();
       document.getElementById('xmlInfo').textContent = 
         `✓ Loaded ${result.recordCount} records`;
@@ -877,6 +949,19 @@ function setNodeAtPath(path, newNode) {
 }
 
 // Initialize root level
+// Get records with filters applied
+function getFilteredRecords() {
+  if (!parsedXmlData || !parsedXmlData.records) return [];
+  
+  // Apply filters if any exist
+  if (typeof applyFilters === 'function' && filterGroups && filterGroups.length > 0) {
+    return applyFilters(parsedXmlData.records);
+  }
+  
+  // No filters - return all records
+  return parsedXmlData.records;
+}
+
 function initializeRootLevel() {
   if (!hierarchyTree) {
     hierarchyTree = {
@@ -956,7 +1041,8 @@ function updateNodeField(path, field) {
     
     if (parsedXmlData && field) {
       const valueCounts = new Map();
-      parsedXmlData.records.forEach(record => {
+      const filteredRecords = getFilteredRecords();
+      filteredRecords.forEach(record => {
         const value = record[field];
         if (value) {
           valueCounts.set(value, (valueCounts.get(value) || 0) + 1);
@@ -1384,7 +1470,8 @@ function getRecordsForPathExtended(path, currentField, currentValue) {
 function getRecordsForPath(path) {
   if (!parsedXmlData || !parsedXmlData.records) return [];
   
-  let filtered = parsedXmlData.records;
+  // Start with filtered records
+  let filtered = getFilteredRecords();
   let currentNode = hierarchyTree;
   
   for (let i = 0; i < path.length; i++) {
@@ -1461,6 +1548,66 @@ function recalculateChildCounts(path) {
   
   // Recursively update children's children
   value.children.values.forEach((childValue, index) => {
+
+/**
+ * Refresh hierarchy counts when filters change
+ * This recalculates counts for all values in the hierarchy tree
+ */
+function refreshHierarchyCounts() {
+  if (!hierarchyTree || !hierarchyTree.field) return;
+  
+  // Recalculate root level counts
+  const filteredRecords = getFilteredRecords();
+  const valueCounts = new Map();
+  
+  filteredRecords.forEach(record => {
+    const value = record[hierarchyTree.field];
+    if (value) {
+      valueCounts.set(value, (valueCounts.get(value) || 0) + 1);
+    }
+  });
+  
+  // Update root counts
+  hierarchyTree.values.forEach(value => {
+    value.count = valueCounts.get(value.value) || 0;
+  });
+  
+  // Recursively update all child levels
+  function refreshNodeCounts(node, path) {
+    if (!node.values) return;
+    
+    node.values.forEach((value, index) => {
+      const valuePath = [...path, index];
+      
+      // Recalculate children if they exist
+      if (value.children && value.children.field) {
+        const pathRecords = getRecordsForPath(valuePath);
+        const childValueCounts = new Map();
+        
+        if (!value.children.isOrganizational) {
+          pathRecords.forEach(record => {
+            const val = record[value.children.field];
+            if (val) {
+              childValueCounts.set(val, (childValueCounts.get(val) || 0) + 1);
+            }
+          });
+          
+          value.children.values.forEach(childValue => {
+            childValue.count = childValueCounts.get(childValue.value) || 0;
+          });
+        }
+        
+        // Recurse into deeper levels
+        refreshNodeCounts(value.children, valuePath);
+      }
+    });
+  }
+  
+  refreshNodeCounts(hierarchyTree, []);
+  
+  // Re-render to show updated counts
+  renderHierarchyTree();
+}
     if (childValue.children) {
       recalculateChildCounts([...path, index]);
     }

@@ -9,6 +9,7 @@ const {
   sortByNumericRef,
 } = require('./utils/refUtils');
 const { validateBundleAudio, checkDuplicateReferences } = require('./validator');
+const { applyFilters } = require('./filter-engine');
 const pathResolve = (...p) => path.resolve(...p);
 
 // Prefer embedded normalizer to avoid brittle path resolution
@@ -594,15 +595,22 @@ async function createLegacyBundle(config, event) {
       ? phonData.data_form 
       : [phonData.data_form];
     
+    // Apply filter configuration before other processing
+    let filteredByFilters = dataForms;
+    if (settingsWithMeta.filterGroups && settingsWithMeta.filterGroups.length > 0) {
+      filteredByFilters = applyFilters(dataForms, settingsWithMeta.filterGroups);
+      console.log(`[createLegacyBundle] Filters applied: ${dataForms.length} -> ${filteredByFilters.length} records`);
+    }
+    
     // Filter records by reference numbers
   const referenceNumbers = (settingsWithMeta.referenceNumbers || []).map((r) => normalizeRefString(r));
     const refSet = new Set(referenceNumbers);
     let filteredRecords = referenceNumbers.length > 0
-      ? dataForms.filter(df => {
+      ? filteredByFilters.filter(df => {
           const ref = df && df.Reference != null ? normalizeRefString(df.Reference) : '';
           return refSet.has(ref);
         })
-      : dataForms;
+      : filteredByFilters;
 
     // Optional: keep a stable numeric order without changing stored strings
     filteredRecords = sortByNumericRef(filteredRecords);
@@ -966,11 +974,19 @@ async function createHierarchicalBundle(config, event) {
       throw new Error(`Duplicate Reference values found: ${duplicates.join(', ')}. Please fix the source XML before creating bundle.`);
     }
     
-    // For hierarchical bundles, use all data_forms (hierarchy filtering happens in sub-bundle generation)
+    // Apply filter configuration before hierarchy processing
+    let filteredByFilters = dataForms;
+    if (settingsWithMeta.filterGroups && settingsWithMeta.filterGroups.length > 0) {
+      filteredByFilters = applyFilters(dataForms, settingsWithMeta.filterGroups);
+      console.log(`[createHierarchicalBundle] Filters applied: ${dataForms.length} -> ${filteredByFilters.length} records`);
+    }
+    
+    // For hierarchical bundles, use all filtered data_forms (hierarchy filtering happens in sub-bundle generation)
     // Reference number filtering is only for legacy bundles
-    let filteredRecords = sortByNumericRef(dataForms);
+    let filteredRecords = sortByNumericRef(filteredByFilters);
     
     console.log('[hierarchical] Starting with', filteredRecords.length, 'total records (hierarchy will filter)');
+
     
     // Get hierarchy tree from settings (new tree format or legacy levels format)
     const settingsTree = settingsWithMeta.hierarchyTree;
