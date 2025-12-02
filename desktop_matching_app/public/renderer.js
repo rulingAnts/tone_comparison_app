@@ -258,11 +258,6 @@ function renderHierarchyTree(hierarchy, subBundles) {
   const treeContainer = document.getElementById('hierarchyTree');
   treeContainer.innerHTML = '';
   
-  console.log('[renderHierarchyTree] hierarchy:', hierarchy);
-  console.log('[renderHierarchyTree] subBundles:', subBundles);
-  console.log('[renderHierarchyTree] subBundles count:', subBundles?.length);
-  console.log('[renderHierarchyTree] First subBundle:', subBundles?.[0]);
-  
   // Guard against undefined subBundles
   if (!subBundles || !Array.isArray(subBundles)) {
     treeContainer.innerHTML = '<div class="no-bundle">No sub-bundles available</div>';
@@ -271,7 +266,6 @@ function renderHierarchyTree(hierarchy, subBundles) {
   
   // Build tree structure from flat sub-bundle list
   const tree = buildTreeStructure(subBundles);
-  console.log('[renderHierarchyTree] Built tree:', tree);
   
   // Render tree nodes
   const rootNode = document.createElement('div');
@@ -383,13 +377,6 @@ function renderTreeNode(treeNode, container, subBundles, depth = 0, parentPath =
       copyBtn.title = 'Copy all reference numbers';
       copyBtn.onclick = (e) => {
         e.stopPropagation();
-        console.log('[Category Copy] node:', node);
-        console.log('[Category Copy] node.name:', node.name);
-        console.log('[Category Copy] node.isLeaf:', node.isLeaf);
-        console.log('[Category Copy] node.subBundle:', node.subBundle);
-        console.log('[Category Copy] node.orgGroups:', node.orgGroups);
-        console.log('[Category Copy] node.children:', node.children);
-        
         // Collect refs from this node and all descendants
         const refs = [];
         // Add refs from this node's leaf if it exists
@@ -402,12 +389,10 @@ function renderTreeNode(treeNode, container, subBundles, depth = 0, parentPath =
               if (g.members) refs.push(...g.members);
             });
           }
-          console.log('[Category Copy] Adding refs from leaf:', refs.length);
         }
         // Add refs from org groups
         if (node.orgGroups) {
           Object.keys(node.orgGroups).forEach(orgGroupName => {
-            console.log('[Category Copy] Processing org group:', orgGroupName, 'with', node.orgGroups[orgGroupName].length, 'sub-bundles');
             node.orgGroups[orgGroupName].forEach(sb => {
               if (sb.references) refs.push(...sb.references);
               if (sb.queue) refs.push(...sb.queue);
@@ -416,18 +401,13 @@ function renderTreeNode(treeNode, container, subBundles, depth = 0, parentPath =
                   if (g.members) refs.push(...g.members);
                 });
               }
-              console.log('[Category Copy] Added refs from org group sub-bundle:', sb.path);
             });
           });
         }
         // Add refs from all child categories
         if (node.children && Object.keys(node.children).length > 0) {
-          console.log('[Category Copy] Collecting from', Object.keys(node.children).length, 'child categories');
-          const childRefs = collectReferencesFromTreeNode(node.children);
-          console.log('[Category Copy] Collected', childRefs.length, 'refs from children');
-          refs.push(...childRefs);
+          refs.push(...collectReferencesFromTreeNode(node.children));
         }
-        console.log('[Category Copy] Total refs collected:', refs.length);
         copyReferencesToClipboard(refs);
       };
       header.appendChild(copyBtn);
@@ -2878,27 +2858,21 @@ async function openMergeReportInFinder() {
 function collectReferencesFromTreeNode(treeNode) {
   const allRefs = [];
   
-  console.log('[collectReferencesFromTreeNode] Processing treeNode with keys:', Object.keys(treeNode));
-  
   // Iterate through all keys in this level of the tree
   Object.keys(treeNode).forEach(key => {
     const node = treeNode[key];
-    console.log('[collectReferencesFromTreeNode] Processing key:', key, 'node:', node);
     
     // If this is a leaf with a sub-bundle, collect its references
     if (node.isLeaf && node.subBundle) {
       const sb = node.subBundle;
-      console.log('[collectReferencesFromTreeNode] Found leaf subBundle:', sb);
       
       // Collect from references (static from hierarchy.json)
       if (sb.references && Array.isArray(sb.references)) {
-        console.log('[collectReferencesFromTreeNode] Adding', sb.references.length, 'refs from references array');
         allRefs.push(...sb.references);
       }
       
       // Collect from queue (session state - unassigned words)
       if (sb.queue && Array.isArray(sb.queue)) {
-        console.log('[collectReferencesFromTreeNode] Adding', sb.queue.length, 'refs from queue');
         allRefs.push(...sb.queue);
       }
       
@@ -2906,7 +2880,6 @@ function collectReferencesFromTreeNode(treeNode) {
       if (sb.groups && Array.isArray(sb.groups)) {
         sb.groups.forEach(group => {
           if (group.members && Array.isArray(group.members)) {
-            console.log('[collectReferencesFromTreeNode] Adding', group.members.length, 'refs from group');
             allRefs.push(...group.members);
           }
         });
@@ -2916,23 +2889,19 @@ function collectReferencesFromTreeNode(treeNode) {
     // Collect from organizational groups
     if (node.orgGroups) {
       Object.keys(node.orgGroups).forEach(orgGroupName => {
-        console.log('[collectReferencesFromTreeNode] Processing org group:', orgGroupName, 'with', node.orgGroups[orgGroupName].length, 'sub-bundles');
         node.orgGroups[orgGroupName].forEach(sb => {
           // Collect from references
           if (sb.references && Array.isArray(sb.references)) {
-            console.log('[collectReferencesFromTreeNode] Adding', sb.references.length, 'refs from org group sub-bundle references');
             allRefs.push(...sb.references);
           }
           // Collect from queue
           if (sb.queue && Array.isArray(sb.queue)) {
-            console.log('[collectReferencesFromTreeNode] Adding', sb.queue.length, 'refs from org group sub-bundle queue');
             allRefs.push(...sb.queue);
           }
           // Collect from groups
           if (sb.groups && Array.isArray(sb.groups)) {
             sb.groups.forEach(group => {
               if (group.members && Array.isArray(group.members)) {
-                console.log('[collectReferencesFromTreeNode] Adding', group.members.length, 'refs from org group sub-bundle group');
                 allRefs.push(...group.members);
               }
             });
@@ -2943,21 +2912,15 @@ function collectReferencesFromTreeNode(treeNode) {
     
     // Recursively collect from children
     if (node.children && Object.keys(node.children).length > 0) {
-      console.log('[collectReferencesFromTreeNode] Recursing into', Object.keys(node.children).length, 'children');
       allRefs.push(...collectReferencesFromTreeNode(node.children));
     }
   });
   
-  console.log('[collectReferencesFromTreeNode] Returning', allRefs.length, 'total references');
   return allRefs;
 }
 
 // Copy reference numbers to clipboard
 function copyReferencesToClipboard(references) {
-  console.log('[copyReferencesToClipboard] Called with:', references);
-  console.log('[copyReferencesToClipboard] Type:', typeof references, 'Array?', Array.isArray(references));
-  console.log('[copyReferencesToClipboard] Length:', references?.length);
-  
   if (!references || references.length === 0) {
     alert('No references to copy');
     return;
