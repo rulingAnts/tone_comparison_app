@@ -258,6 +258,11 @@ function renderHierarchyTree(hierarchy, subBundles) {
   const treeContainer = document.getElementById('hierarchyTree');
   treeContainer.innerHTML = '';
   
+  console.log('[renderHierarchyTree] hierarchy:', hierarchy);
+  console.log('[renderHierarchyTree] subBundles:', subBundles);
+  console.log('[renderHierarchyTree] subBundles count:', subBundles?.length);
+  console.log('[renderHierarchyTree] First subBundle:', subBundles?.[0]);
+  
   // Guard against undefined subBundles
   if (!subBundles || !Array.isArray(subBundles)) {
     treeContainer.innerHTML = '<div class="no-bundle">No sub-bundles available</div>';
@@ -266,6 +271,7 @@ function renderHierarchyTree(hierarchy, subBundles) {
   
   // Build tree structure from flat sub-bundle list
   const tree = buildTreeStructure(subBundles);
+  console.log('[renderHierarchyTree] Built tree:', tree);
   
   // Render tree nodes
   const rootNode = document.createElement('div');
@@ -288,8 +294,15 @@ function buildTreeStructure(subBundles) {
           isLeaf: false,
           subBundle: null,
           children: {},
-          orgGroups: {} // Track organizational groups
+          orgGroups: {}, // Track organizational groups
+          pathSegments: parts.slice(0, index + 1), // Store path segments for this node
+          hierarchyNode: null // Will store reference to hierarchy.json node
         };
+      }
+      
+      // Store reference to the hierarchy data for this sub-bundle
+      if (index === parts.length - 1 && sb.hierarchyNode) {
+        current[part].hierarchyNode = sb.hierarchyNode;
       }
       
       // On the last part (leaf), check for organizational group
@@ -315,9 +328,20 @@ function buildTreeStructure(subBundles) {
   return tree;
 }
 
-function renderTreeNode(treeNode, container, subBundles, depth = 0) {
+// Helper: Build full path for a category node
+function buildCategoryPath(node, depth, parentPath = '') {
+  // Node.name contains the current segment
+  // We need to track parent path as we recurse
+  if (parentPath) {
+    return `${parentPath}/${node.name}`;
+  }
+  return node.name;
+}
+
+function renderTreeNode(treeNode, container, subBundles, depth = 0, parentPath = '') {
   Object.keys(treeNode).forEach(key => {
     const node = treeNode[key];
+    const currentPath = parentPath ? `${parentPath}/${node.name}` : node.name;
     
     if (node.isLeaf && node.subBundle) {
       // Direct leaf node - render as sub-bundle item
@@ -333,8 +357,9 @@ function renderTreeNode(treeNode, container, subBundles, depth = 0) {
       
       const itemCount = countSubBundles(node.children, node.orgGroups);
       
-      // Collect all references from this category and its children
-      const categoryRefs = collectCategoryReferences(node.children, node.orgGroups);
+      // Build path prefix for this category node (accumulate from depth)
+      // For root categories, use just the name; for nested, build full path
+      const categoryPath = currentPath;
       
       header.innerHTML = `
         <span class="toggle">▼</span>
@@ -355,10 +380,55 @@ function renderTreeNode(treeNode, container, subBundles, depth = 0) {
         border-radius: 3px;
         cursor: pointer;
       `;
-      copyBtn.title = `Copy all ${categoryRefs.length} reference numbers`;
+      copyBtn.title = 'Copy all reference numbers';
       copyBtn.onclick = (e) => {
         e.stopPropagation();
-        copyReferencesToClipboard(categoryRefs);
+        console.log('[Category Copy] node:', node);
+        console.log('[Category Copy] node.name:', node.name);
+        console.log('[Category Copy] node.isLeaf:', node.isLeaf);
+        console.log('[Category Copy] node.subBundle:', node.subBundle);
+        console.log('[Category Copy] node.orgGroups:', node.orgGroups);
+        console.log('[Category Copy] node.children:', node.children);
+        
+        // Collect refs from this node and all descendants
+        const refs = [];
+        // Add refs from this node's leaf if it exists
+        if (node.isLeaf && node.subBundle) {
+          const sb = node.subBundle;
+          if (sb.references) refs.push(...sb.references);
+          if (sb.queue) refs.push(...sb.queue);
+          if (sb.groups) {
+            sb.groups.forEach(g => {
+              if (g.members) refs.push(...g.members);
+            });
+          }
+          console.log('[Category Copy] Adding refs from leaf:', refs.length);
+        }
+        // Add refs from org groups
+        if (node.orgGroups) {
+          Object.keys(node.orgGroups).forEach(orgGroupName => {
+            console.log('[Category Copy] Processing org group:', orgGroupName, 'with', node.orgGroups[orgGroupName].length, 'sub-bundles');
+            node.orgGroups[orgGroupName].forEach(sb => {
+              if (sb.references) refs.push(...sb.references);
+              if (sb.queue) refs.push(...sb.queue);
+              if (sb.groups) {
+                sb.groups.forEach(g => {
+                  if (g.members) refs.push(...g.members);
+                });
+              }
+              console.log('[Category Copy] Added refs from org group sub-bundle:', sb.path);
+            });
+          });
+        }
+        // Add refs from all child categories
+        if (node.children && Object.keys(node.children).length > 0) {
+          console.log('[Category Copy] Collecting from', Object.keys(node.children).length, 'child categories');
+          const childRefs = collectReferencesFromTreeNode(node.children);
+          console.log('[Category Copy] Collected', childRefs.length, 'refs from children');
+          refs.push(...childRefs);
+        }
+        console.log('[Category Copy] Total refs collected:', refs.length);
+        copyReferencesToClipboard(refs);
       };
       header.appendChild(copyBtn);
       
@@ -386,10 +456,9 @@ function renderTreeNode(treeNode, container, subBundles, depth = 0) {
           const orgHeader = document.createElement('div');
           orgHeader.className = 'category-header org-group-header';
           
-          // Collect references from this organizational group
-          const orgGroupRefs = node.orgGroups[orgGroupName].reduce((acc, sb) => {
-            return acc.concat(sb.references || []);
-          }, []);
+          // Build path prefix for this org group (category path + org group name isn't in path)
+          // Org groups are metadata, so collect refs from all sub-bundles in this org group
+          const orgGroupSubBundlePaths = node.orgGroups[orgGroupName].map(sb => sb.path);
           
           orgHeader.innerHTML = `
             <span class="toggle">▼</span>
@@ -410,10 +479,21 @@ function renderTreeNode(treeNode, container, subBundles, depth = 0) {
             border-radius: 3px;
             cursor: pointer;
           `;
-          orgCopyBtn.title = `Copy all ${orgGroupRefs.length} reference numbers`;
+          orgCopyBtn.title = 'Copy all reference numbers';
           orgCopyBtn.onclick = (e) => {
             e.stopPropagation();
-            copyReferencesToClipboard(orgGroupRefs);
+            // Collect refs from all sub-bundles in this org group
+            const allRefs = [];
+            node.orgGroups[orgGroupName].forEach(sb => {
+              if (sb.references) allRefs.push(...sb.references);
+              if (sb.queue) allRefs.push(...sb.queue);
+              if (sb.groups) {
+                sb.groups.forEach(g => {
+                  if (g.members) allRefs.push(...g.members);
+                });
+              }
+            });
+            copyReferencesToClipboard(allRefs);
           };
           orgHeader.appendChild(orgCopyBtn);
           
@@ -439,8 +519,8 @@ function renderTreeNode(treeNode, container, subBundles, depth = 0) {
         });
       }
       
-      // Then recursively render child categories
-      renderTreeNode(node.children, childrenDiv, subBundles, depth + 1);
+      // Then recursively render child categories (pass current path as parent)
+      renderTreeNode(node.children, childrenDiv, subBundles, depth + 1, currentPath);
     }
   });
 }
@@ -540,7 +620,15 @@ function createSubBundleItem(subBundle) {
   copyBtn.title = 'Copy reference numbers';
   copyBtn.onclick = (e) => {
     e.stopPropagation();
-    copyReferencesToClipboard(subBundle.references || []);
+    const refs = [];
+    if (subBundle.references) refs.push(...subBundle.references);
+    if (subBundle.queue) refs.push(...subBundle.queue);
+    if (subBundle.groups) {
+      subBundle.groups.forEach(g => {
+        if (g.members) refs.push(...g.members);
+      });
+    }
+    copyReferencesToClipboard(refs);
   };
   item.appendChild(copyBtn);
   
@@ -1279,7 +1367,7 @@ async function renderGroups() {
     copyRefsBtn.title = 'Copy reference numbers to clipboard';
     copyRefsBtn.onclick = (e) => {
       e.stopPropagation();
-      copyReferencesToClipboard(group.members);
+      copyReferencesToClipboard(group.members || []);
     };
     headerActions.appendChild(copyRefsBtn);
     
@@ -2786,8 +2874,90 @@ async function openMergeReportInFinder() {
   await ipcRenderer.invoke('open-path', lastMergeReportPath);
 }
 
+// Recursively collect all reference numbers from tree node and its descendants
+function collectReferencesFromTreeNode(treeNode) {
+  const allRefs = [];
+  
+  console.log('[collectReferencesFromTreeNode] Processing treeNode with keys:', Object.keys(treeNode));
+  
+  // Iterate through all keys in this level of the tree
+  Object.keys(treeNode).forEach(key => {
+    const node = treeNode[key];
+    console.log('[collectReferencesFromTreeNode] Processing key:', key, 'node:', node);
+    
+    // If this is a leaf with a sub-bundle, collect its references
+    if (node.isLeaf && node.subBundle) {
+      const sb = node.subBundle;
+      console.log('[collectReferencesFromTreeNode] Found leaf subBundle:', sb);
+      
+      // Collect from references (static from hierarchy.json)
+      if (sb.references && Array.isArray(sb.references)) {
+        console.log('[collectReferencesFromTreeNode] Adding', sb.references.length, 'refs from references array');
+        allRefs.push(...sb.references);
+      }
+      
+      // Collect from queue (session state - unassigned words)
+      if (sb.queue && Array.isArray(sb.queue)) {
+        console.log('[collectReferencesFromTreeNode] Adding', sb.queue.length, 'refs from queue');
+        allRefs.push(...sb.queue);
+      }
+      
+      // Collect from groups (session state - assigned words)
+      if (sb.groups && Array.isArray(sb.groups)) {
+        sb.groups.forEach(group => {
+          if (group.members && Array.isArray(group.members)) {
+            console.log('[collectReferencesFromTreeNode] Adding', group.members.length, 'refs from group');
+            allRefs.push(...group.members);
+          }
+        });
+      }
+    }
+    
+    // Collect from organizational groups
+    if (node.orgGroups) {
+      Object.keys(node.orgGroups).forEach(orgGroupName => {
+        console.log('[collectReferencesFromTreeNode] Processing org group:', orgGroupName, 'with', node.orgGroups[orgGroupName].length, 'sub-bundles');
+        node.orgGroups[orgGroupName].forEach(sb => {
+          // Collect from references
+          if (sb.references && Array.isArray(sb.references)) {
+            console.log('[collectReferencesFromTreeNode] Adding', sb.references.length, 'refs from org group sub-bundle references');
+            allRefs.push(...sb.references);
+          }
+          // Collect from queue
+          if (sb.queue && Array.isArray(sb.queue)) {
+            console.log('[collectReferencesFromTreeNode] Adding', sb.queue.length, 'refs from org group sub-bundle queue');
+            allRefs.push(...sb.queue);
+          }
+          // Collect from groups
+          if (sb.groups && Array.isArray(sb.groups)) {
+            sb.groups.forEach(group => {
+              if (group.members && Array.isArray(group.members)) {
+                console.log('[collectReferencesFromTreeNode] Adding', group.members.length, 'refs from org group sub-bundle group');
+                allRefs.push(...group.members);
+              }
+            });
+          }
+        });
+      });
+    }
+    
+    // Recursively collect from children
+    if (node.children && Object.keys(node.children).length > 0) {
+      console.log('[collectReferencesFromTreeNode] Recursing into', Object.keys(node.children).length, 'children');
+      allRefs.push(...collectReferencesFromTreeNode(node.children));
+    }
+  });
+  
+  console.log('[collectReferencesFromTreeNode] Returning', allRefs.length, 'total references');
+  return allRefs;
+}
+
 // Copy reference numbers to clipboard
 function copyReferencesToClipboard(references) {
+  console.log('[copyReferencesToClipboard] Called with:', references);
+  console.log('[copyReferencesToClipboard] Type:', typeof references, 'Array?', Array.isArray(references));
+  console.log('[copyReferencesToClipboard] Length:', references?.length);
+  
   if (!references || references.length === 0) {
     alert('No references to copy');
     return;
