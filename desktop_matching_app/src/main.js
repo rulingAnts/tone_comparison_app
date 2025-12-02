@@ -10,6 +10,7 @@ const {
   sortByNumericRef,
 } = require('./utils/refUtils');
 const { changeTracker, ChangeTracker } = require('./utils/changeTracker');
+const { updateLinkedXml, buildUpdatesFromSession } = require('./utils/linkedXmlWriter');
 
 let mainWindow;
 let sessionData = null;
@@ -1867,15 +1868,51 @@ async function updateWorkingXmlWithSessionData() {
   let workingXmlPath;
   
   if (bundleData.isLinkedBundle) {
-    // LINKED BUNDLE: Write directly to the original XML file
+    // LINKED BUNDLE: Write directly to the original XML file using CONSERVATIVE writer
     workingXmlPath = bundleData.xmlPath;
-    console.log('[updateWorkingXmlWithSessionData] LINKED bundle - writing directly to:', workingXmlPath);
-  } else {
-    // EMBEDDED BUNDLE: Write to working_data.xml in extracted bundle
-    const xmlFolder = path.join(extractedPath, 'xml');
-    workingXmlPath = path.join(xmlFolder, 'working_data.xml');
-    console.log('[updateWorkingXmlWithSessionData] EMBEDDED bundle - writing to working_data.xml');
+    console.log('[updateWorkingXmlWithSessionData] LINKED bundle - using conservative writer for:', workingXmlPath);
+    
+    // Use the new conservative linked XML writer
+    try {
+      const updates = buildUpdatesFromSession(sessionData, bundleData.settings);
+      const result = updateLinkedXml(workingXmlPath, updates);
+      
+      if (!result.success) {
+        console.error('[updateWorkingXmlWithSessionData] Conservative writer failed:', result.error);
+        return;
+      }
+      
+      console.log('[updateWorkingXmlWithSessionData] Successfully updated', result.updatedCount, 'records in linked XML');
+      
+      // Re-read updated XML to update in-memory data
+      const xmlBuffer = fs.readFileSync(workingXmlPath);
+      const xmlData = xmlBuffer.toString('utf16le');
+      const parser = new XMLParser({
+        ignoreAttributes: false,
+        attributeNamePrefix: '@_',
+        trimValues: true,
+        parseAttributeValue: false,
+        parseTagValue: false,
+      });
+      const xmlResult = parser.parse(xmlData);
+      const phonData = xmlResult.phon_data;
+      bundleData.allDataForms = Array.isArray(phonData.data_form)
+        ? phonData.data_form
+        : [phonData.data_form];
+      
+      console.log('[updateWorkingXmlWithSessionData] Updated in-memory data for linked bundle');
+      return;
+      
+    } catch (error) {
+      console.error('[updateWorkingXmlWithSessionData] Error with conservative writer:', error);
+      return;
+    }
   }
+  
+  // EMBEDDED BUNDLE: Use existing full XML rebuilding approach
+  const xmlFolder = path.join(extractedPath, 'xml');
+  workingXmlPath = path.join(xmlFolder, 'working_data.xml');
+  console.log('[updateWorkingXmlWithSessionData] EMBEDDED bundle - writing to working_data.xml');
 
   if (!fs.existsSync(workingXmlPath)) {
     console.warn('[updateWorkingXmlWithSessionData] XML file not found:', workingXmlPath);
@@ -1953,7 +1990,7 @@ async function updateWorkingXmlWithSessionData() {
       record[tgKey] = String(groupData.groupNumber);
       record[tgIdKey] = groupData.groupId;
 
-      // Add metadata fields using configured field names
+      // Add metadata fields using configured field names - ONLY if value exists
       if (groupData.pitchTranscription && pitchKey) {
         record[pitchKey] = groupData.pitchTranscription;
       }
@@ -1997,12 +2034,6 @@ async function updateWorkingXmlWithSessionData() {
   // Write with UTF-16 encoding
   fs.writeFileSync(workingXmlPath, updatedXml, 'utf16le');
   console.log('[updateWorkingXmlWithSessionData] Successfully wrote updated XML to:', workingXmlPath);
-  
-  // For linked bundles, also update the in-memory data
-  if (bundleData.isLinkedBundle) {
-    bundleData.allDataForms = dataForms;
-    console.log('[updateWorkingXmlWithSessionData] Updated in-memory data for linked bundle');
-  }
 }
 
 // Export hierarchical bundle (.tnset)
