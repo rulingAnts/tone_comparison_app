@@ -78,7 +78,13 @@ function parseLinkedXml(xmlPath) {
   const hasBOM = xmlBuffer.length >= 2 && xmlBuffer[0] === 0xFF && xmlBuffer[1] === 0xFE;
   
   // Convert to text (BOM is automatically handled by toString)
-  const xmlText = xmlBuffer.toString('utf16le');
+  let xmlText = xmlBuffer.toString('utf16le');
+  
+  // CRITICAL: Remove ALL BOM characters (U+FEFF) from text if present
+  // When reading UTF-16 LE with BOM, toString() converts the BOM bytes to U+FEFF character
+  // We need to strip ALL of them to avoid duplicating when we write back
+  // Use global replace to remove all occurrences, not just the first one
+  xmlText = xmlText.replace(/\uFEFF/g, '');
   
   // Detect line ending style (preserve original)
   const hasCRLF = xmlText.includes('\r\n');
@@ -233,17 +239,11 @@ function updateLinkedXml(xmlPath, updates) {
     // Write back with UTF-16 LE encoding
     console.log('[linkedXmlWriter] Writing updated XML with', lineEnding === '\r\n' ? 'CRLF' : 'LF', 'and', parsed.hasBOM ? 'BOM' : 'no BOM');
     
-    // Convert to buffer with BOM if original had it
-    let outputBuffer;
-    if (parsed.hasBOM) {
-      // Write UTF-16 LE with BOM
-      const textBuffer = Buffer.from(xmlText, 'utf16le');
-      const bomBuffer = Buffer.from([0xFF, 0xFE]);
-      outputBuffer = Buffer.concat([bomBuffer, textBuffer]);
-    } else {
-      // Write UTF-16 LE without BOM
-      outputBuffer = Buffer.from(xmlText, 'utf16le');
-    }
+    // CRITICAL: Always write UTF-16 LE WITH BOM for Dekereke compatibility
+    // Dekereke's parser REQUIRES the BOM to detect UTF-16 LE encoding
+    const textBuffer = Buffer.from(xmlText, 'utf16le');
+    const bomBuffer = Buffer.from([0xFF, 0xFE]);
+    const outputBuffer = Buffer.concat([bomBuffer, textBuffer]);
     
     fs.writeFileSync(xmlPath, outputBuffer);
     
