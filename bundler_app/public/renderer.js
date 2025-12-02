@@ -112,10 +112,31 @@ function handleBundleTypeChange() {
     refNumbersSection.style.display = (bundleType === 'legacy') ? 'block' : 'none';
   }
   
+  // Reset linked bundle checkbox when switching to legacy
+  if (bundleType === 'legacy') {
+    const linkedCheckbox = document.getElementById('createLinkedBundle');
+    if (linkedCheckbox) {
+      linkedCheckbox.checked = false;
+    }
+  }
+  
   // Update output file extension in the button text
   updateCreateButtonText();
   
   // Persist bundle type choice
+  persistSettings();
+}
+
+function handleLinkedBundleChange() {
+  const linkedCheckbox = document.getElementById('createLinkedBundle');
+  const linkedInfo = document.getElementById('linkedBundleInfo');
+  
+  if (linkedCheckbox && linkedCheckbox.checked) {
+    if (linkedInfo) linkedInfo.style.display = 'block';
+  } else {
+    if (linkedInfo) linkedInfo.style.display = 'none';
+  }
+  
   persistSettings();
 }
 
@@ -164,6 +185,15 @@ async function loadPersistedSettings() {
     if (radioToCheck) {
       radioToCheck.checked = true;
       handleBundleTypeChange();
+    }
+  }
+  
+  // Restore linked bundle option
+  if (s.createLinkedBundle) {
+    const linkedCheckbox = document.getElementById('createLinkedBundle');
+    if (linkedCheckbox) {
+      linkedCheckbox.checked = true;
+      handleLinkedBundleChange();
     }
   }
   
@@ -415,6 +445,7 @@ function collectCurrentSettings() {
     outputPath: outputFilePath,
     settings: {
       bundleType: bundleType,
+      createLinkedBundle: document.getElementById('createLinkedBundle')?.checked || false,
       writtenFormElements,
       showWrittenForm,
       audioFileSuffix: firstSuffix === '' ? null : firstSuffix,
@@ -2974,20 +3005,64 @@ function renderAudioVariants() {
 
   const table = document.createElement('div');
   table.style.display = 'grid';
-  table.style.gridTemplateColumns = '1fr 220px 40px';
+  table.style.gridTemplateColumns = '70px 1fr 220px 40px';
   table.style.gap = '8px';
+  table.style.alignItems = 'center';
 
   // Header
+  const hOrder = document.createElement('div'); hOrder.textContent = 'Order'; hOrder.style.color = '#666'; hOrder.style.fontWeight = '600';
   const hDesc = document.createElement('div'); hDesc.textContent = 'Description'; hDesc.style.color = '#666'; hDesc.style.fontWeight = '600';
   const hSuf = document.createElement('div'); hSuf.textContent = 'Suffix'; hSuf.style.color = '#666'; hSuf.style.fontWeight = '600';
   const hAct = document.createElement('div'); hAct.textContent = '';
-  table.appendChild(hDesc); table.appendChild(hSuf); table.appendChild(hAct);
+  table.appendChild(hOrder); table.appendChild(hDesc); table.appendChild(hSuf); table.appendChild(hAct);
 
   if (audioVariants.length === 0) {
     audioVariants = [{ description: 'Default', suffix: '' }];
   }
 
   audioVariants.forEach((v, idx) => {
+    // Order buttons container
+    const orderBtns = document.createElement('div');
+    orderBtns.style.display = 'flex';
+    orderBtns.style.gap = '4px';
+    
+    const upBtn = document.createElement('button');
+    upBtn.className = 'btn-secondary';
+    upBtn.textContent = '↑';
+    upBtn.title = 'Move up';
+    upBtn.style.padding = '2px 8px';
+    upBtn.style.fontSize = '16px';
+    upBtn.disabled = idx === 0;
+    upBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (idx > 0) {
+        // Swap with previous item
+        [audioVariants[idx - 1], audioVariants[idx]] = [audioVariants[idx], audioVariants[idx - 1]];
+        renderAudioVariants();
+        persistSettings();
+      }
+    });
+    
+    const downBtn = document.createElement('button');
+    downBtn.className = 'btn-secondary';
+    downBtn.textContent = '↓';
+    downBtn.title = 'Move down';
+    downBtn.style.padding = '2px 8px';
+    downBtn.style.fontSize = '16px';
+    downBtn.disabled = idx === audioVariants.length - 1;
+    downBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (idx < audioVariants.length - 1) {
+        // Swap with next item
+        [audioVariants[idx], audioVariants[idx + 1]] = [audioVariants[idx + 1], audioVariants[idx]];
+        renderAudioVariants();
+        persistSettings();
+      }
+    });
+    
+    orderBtns.appendChild(upBtn);
+    orderBtns.appendChild(downBtn);
+    
     const descInput = document.createElement('input');
     descInput.type = 'text';
     descInput.placeholder = 'e.g., Yohanis';
@@ -3019,6 +3094,7 @@ function renderAudioVariants() {
       persistSettings();
     });
 
+    table.appendChild(orderBtns);
     table.appendChild(descInput);
     table.appendChild(sufInput);
     table.appendChild(delBtn);

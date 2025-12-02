@@ -332,17 +332,43 @@ function renderTreeNode(treeNode, container, subBundles, depth = 0) {
       header.className = 'category-header';
       
       const itemCount = countSubBundles(node.children, node.orgGroups);
+      
+      // Collect all references from this category and its children
+      const categoryRefs = collectCategoryReferences(node.children, node.orgGroups);
+      
       header.innerHTML = `
         <span class="toggle">▼</span>
         <span class="label">${node.name}</span>
         <span class="count">${itemCount} items</span>
       `;
       
+      // Add copy references button to category header
+      const copyBtn = document.createElement('button');
+      copyBtn.textContent = '📋';
+      copyBtn.className = 'copy-refs-btn';
+      copyBtn.style.cssText = `
+        margin-left: 8px;
+        padding: 4px 8px;
+        font-size: 12px;
+        background: #f0f0f0;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+        cursor: pointer;
+      `;
+      copyBtn.title = `Copy all ${categoryRefs.length} reference numbers`;
+      copyBtn.onclick = (e) => {
+        e.stopPropagation();
+        copyReferencesToClipboard(categoryRefs);
+      };
+      header.appendChild(copyBtn);
+      
       const childrenDiv = document.createElement('div');
       childrenDiv.className = 'category-children';
       
       // Toggle functionality
-      header.addEventListener('click', () => {
+      header.addEventListener('click', (e) => {
+        // Don't toggle if clicking the copy button
+        if (e.target.closest('.copy-refs-btn')) return;
         childrenDiv.classList.toggle('collapsed');
         header.querySelector('.toggle').textContent = childrenDiv.classList.contains('collapsed') ? '▶' : '▼';
       });
@@ -359,16 +385,44 @@ function renderTreeNode(treeNode, container, subBundles, depth = 0) {
           
           const orgHeader = document.createElement('div');
           orgHeader.className = 'category-header org-group-header';
+          
+          // Collect references from this organizational group
+          const orgGroupRefs = node.orgGroups[orgGroupName].reduce((acc, sb) => {
+            return acc.concat(sb.references || []);
+          }, []);
+          
           orgHeader.innerHTML = `
             <span class="toggle">▼</span>
             <span class="label">${orgGroupName}</span>
             <span class="count">${node.orgGroups[orgGroupName].length} items</span>
           `;
           
+          // Add copy button to org group header
+          const orgCopyBtn = document.createElement('button');
+          orgCopyBtn.textContent = '📋';
+          orgCopyBtn.className = 'copy-refs-btn';
+          orgCopyBtn.style.cssText = `
+            margin-left: 8px;
+            padding: 4px 8px;
+            font-size: 12px;
+            background: #f0f0f0;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            cursor: pointer;
+          `;
+          orgCopyBtn.title = `Copy all ${orgGroupRefs.length} reference numbers`;
+          orgCopyBtn.onclick = (e) => {
+            e.stopPropagation();
+            copyReferencesToClipboard(orgGroupRefs);
+          };
+          orgHeader.appendChild(orgCopyBtn);
+          
           const orgChildrenDiv = document.createElement('div');
           orgChildrenDiv.className = 'category-children';
           
-          orgHeader.addEventListener('click', () => {
+          orgHeader.addEventListener('click', (e) => {
+            // Don't toggle if clicking the copy button
+            if (e.target.closest('.copy-refs-btn')) return;
             orgChildrenDiv.classList.toggle('collapsed');
             orgHeader.querySelector('.toggle').textContent = orgChildrenDiv.classList.contains('collapsed') ? '▶' : '▼';
           });
@@ -389,6 +443,32 @@ function renderTreeNode(treeNode, container, subBundles, depth = 0) {
       renderTreeNode(node.children, childrenDiv, subBundles, depth + 1);
     }
   });
+}
+
+// Helper function to collect all references from a category and its children
+function collectCategoryReferences(children, orgGroups) {
+  let refs = [];
+  
+  // Collect from organizational groups
+  if (orgGroups) {
+    Object.keys(orgGroups).forEach(groupName => {
+      orgGroups[groupName].forEach(sb => {
+        refs = refs.concat(sb.references || []);
+      });
+    });
+  }
+  
+  // Collect from child categories
+  Object.keys(children).forEach(key => {
+    const node = children[key];
+    if (node.isLeaf && node.subBundle) {
+      refs = refs.concat(node.subBundle.references || []);
+    } else {
+      refs = refs.concat(collectCategoryReferences(node.children, node.orgGroups));
+    }
+  });
+  
+  return refs;
 }
 
 function countSubBundles(children, orgGroups) {
@@ -443,6 +523,26 @@ function createSubBundleItem(subBundle) {
     </div>
     <div class="review-status" title="${getReviewStatusText(subBundle, isComplete)}">${reviewIcon}</div>
   `;
+  
+  // Add copy references button
+  const copyBtn = document.createElement('button');
+  copyBtn.textContent = '📋';
+  copyBtn.className = 'copy-refs-btn';
+  copyBtn.style.cssText = `
+    margin-left: 8px;
+    padding: 4px 8px;
+    font-size: 12px;
+    background: #f0f0f0;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    cursor: pointer;
+  `;
+  copyBtn.title = 'Copy reference numbers';
+  copyBtn.onclick = (e) => {
+    e.stopPropagation();
+    copyReferencesToClipboard(subBundle.references || []);
+  };
+  item.appendChild(copyBtn);
   
   item.addEventListener('click', () => selectSubBundle(subBundle.path));
   
@@ -1169,6 +1269,19 @@ async function renderGroups() {
       openEditGroupModal(group.id);
     };
     headerActions.appendChild(editBtn);
+    
+    // Copy references button
+    const copyRefsBtn = document.createElement('button');
+    copyRefsBtn.textContent = '📋 Copy Refs';
+    copyRefsBtn.className = 'secondary';
+    copyRefsBtn.style.fontSize = '12px';
+    copyRefsBtn.style.padding = '4px 8px';
+    copyRefsBtn.title = 'Copy reference numbers to clipboard';
+    copyRefsBtn.onclick = (e) => {
+      e.stopPropagation();
+      copyReferencesToClipboard(group.members);
+    };
+    headerActions.appendChild(copyRefsBtn);
     
     // Move flagged words button (only show if group has flagged members)
     const flaggedMembers = group.members?.filter(ref => session.records[ref]?.flagged) || [];
@@ -2672,3 +2785,42 @@ async function openMergeReportInFinder() {
   if (!lastMergeReportPath) return;
   await ipcRenderer.invoke('open-path', lastMergeReportPath);
 }
+
+// Copy reference numbers to clipboard
+function copyReferencesToClipboard(references) {
+  if (!references || references.length === 0) {
+    alert('No references to copy');
+    return;
+  }
+  
+  // Join references with spaces, preserving leading zeros
+  const refString = references.join(' ');
+  
+  // Copy to clipboard using Electron's clipboard API
+  const { clipboard } = require('electron');
+  clipboard.writeText(refString);
+  
+  // Show feedback
+  console.log(`[renderer] Copied ${references.length} references to clipboard`);
+  
+  // Optional: Show brief notification
+  const notification = document.createElement('div');
+  notification.textContent = `Copied ${references.length} reference(s)`;
+  notification.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #28a745;
+    color: white;
+    padding: 12px 20px;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    z-index: 10000;
+    font-size: 14px;
+  `;
+  document.body.appendChild(notification);
+  setTimeout(() => {
+    notification.remove();
+  }, 2000);
+}
+

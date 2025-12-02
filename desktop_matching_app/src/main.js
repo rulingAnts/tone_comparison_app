@@ -51,6 +51,13 @@ function saveSession() {
     fs.mkdirSync(path.dirname(p), { recursive: true });
     fs.writeFileSync(p, JSON.stringify(sessionData || {}, null, 2), 'utf8');
     console.log('[desktop_matching] Session saved to', p);
+    
+    // For LINKED hierarchical bundles, immediately write changes to the XML file
+    if (bundleData && bundleData.isLinkedBundle && bundleType === 'hierarchical') {
+      updateWorkingXmlWithSessionData().catch(err => {
+        console.warn('[saveSession] Failed to update linked XML:', err.message);
+      });
+    }
   } catch (e) {
     console.warn('Failed to save session:', e.message);
   }
@@ -736,132 +743,166 @@ async function loadHierarchicalBundle(filePath) {
     
     zip.extractAllTo(extractedPath, true);
     
-    // Check for new structure (xml/ and audio/ folders at root)
-    const xmlFolder = path.join(extractedPath, 'xml');
-    const audioFolder = path.join(extractedPath, 'audio');
-    const hierarchyPath = path.join(extractedPath, 'hierarchy.json');
+    // Check for linked bundle metadata
+    const linkMetadataPath = path.join(extractedPath, 'link_metadata.json');
+    const isLinkedBundle = fs.existsSync(linkMetadataPath);
     
-    const hasNewStructure = fs.existsSync(xmlFolder) && fs.existsSync(audioFolder);
+    let xmlPath, audioFolder;
+    let linkMetadata = null;
     
-    if (hasNewStructure) {
-      // NEW STRUCTURE: Load from centralized XML and audio
-      console.log('[desktop_matching] Loading hierarchical bundle with new structure (xml/, audio/)');
+    if (isLinkedBundle) {
+      // LINKED BUNDLE: Read paths from link_metadata.json
+      console.log('[desktop_matching] Loading LINKED hierarchical bundle');
+      linkMetadata = JSON.parse(fs.readFileSync(linkMetadataPath, 'utf8'));
       
-      // Load hierarchy.json
-      if (!fs.existsSync(hierarchyPath)) {
-        throw new Error('Hierarchical bundle missing hierarchy.json');
-      }
-      hierarchyConfig = JSON.parse(fs.readFileSync(hierarchyPath, 'utf8'));
+      xmlPath = linkMetadata.linkedXmlPath;
+      audioFolder = linkMetadata.linkedAudioFolder;
       
-      // Load settings.json
-      const settingsPath = path.join(extractedPath, 'settings.json');
-      if (!fs.existsSync(settingsPath)) {
-        throw new Error('Bundle missing settings.json');
+      // Verify linked files exist
+      if (!fs.existsSync(xmlPath)) {
+        throw new Error(`Linked XML file not found: ${xmlPath}\n\nThis linked bundle requires the original XML file to be in its original location.`);
       }
-      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!fs.existsSync(audioFolder)) {
+        throw new Error(`Linked audio folder not found: ${audioFolder}\n\nThis linked bundle requires the original audio folder to be in its original location.`);
+      }
+      
+      console.log('[desktop_matching] Linked XML:', xmlPath);
+      console.log('[desktop_matching] Linked audio folder:', audioFolder);
+    } else {
+      // EMBEDDED BUNDLE: Use files from bundle
+      console.log('[desktop_matching] Loading EMBEDDED hierarchical bundle');
+      const xmlFolder = path.join(extractedPath, 'xml');
+      audioFolder = path.join(extractedPath, 'audio');
+      
+      const hasNewStructure = fs.existsSync(xmlFolder) && fs.existsSync(audioFolder);
+      
+      if (!hasNewStructure) {
+        throw new Error('Invalid hierarchical bundle structure. Expected xml/ and audio/ folders at root or link_metadata.json for linked bundles.');
+      }
       
       // Load XML data (prefer working_data.xml, fallback to original_data.xml)
       const workingXmlPath = path.join(xmlFolder, 'working_data.xml');
       const originalXmlPath = path.join(xmlFolder, 'original_data.xml');
-      const xmlPath = fs.existsSync(workingXmlPath) ? workingXmlPath : originalXmlPath;
+      xmlPath = fs.existsSync(workingXmlPath) ? workingXmlPath : originalXmlPath;
       
       if (!fs.existsSync(xmlPath)) {
         throw new Error('Hierarchical bundle missing XML data');
       }
+    }
+    
+    // Load hierarchy.json
+    const hierarchyPath = path.join(extractedPath, 'hierarchy.json');
+    if (!fs.existsSync(hierarchyPath)) {
+      throw new Error('Hierarchical bundle missing hierarchy.json');
+    }
+    hierarchyConfig = JSON.parse(fs.readFileSync(hierarchyPath, 'utf8'));
+    
+    // Load settings.json
+    const settingsPath = path.join(extractedPath, 'settings.json');
+    if (!fs.existsSync(settingsPath)) {
+      throw new Error('Bundle missing settings.json');
+    }
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    
+    // Parse XML with UTF-16 support
+    const xmlBuffer = fs.readFileSync(xmlPath);
+    const xmlData = xmlBuffer.toString('utf16le');
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: '@_',
+      trimValues: true,
+      parseAttributeValue: false,
+      parseTagValue: false,
+    });
+    const xmlResult = parser.parse(xmlData);
+    const phonData = xmlResult.phon_data;
+    const allDataForms = Array.isArray(phonData.data_form) 
+      ? phonData.data_form 
+      : [phonData.data_form];
+    
+    // Build sub-bundle list from hierarchy.json tree
+    const subBundles = [];
+    
+    function extractSubBundlesFromTree(node, pathPrefix = '', parentAudioVariants = []) {
+      if (!node) return;
       
-      // Parse XML with UTF-16 support
-      const xmlBuffer = fs.readFileSync(xmlPath);
-      const xmlData = xmlBuffer.toString('utf16le');
-      const parser = new XMLParser({
-        ignoreAttributes: false,
-        attributeNamePrefix: '@_',
-        trimValues: true,
-        parseAttributeValue: false,
-        parseTagValue: false,
-      });
-      const xmlResult = parser.parse(xmlData);
-      const phonData = xmlResult.phon_data;
-      const allDataForms = Array.isArray(phonData.data_form) 
-        ? phonData.data_form 
-        : [phonData.data_form];
+      const values = node.values || [];
       
-      // Build sub-bundle list from hierarchy.json tree
-      const subBundles = [];
-      
-      function extractSubBundlesFromTree(node, pathPrefix = '', parentAudioVariants = []) {
-        if (!node) return;
+      for (const valueNode of values) {
+        const subPath = pathPrefix ? `${pathPrefix}/${valueNode.value}` : valueNode.value;
         
-        const values = node.values || [];
-        
-        for (const valueNode of values) {
-          const subPath = pathPrefix ? `${pathPrefix}/${valueNode.value}` : valueNode.value;
-          
-          // Check if this is a leaf node (has references) or parent node (has children)
-          if (valueNode.children && valueNode.children.length > 0) {
-            // Parent node - recurse into children
-            const audioVariants = valueNode.audioVariants || parentAudioVariants;
-            for (const child of valueNode.children) {
-              extractSubBundlesFromTree(
-                { field: child.field || node.field, values: [child] },
-                subPath,
-                audioVariants
-              );
-            }
-          } else if (valueNode.references && valueNode.references.length > 0) {
-            // Leaf node - create sub-bundle entry
-            subBundles.push({
-              path: subPath,
-              categoryPath: subPath,
-              label: valueNode.label || valueNode.value,
-              references: valueNode.references,
-              recordCount: valueNode.recordCount || valueNode.references.length,
-              audioVariants: valueNode.audioVariants || parentAudioVariants,
-              organizationalGroup: valueNode.organizationalGroup || null,
-              // NEW STRUCTURE FLAG: indicates we have centralized data
-              usesNewStructure: true,
-            });
+        // Check if this is a leaf node (has references) or parent node (has children)
+        if (valueNode.children && valueNode.children.length > 0) {
+          // Parent node - recurse into children
+          const audioVariants = valueNode.audioVariants || parentAudioVariants;
+          for (const child of valueNode.children) {
+            extractSubBundlesFromTree(
+              { field: child.field || node.field, values: [child] },
+              subPath,
+              audioVariants
+            );
           }
+        } else if (valueNode.references && valueNode.references.length > 0) {
+          // Leaf node - create sub-bundle entry
+          subBundles.push({
+            path: subPath,
+            categoryPath: subPath,
+            label: valueNode.label || valueNode.value,
+            references: valueNode.references,
+            recordCount: valueNode.recordCount || valueNode.references.length,
+            audioVariants: valueNode.audioVariants || parentAudioVariants,
+            organizationalGroup: valueNode.organizationalGroup || null,
+            usesNewStructure: true,
+          });
         }
       }
-      
-      if (hierarchyConfig.tree) {
-        extractSubBundlesFromTree(hierarchyConfig.tree);
-      }
-      
-      console.log(`[desktop_matching] Found ${subBundles.length} sub-bundles (new structure)`);
-      
-      // Load existing change history if present
-      const existingHistory = ChangeTracker.loadChangeHistory(extractedPath);
-      
-      // Build bundle data structure
-      bundleData = {
-        settings,
-        hierarchy: hierarchyConfig,
-        subBundles,
-        extractedPath,
-        bundleId: settings.bundleId || null,
+    }
+    
+    if (hierarchyConfig.tree) {
+      extractSubBundlesFromTree(hierarchyConfig.tree);
+    }
+    
+    console.log(`[desktop_matching] Found ${subBundles.length} sub-bundles`);
+    
+    // Load existing change history if present
+    const existingHistory = ChangeTracker.loadChangeHistory(extractedPath);
+    
+    // Build bundle data structure
+    bundleData = {
+      settings,
+      hierarchy: hierarchyConfig,
+      subBundles,
+      extractedPath,
+      bundleId: settings.bundleId || null,
+      bundleType: 'hierarchical',
+      xmlPath: xmlPath, // Path to XML file (linked or embedded)
+      audioFolder: audioFolder, // Path to audio folder (linked or embedded)
+      allDataForms: allDataForms, // Store all records for quick lookup
+      usesNewStructure: true,
+      isLinkedBundle: isLinkedBundle, // Flag for linked vs embedded bundle
+      linkMetadata: linkMetadata, // Store link metadata if linked
+    };
+    
+    console.log('[desktop_matching] Bundle type:', isLinkedBundle ? 'LINKED' : 'EMBEDDED');
+    console.log('[desktop_matching] XML path:', xmlPath);
+    console.log('[desktop_matching] Audio folder:', audioFolder);
+    
+    // Create or restore session
+    let needNewSession = true;
+    if (sessionData && sessionData.bundleId === bundleData.bundleId && sessionData.bundleType === 'hierarchical') {
+      needNewSession = false;
+    }
+    
+    if (needNewSession) {
+      sessionData = {
+        bundleId: bundleData.bundleId,
         bundleType: 'hierarchical',
-        xmlPath: xmlPath, // Store which XML file we're using
-        allDataForms: allDataForms, // Store all records for quick lookup
-        usesNewStructure: true, // Flag for new centralized structure
-      };
-      
-      // Create or restore session
-      let needNewSession = true;
-      if (sessionData && sessionData.bundleId === bundleData.bundleId && sessionData.bundleType === 'hierarchical') {
-        needNewSession = false;
-      }
-      
-      if (needNewSession) {
-        sessionData = {
-          bundleId: bundleData.bundleId,
-          bundleType: 'hierarchical',
-          hierarchyConfig: hierarchyConfig,
-          subBundles: subBundles.map(sb => ({
-            path: sb.path,
-            categoryPath: sb.categoryPath,
-            label: sb.label,
-            recordCount: sb.recordCount,
+        hierarchyConfig: hierarchyConfig,
+        subBundles: subBundles.map(sb => ({
+          path: sb.path,
+          categoryPath: sb.categoryPath,
+          label: sb.label,
+          recordCount: sb.recordCount,
             assignedCount: 0,
             reviewed: false,
             queue: [...(sb.references || [])], // Initialize with all references
@@ -875,26 +916,21 @@ async function loadHierarchicalBundle(filePath) {
         };
         
         saveSession();
-      }
-      
-      // Initialize change tracker
-      changeTracker.initialize(extractedPath, existingHistory);
-      console.log('[desktop_matching] Change tracker initialized');
-      
-      return {
-        success: true,
-        bundleType: 'hierarchical',
-        settings: bundleData.settings,
-        hierarchy: hierarchyConfig,
-        subBundleCount: subBundles.length,
-        session: sessionData,
-        requiresNavigation: true,
-      };
-      
-    } else {
-      // No new structure detected - hierarchical bundles must have xml/ and audio/ folders
-      throw new Error('Invalid hierarchical bundle structure. Expected xml/ and audio/ folders at root.');
     }
+    
+    // Initialize change tracker
+    changeTracker.initialize(extractedPath, existingHistory);
+    console.log('[desktop_matching] Change tracker initialized');
+    
+    return {
+      success: true,
+      bundleType: 'hierarchical',
+      settings: bundleData.settings,
+      hierarchy: hierarchyConfig,
+      subBundleCount: subBundles.length,
+      session: sessionData,
+      requiresNavigation: true,
+    };
     
   } catch (error) {
     return {
@@ -919,7 +955,9 @@ ipcMain.handle('get-current-word', async () => {
   }
   
   const ref = sessionData.queue[0];
-  const record = bundleData.records.find(r => normalizeRefString(r.Reference) === ref);
+  // For hierarchical bundles, use allDataForms if records not set
+  const recordsList = bundleData.records || bundleData.allDataForms || [];
+  const record = recordsList.find(r => normalizeRefString(r.Reference) === ref);
   if (!record) return null;
   
   // Merge with user edits
@@ -1257,15 +1295,19 @@ ipcMain.handle('select-image-file', async () => {
 });
 
 ipcMain.handle('get-audio-path', async (event, soundFile, suffix) => {
-  if (!extractedPath) return null;
+  if (!extractedPath && !bundleData) return null;
   
-  // Determine audio directory based on bundle type and structure
+  // Determine audio directory based on bundle type
   let audioDir;
-  if (bundleType === 'hierarchical') {
-    // New structure: all audio in root audio/ folder
+  
+  if (bundleData && bundleData.audioFolder) {
+    // Use audioFolder from bundleData (works for both linked and embedded)
+    audioDir = bundleData.audioFolder;
+  } else if (bundleType === 'hierarchical') {
+    // Fallback: New structure with all audio in root audio/ folder
     audioDir = path.join(extractedPath, 'audio');
   } else {
-    // For legacy single bundles, audio is in audio/
+    // Legacy single bundles
     audioDir = path.join(extractedPath, 'audio');
   }
   
@@ -1322,7 +1364,9 @@ ipcMain.handle('get-audio-path', async (event, soundFile, suffix) => {
 ipcMain.handle('get-record-by-ref', async (event, ref) => {
   if (!bundleData) return null;
   
-  const record = bundleData.records.find(r => normalizeRefString(r.Reference) === ref);
+  // For hierarchical bundles, use allDataForms if records not set
+  const recordsList = bundleData.records || bundleData.allDataForms || [];
+  const record = recordsList.find(r => normalizeRefString(r.Reference) === ref);
   if (!record) return null;
   
   // Merge with user edits
@@ -1372,7 +1416,8 @@ ipcMain.handle('reset-session', async () => {
     sessionData.records = {};
   } else {
     // For legacy bundles
-    const queue = bundleData.records.map(df => normalizeRefString(df.Reference));
+    const recordsList = bundleData.records || bundleData.allDataForms || [];
+    const queue = recordsList.map(df => normalizeRefString(df.Reference));
     sessionData = {
       bundleId: bundleData.bundleId,
       queue,
@@ -1818,15 +1863,26 @@ async function updateWorkingXmlWithSessionData() {
     return;
   }
 
-  const xmlFolder = path.join(extractedPath, 'xml');
-  const workingXmlPath = path.join(xmlFolder, 'working_data.xml');
+  // Determine which XML file to update based on linked vs embedded bundle
+  let workingXmlPath;
+  
+  if (bundleData.isLinkedBundle) {
+    // LINKED BUNDLE: Write directly to the original XML file
+    workingXmlPath = bundleData.xmlPath;
+    console.log('[updateWorkingXmlWithSessionData] LINKED bundle - writing directly to:', workingXmlPath);
+  } else {
+    // EMBEDDED BUNDLE: Write to working_data.xml in extracted bundle
+    const xmlFolder = path.join(extractedPath, 'xml');
+    workingXmlPath = path.join(xmlFolder, 'working_data.xml');
+    console.log('[updateWorkingXmlWithSessionData] EMBEDDED bundle - writing to working_data.xml');
+  }
 
   if (!fs.existsSync(workingXmlPath)) {
-    console.warn('[updateWorkingXmlWithSessionData] working_data.xml not found');
+    console.warn('[updateWorkingXmlWithSessionData] XML file not found:', workingXmlPath);
     return;
   }
 
-  console.log('[updateWorkingXmlWithSessionData] Updating working_data.xml with session changes');
+  console.log('[updateWorkingXmlWithSessionData] Updating XML with session changes');
 
   // Read and parse XML with UTF-16 encoding
   const xmlBuffer = fs.readFileSync(workingXmlPath);
@@ -1915,7 +1971,7 @@ async function updateWorkingXmlWithSessionData() {
     }
   });
 
-  console.log(`[updateWorkingXmlWithSessionData] Updated ${updatedCount} records in working_data.xml`);
+  console.log(`[updateWorkingXmlWithSessionData] Updated ${updatedCount} records`);
 
   // Build XML
   const builder = new XMLBuilder({
@@ -1940,7 +1996,13 @@ async function updateWorkingXmlWithSessionData() {
 
   // Write with UTF-16 encoding
   fs.writeFileSync(workingXmlPath, updatedXml, 'utf16le');
-  console.log('[updateWorkingXmlWithSessionData] Successfully wrote updated working_data.xml');
+  console.log('[updateWorkingXmlWithSessionData] Successfully wrote updated XML to:', workingXmlPath);
+  
+  // For linked bundles, also update the in-memory data
+  if (bundleData.isLinkedBundle) {
+    bundleData.allDataForms = dataForms;
+    console.log('[updateWorkingXmlWithSessionData] Updated in-memory data for linked bundle');
+  }
 }
 
 // Export hierarchical bundle (.tnset)
@@ -2057,7 +2119,8 @@ function buildSubBundleDataXml(subBundle) {
   
   // Get records for this sub-bundle (from queue + assigned)
   const subBundleRefs = new Set([...subBundle.queue, ...refToGroup.keys()]);
-  const subBundleRecords = bundleData.records.filter(record => {
+  const recordsList = bundleData.records || bundleData.allDataForms || [];
+  const subBundleRecords = recordsList.filter(record => {
     const ref = normalizeRefString(record.Reference);
     return subBundleRefs.has(ref);
   });
@@ -2163,7 +2226,8 @@ async function exportLegacyBundle() {
     });
     
     // Update records with tone group assignments and user spelling
-    const updatedRecords = bundleData.records.map(record => {
+    const recordsList = bundleData.records || bundleData.allDataForms || [];
+    const updatedRecords = recordsList.map(record => {
       const ref = normalizeRefString(record.Reference);
       const updated = { ...record };
       

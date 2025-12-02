@@ -929,6 +929,18 @@ async function createHierarchicalBundle(config, event) {
     if (!settingsWithMeta.bundleId) settingsWithMeta.bundleId = generateUuid();
     if (settingsWithMeta.bundleDescription == null) settingsWithMeta.bundleDescription = '';
     
+    // Check if this is a linked bundle
+    const isLinkedBundle = settingsWithMeta.createLinkedBundle === true;
+    
+    if (isLinkedBundle) {
+      console.log('[hierarchical] Creating LINKED bundle (linking to external files)');
+      settingsWithMeta.linkedBundle = true;
+      settingsWithMeta.linkedXmlPath = xmlPath;
+      settingsWithMeta.linkedAudioFolder = audioFolder;
+    } else {
+      console.log('[hierarchical] Creating EMBEDDED bundle (files copied into bundle)');
+    }
+    
     // Read original XML file (preserve exact encoding and format)
     const xmlBuffer = fs.readFileSync(xmlPath);
     const xmlData = xmlBuffer.toString('utf16le');
@@ -1186,37 +1198,59 @@ async function createHierarchicalBundle(config, event) {
     
     archive.pipe(output);
     
-    // Add original_data.xml to xml/ folder (preserve exact format and encoding)
-    archive.file(xmlPath, { name: 'xml/original_data.xml' });
-    
-    // Create working_data.xml (copy of original for now - will be updated by desktop app later)
-    archive.file(xmlPath, { name: 'xml/working_data.xml' });
-    
-    console.log('[hierarchical] Added XML files to xml/ folder');
-    
-    // Add all audio files to audio/ folder (flat structure)
-    // IMPORTANT: Only add audio for records that are actually in sub-bundles (after hierarchy filtering)
-    
-    for (const soundFile of soundFiles) {
-      let srcPath;
-      let actualFileName = soundFile;
+    // For LINKED bundles: Store file paths instead of copying files
+    // For EMBEDDED bundles: Copy files into the bundle
+    if (isLinkedBundle) {
+      // LINKED BUNDLE: Store paths to external files
+      console.log('[hierarchical] LINKED bundle - storing file paths only');
       
-      if (processedDir && processedNameMap.has(soundFile)) {
-        const processedName = processedNameMap.get(soundFile);
-        srcPath = path.join(processedDir, processedName);
-        actualFileName = processedName;
-      } else {
-        srcPath = path.join(audioFolder, soundFile);
+      // Store link metadata in a separate file
+      const linkMetadata = {
+        linkedBundle: true,
+        linkedXmlPath: xmlPath,
+        linkedAudioFolder: audioFolder,
+        bundleCreatedAt: new Date().toISOString(),
+        bundleCreatedOn: require('os').hostname(),
+      };
+      archive.append(JSON.stringify(linkMetadata, null, 2), { name: 'link_metadata.json' });
+      
+      console.log('[hierarchical] Added link metadata (no XML/audio files copied)');
+    } else {
+      // EMBEDDED BUNDLE: Copy files into bundle
+      console.log('[hierarchical] EMBEDDED bundle - copying files into bundle');
+      
+      // Add original_data.xml to xml/ folder (preserve exact format and encoding)
+      archive.file(xmlPath, { name: 'xml/original_data.xml' });
+      
+      // Create working_data.xml (copy of original for now - will be updated by desktop app later)
+      archive.file(xmlPath, { name: 'xml/working_data.xml' });
+      
+      console.log('[hierarchical] Added XML files to xml/ folder');
+      
+      // Add all audio files to audio/ folder (flat structure)
+      // IMPORTANT: Only add audio for records that are actually in sub-bundles (after hierarchy filtering)
+      
+      for (const soundFile of soundFiles) {
+        let srcPath;
+        let actualFileName = soundFile;
+        
+        if (processedDir && processedNameMap.has(soundFile)) {
+          const processedName = processedNameMap.get(soundFile);
+          srcPath = path.join(processedDir, processedName);
+          actualFileName = processedName;
+        } else {
+          srcPath = path.join(audioFolder, soundFile);
+        }
+        
+        if (fs.existsSync(srcPath)) {
+          archive.file(srcPath, { name: `audio/${actualFileName}` });
+        } else {
+          console.warn('[hierarchical] Audio file not found:', srcPath);
+        }
       }
       
-      if (fs.existsSync(srcPath)) {
-        archive.file(srcPath, { name: `audio/${actualFileName}` });
-      } else {
-        console.warn('[hierarchical] Audio file not found:', srcPath);
-      }
+      console.log('[hierarchical] Added', soundFiles.size, 'audio files to audio/ folder');
     }
-    
-    console.log('[hierarchical] Added', soundFiles.size, 'audio files to audio/ folder');
     
     // Build hierarchy.json with complete structure
     const buildHierarchyFromTree = (node, records) => {

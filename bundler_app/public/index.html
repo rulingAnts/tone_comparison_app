@@ -496,6 +496,19 @@
       <div class="bundle-type-info" id="bundleTypeInfo">
         <strong>Legacy mode:</strong> Creates a single bundle file with all words. Compatible with all app versions.
       </div>
+      
+      <!-- Linked bundle option (only for hierarchical) -->
+      <div class="form-group hierarchical-only" id="linkedBundleOption" style="margin-top: 15px;">
+        <div class="checkbox-group">
+          <input type="checkbox" id="createLinkedBundle" onchange="handleLinkedBundleChange()">
+          <label for="createLinkedBundle">Create Linked Bundle (link to existing files instead of embedding)</label>
+        </div>
+        <div class="info" id="linkedBundleInfo" style="display: none; margin-top: 8px; padding: 10px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;">
+          <strong>Linked Bundle:</strong> Stores file paths to your XML and audio folder instead of copying the files into the bundle. 
+          The desktop matching app will work directly on the original files, applying changes as you make them. 
+          <strong>Note:</strong> The XML and audio folder must remain in their current locations and be accessible when using this bundle.
+        </div>
+      </div>
     </div>
 
     <div class="section">
