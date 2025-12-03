@@ -3124,7 +3124,7 @@ ipcMain.handle('move-word-to-sub-bundle', async (event, { ref, targetSubBundle, 
 });
 
 // Move multiple words to different sub-bundle (with optional new sub-bundle creation)
-ipcMain.handle('move-words-to-sub-bundle', async (event, { refs, targetSubBundle, newSubBundleName, returnToOriginal }) => {
+ipcMain.handle('move-words-to-sub-bundle', async (event, { refs, targetSubBundle, newSubBundlePath, returnToOriginal }) => {
   if (bundleType !== 'hierarchical' || !sessionData) {
     return { success: false, error: 'Not a hierarchical bundle' };
   }
@@ -3151,22 +3151,21 @@ ipcMain.handle('move-words-to-sub-bundle', async (event, { refs, targetSubBundle
     let finalTargetSubBundle = targetSubBundle;
     
     // If creating a new sub-bundle
-    if (newSubBundleName) {
-      // Create new sub-bundle path as child of current
-      finalTargetSubBundle = `${currentSubBundle}/${newSubBundleName}`;
+    if (newSubBundlePath) {
+      finalTargetSubBundle = newSubBundlePath;
       
       // Check if it already exists
       const exists = bundleData.subBundles.some(sb => sb.path === finalTargetSubBundle);
       if (exists) {
-        return { success: false, error: 'Sub-bundle with that name already exists' };
+        return { success: false, error: 'Sub-bundle with that path already exists' };
       }
       
-      // Create the new sub-bundle in hierarchy.json
+      // Create the new sub-bundle path in hierarchy.json
       const hierarchyPath = path.join(extractedPath, 'hierarchy.json');
       const hierarchy = JSON.parse(fs.readFileSync(hierarchyPath, 'utf8'));
       
-      // Add to hierarchy tree
-      if (!addNewSubBundleToHierarchy(hierarchy, currentSubBundle, newSubBundleName)) {
+      // Add to hierarchy tree (creates all intermediate nodes if needed)
+      if (!addSubBundlePathToHierarchy(hierarchy, newSubBundlePath)) {
         return { success: false, error: 'Failed to add new sub-bundle to hierarchy' };
       }
       
@@ -3547,7 +3546,104 @@ function updateWorkingDataXmlFields(xmlPath, ref, fieldUpdates) {
 }
 
 // ============================================================================
-// Helper function: Add new sub-bundle to hierarchy
+// Helper function: Add sub-bundle path to hierarchy (creates all intermediate nodes)
+// ============================================================================
+function addSubBundlePathToHierarchy(hierarchy, fullPath) {
+  if (!hierarchy || !hierarchy.tree) {
+    return false;
+  }
+  
+  const pathParts = fullPath.split('/');
+  
+  // Navigate/create nodes level by level
+  function ensurePathExists(currentLevel, parts, depth = 0) {
+    if (depth >= parts.length) {
+      return true;
+    }
+    
+    const partName = parts[depth];
+    const isLastPart = depth === parts.length - 1;
+    
+    if (!currentLevel.values) {
+      currentLevel.values = [];
+    }
+    
+    // Find or create the value node for this part
+    let valueNode = currentLevel.values.find(v => v.value === partName);
+    
+    if (!valueNode) {
+      // Create new node
+      valueNode = {
+        value: partName,
+        label: partName
+      };
+      
+      if (isLastPart) {
+        // Terminal node (leaf) - will hold references
+        valueNode.references = [];
+        valueNode.recordCount = 0;
+      } else {
+        // Organizational node - will have children
+        valueNode.children = [];
+      }
+      
+      currentLevel.values.push(valueNode);
+      console.log(`[addSubBundlePathToHierarchy] Created ${isLastPart ? 'terminal' : 'organizational'} node:`, partName);
+    } else {
+      // Node exists, verify structure
+      if (isLastPart) {
+        // Should be a terminal node
+        if (!valueNode.references) {
+          valueNode.references = [];
+          valueNode.recordCount = 0;
+        }
+        // If it has children, this is an error (can't add words to organizational node)
+        if (valueNode.children && valueNode.children.length > 0) {
+          console.error('[addSubBundlePathToHierarchy] Cannot create terminal node - already has children:', partName);
+          return false;
+        }
+      } else {
+        // Should be organizational node
+        if (!valueNode.children) {
+          valueNode.children = [];
+        }
+      }
+    }
+    
+    // If not last part, recurse into children
+    if (!isLastPart) {
+      if (!valueNode.children) {
+        valueNode.children = [];
+      }
+      
+      // Determine field for children (if any child exists, use its field, otherwise use parent field)
+      let childLevel;
+      if (valueNode.children.length > 0 && valueNode.children[0].field) {
+        childLevel = { field: valueNode.children[0].field, values: valueNode.children };
+      } else {
+        // Create new level with inherited field
+        childLevel = { field: currentLevel.field, values: valueNode.children };
+      }
+      
+      return ensurePathExists(childLevel, parts, depth + 1);
+    }
+    
+    return true;
+  }
+  
+  const success = ensurePathExists(hierarchy.tree, pathParts);
+  
+  if (success) {
+    console.log('[addSubBundlePathToHierarchy] Successfully added path:', fullPath);
+  } else {
+    console.error('[addSubBundlePathToHierarchy] Failed to add path:', fullPath);
+  }
+  
+  return success;
+}
+
+// ============================================================================
+// Helper function: Add new sub-bundle to hierarchy (DEPRECATED - use addSubBundlePathToHierarchy)
 // ============================================================================
 function addNewSubBundleToHierarchy(hierarchy, parentPath, newName) {
   if (!hierarchy || !hierarchy.tree) {

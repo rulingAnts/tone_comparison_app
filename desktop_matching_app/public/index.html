@@ -1259,8 +1259,20 @@
             <span style="font-weight: 500;">Create New Sub-Bundle</span>
           </label>
           <div id="newSubBundleForm" style="display: none; margin-top: 10px; padding-left: 26px;">
-            <input type="text" id="newSubBundleName" placeholder="Enter sub-bundle name" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
-            <div style="font-size: 12px; color: #666; margin-top: 5px;">New sub-bundle will be created at: <span id="newSubBundlePath"></span></div>
+            <div style="margin-bottom: 8px;">
+              <label style="font-size: 12px; color: #666; display: block; margin-bottom: 4px;">Full path (e.g., "Noun/CV" or "Noun/NewCategory/CV"):</label>
+              <input type="text" id="newSubBundlePath" placeholder="Enter path with / for levels" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
+            <div style="font-size: 12px; color: #666; margin-top: 5px;">
+              <strong>Tip:</strong> Use / to create organizational levels. Terminal node (last part) will hold words.
+            </div>
+            <div style="margin-top: 8px;">
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 12px;">
+                <input type="checkbox" id="createAsSiblingCheck" checked>
+                <span>Create as sibling of selected sub-bundle</span>
+              </label>
+            </div>
+            <div id="siblingPreview" style="font-size: 12px; color: #007bff; margin-top: 5px;"></div>
           </div>
         </div>
         
