@@ -122,13 +122,9 @@ async function restoreBundleFromSession() {
     bundleType = sessionData.bundleType || 'legacy';
     
     if (bundleType === 'hierarchical') {
-      // Restore hierarchical bundle - check for new structure first
-      const xmlFolder = path.join(extractedPath, 'xml');
-      let audioFolder = path.join(extractedPath, 'audio');
+      // Restore hierarchical bundle
       const hierarchyPath = path.join(extractedPath, 'hierarchy.json');
       const settingsPath = path.join(extractedPath, 'settings.json');
-      
-      const hasNewStructure = fs.existsSync(xmlFolder) && fs.existsSync(audioFolder);
       
       if (!fs.existsSync(hierarchyPath) || !fs.existsSync(settingsPath)) {
         console.log('[desktop_matching] Missing bundle files, cannot restore');
@@ -144,18 +140,12 @@ async function restoreBundleFromSession() {
         return;
       }
       
-      if (!hasNewStructure) {
-        console.log('[desktop_matching] Old hierarchical structure not supported, cannot restore');
-        return;
-      }
-      
-      console.log('[desktop_matching] Restoring new hierarchical structure bundle');
-      
-      // Check for linked bundle metadata
+      // Check for linked bundle metadata FIRST (before checking for embedded structure)
       const linkMetadataPath = path.join(extractedPath, 'link_metadata.json');
       const isLinkedBundle = fs.existsSync(linkMetadataPath);
       let linkMetadata = null;
       let xmlPath;
+      let audioFolder;
       
       if (isLinkedBundle) {
         // LINKED BUNDLE: Use paths from link_metadata.json
@@ -180,8 +170,17 @@ async function restoreBundleFromSession() {
         console.log('[desktop_matching] Linked XML:', xmlPath);
         console.log('[desktop_matching] Linked audio folder:', audioFolder);
       } else {
-        // EMBEDDED BUNDLE: Use files from bundle
+        // EMBEDDED BUNDLE: Check for new structure and use files from bundle
         console.log('[desktop_matching] Restoring EMBEDDED hierarchical bundle');
+        const xmlFolder = path.join(extractedPath, 'xml');
+        audioFolder = path.join(extractedPath, 'audio');
+        
+        const hasNewStructure = fs.existsSync(xmlFolder) && fs.existsSync(audioFolder);
+        
+        if (!hasNewStructure) {
+          console.log('[desktop_matching] Old hierarchical structure not supported, cannot restore');
+          return;
+        }
         
         // Load XML data
         const workingXmlPath = path.join(xmlFolder, 'working_data.xml');
