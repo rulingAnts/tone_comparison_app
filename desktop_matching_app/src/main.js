@@ -3160,13 +3160,28 @@ ipcMain.handle('move-words-to-sub-bundle', async (event, { refs, targetSubBundle
         return { success: false, error: 'Sub-bundle with that path already exists' };
       }
       
+      // Validate that the new path structure is supported by the hierarchy
+      const validation = validatePathStructure(newSubBundlePath, bundleData.hierarchy);
+      if (!validation.valid) {
+        return { 
+          success: false, 
+          error: `Cannot create path "${newSubBundlePath}": ${validation.error}` 
+        };
+      }
+      
+      console.log('[move-words] Validated new path with field mappings:', validation.fieldMappings);
+      
       // Create the new sub-bundle path in hierarchy.json
       const hierarchyPath = path.join(extractedPath, 'hierarchy.json');
       const hierarchy = JSON.parse(fs.readFileSync(hierarchyPath, 'utf8'));
       
       // Add to hierarchy tree (creates all intermediate nodes if needed)
-      if (!addSubBundlePathToHierarchy(hierarchy, newSubBundlePath)) {
-        return { success: false, error: 'Failed to add new sub-bundle to hierarchy' };
+      const addResult = addSubBundlePathToHierarchy(hierarchy, newSubBundlePath, validation.fieldMappings);
+      if (!addResult) {
+        return { 
+          success: false, 
+          error: `Failed to add new sub-bundle to hierarchy - path structure may be invalid` 
+        };
       }
       
       // Save updated hierarchy
@@ -3215,8 +3230,25 @@ ipcMain.handle('move-words-to-sub-bundle', async (event, { refs, targetSubBundle
     
     // Update hierarchy.json and working_data.xml for each word
     const hierarchyPath = path.join(extractedPath, 'hierarchy.json');
-    const workingXmlPath = path.join(extractedPath, 'xml', 'working_data.xml');
+    
+    // Determine correct XML path (linked vs embedded)
+    let xmlPath;
+    if (bundleData.isLinkedBundle && bundleData.linkedXmlPath) {
+      xmlPath = bundleData.linkedXmlPath;
+      console.log('[move-words] Using linked XML path:', xmlPath);
+    } else {
+      xmlPath = path.join(extractedPath, 'xml', 'working_data.xml');
+      console.log('[move-words] Using embedded XML path:', xmlPath);
+    }
+    
+    // Get field updates for the target path
     const categoryUpdates = getCategoryUpdatesForPath(finalTargetSubBundle, bundleData.hierarchy);
+    console.log('[move-words] Category field updates:', categoryUpdates);
+    
+    // Validate that we have field updates (means path is valid)
+    if (!categoryUpdates || Object.keys(categoryUpdates).length === 0) {
+      return { success: false, error: `Cannot determine field mappings for path: ${finalTargetSubBundle}` };
+    }
     
     for (const ref of refsArray) {
       // 1. Update hierarchy.json
@@ -3236,8 +3268,8 @@ ipcMain.handle('move-words-to-sub-bundle', async (event, { refs, targetSubBundle
         targetSubBundleData.references.push(ref);
       }
       
-      // 2. Update working_data.xml with category field changes
-      updateWorkingDataXmlFields(workingXmlPath, ref, categoryUpdates);
+      // 2. Update working_data.xml (or linked XML) with category field changes
+      updateWorkingDataXmlFields(xmlPath, ref, categoryUpdates);
       
       // 3. Update session data
       currentSession.queue = currentSession.queue.filter(r => r !== ref);
@@ -3427,6 +3459,87 @@ function getCategoryUpdatesForPath(targetPath, hierarchy) {
 }
 
 // ============================================================================
+// Helper function: Validate if a path structure can be supported by hierarchy
+// This checks field depth without requiring nodes to exist
+// ============================================================================
+function validatePathStructure(targetPath, hierarchy) {
+  if (!hierarchy || !hierarchy.tree) {
+    return { valid: false, error: 'Invalid hierarchy structure' };
+  }
+  
+  const pathParts = targetPath.split('/');
+  
+  // Check if we can determine field mappings for the expected depth
+  // We need to look at the deepest existing branches to understand max depth
+  let maxDepth = 0;
+  const fieldsByDepth = {};
+  
+  function scanDepth(node, depth = 0) {
+    if (!node) return;
+    
+    const field = node.field;
+    if (field) {
+      if (!fieldsByDepth[depth]) {
+        fieldsByDepth[depth] = field;
+      } else if (fieldsByDepth[depth] !== field) {
+        // Different fields at same depth - this is unusual but might be valid
+        console.warn(`[validatePathStructure] Multiple fields at depth ${depth}: ${fieldsByDepth[depth]} vs ${field}`);
+      }
+      maxDepth = Math.max(maxDepth, depth);
+    }
+    
+    if (node.values) {
+      for (const valueNode of node.values) {
+        if (valueNode.children && valueNode.children.length > 0) {
+          // Construct child level from first child's field
+          const firstChild = valueNode.children[0];
+          if (typeof firstChild.field === 'string') {
+            scanDepth({ field: firstChild.field, values: valueNode.children }, depth + 1);
+          }
+        }
+      }
+    }
+  }
+  
+  // Scan the hierarchy tree to understand its structure
+  scanDepth(hierarchy.tree);
+  
+  console.log('[validatePathStructure] Max hierarchy depth:', maxDepth);
+  console.log('[validatePathStructure] Fields by depth:', fieldsByDepth);
+  console.log('[validatePathStructure] Requested path depth:', pathParts.length - 1);
+  
+  // Check if requested depth is supported
+  const requestedDepth = pathParts.length - 1;
+  if (requestedDepth > maxDepth) {
+    return { 
+      valid: false, 
+      error: `Path depth ${requestedDepth + 1} exceeds maximum hierarchy depth ${maxDepth + 1}` 
+    };
+  }
+  
+  // Verify we have field mappings for all required depths
+  for (let i = 0; i <= requestedDepth; i++) {
+    if (!fieldsByDepth[i]) {
+      return { 
+        valid: false, 
+        error: `No field mapping defined for depth level ${i}` 
+      };
+    }
+  }
+  
+  // Build expected field mappings
+  const expectedUpdates = {};
+  for (let i = 0; i < pathParts.length; i++) {
+    const field = fieldsByDepth[i];
+    if (field) {
+      expectedUpdates[field] = pathParts[i];
+    }
+  }
+  
+  return { valid: true, fieldMappings: expectedUpdates };
+}
+
+// ============================================================================
 // Helper function: Update hierarchy.json with Reference movement
 // ============================================================================
 function updateHierarchyJsonReferences(hierarchyPath, currentPath, targetPath, ref) {
@@ -3547,13 +3660,24 @@ function updateWorkingDataXmlFields(xmlPath, ref, fieldUpdates) {
 
 // ============================================================================
 // Helper function: Add sub-bundle path to hierarchy (creates all intermediate nodes)
+// This uses validated field mappings to ensure proper structure
 // ============================================================================
-function addSubBundlePathToHierarchy(hierarchy, fullPath) {
+function addSubBundlePathToHierarchy(hierarchy, fullPath, fieldMappings = null) {
   if (!hierarchy || !hierarchy.tree) {
+    console.error('[addSubBundlePathToHierarchy] Invalid hierarchy structure');
+    return false;
+  }
+  
+  if (!hierarchy.tree.field) {
+    console.error('[addSubBundlePathToHierarchy] Hierarchy tree missing field information');
     return false;
   }
   
   const pathParts = fullPath.split('/');
+  
+  // If field mappings weren't provided, we'll determine them as we go
+  // (less safe, but maintains backward compatibility)
+  const useProvidedMappings = fieldMappings !== null;
   
   // Navigate/create nodes level by level
   function ensurePathExists(currentLevel, parts, depth = 0) {
@@ -3563,6 +3687,12 @@ function addSubBundlePathToHierarchy(hierarchy, fullPath) {
     
     const partName = parts[depth];
     const isLastPart = depth === parts.length - 1;
+    const currentField = currentLevel.field;
+    
+    if (!currentField) {
+      console.error(`[addSubBundlePathToHierarchy] No field defined at depth ${depth} for path part:`, partName);
+      return false;
+    }
     
     if (!currentLevel.values) {
       currentLevel.values = [];
@@ -3582,13 +3712,14 @@ function addSubBundlePathToHierarchy(hierarchy, fullPath) {
         // Terminal node (leaf) - will hold references
         valueNode.references = [];
         valueNode.recordCount = 0;
+        console.log(`[addSubBundlePathToHierarchy] Created terminal node '${partName}' at depth ${depth} (field: ${currentField})`);
       } else {
         // Organizational node - will have children
         valueNode.children = [];
+        console.log(`[addSubBundlePathToHierarchy] Created organizational node '${partName}' at depth ${depth} (field: ${currentField})`);
       }
       
       currentLevel.values.push(valueNode);
-      console.log(`[addSubBundlePathToHierarchy] Created ${isLastPart ? 'terminal' : 'organizational'} node:`, partName);
     } else {
       // Node exists, verify structure
       if (isLastPart) {
@@ -3599,13 +3730,16 @@ function addSubBundlePathToHierarchy(hierarchy, fullPath) {
         }
         // If it has children, this is an error (can't add words to organizational node)
         if (valueNode.children && valueNode.children.length > 0) {
-          console.error('[addSubBundlePathToHierarchy] Cannot create terminal node - already has children:', partName);
+          console.error('[addSubBundlePathToHierarchy] Cannot create terminal node - path already has children:', partName);
           return false;
         }
       } else {
         // Should be organizational node
         if (!valueNode.children) {
+          // Node exists but wasn't organizational - convert it
+          console.warn(`[addSubBundlePathToHierarchy] Converting terminal node '${partName}' to organizational node`);
           valueNode.children = [];
+          // Keep existing references if any (they'll be orphaned but at least not deleted)
         }
       }
     }
@@ -3616,14 +3750,50 @@ function addSubBundlePathToHierarchy(hierarchy, fullPath) {
         valueNode.children = [];
       }
       
-      // Determine field for children (if any child exists, use its field, otherwise use parent field)
-      let childLevel;
-      if (valueNode.children.length > 0 && valueNode.children[0].field) {
-        childLevel = { field: valueNode.children[0].field, values: valueNode.children };
+      // Determine field for next level
+      let childField;
+      
+      if (useProvidedMappings && fieldMappings) {
+        // Use the validated field mapping for next depth
+        const nextDepth = depth + 1;
+        // Field mappings is keyed by field name with values, so we need to find which field
+        // corresponds to the next depth. We'll scan the mappings to find it.
+        // This is a bit tricky - let's use a different approach
+        
+        // Actually, let's look at existing children first, then fall back to inference
+        if (valueNode.children.length > 0) {
+          const firstChild = valueNode.children[0];
+          if (firstChild.field) {
+            childField = firstChild.field;
+          } else if (firstChild.children && firstChild.children.length > 0 && firstChild.children[0].field) {
+            childField = firstChild.children[0].field;
+          }
+        }
+        
+        // If still no field, we have a problem - the validation should have caught this
+        if (!childField) {
+          console.error(`[addSubBundlePathToHierarchy] Cannot determine child field at depth ${nextDepth}`);
+          return false;
+        }
       } else {
-        // Create new level with inherited field
-        childLevel = { field: currentLevel.field, values: valueNode.children };
+        // Original logic: try to infer from existing children
+        if (valueNode.children.length > 0) {
+          const firstChild = valueNode.children[0];
+          if (firstChild.field) {
+            childField = firstChild.field;
+          } else if (firstChild.children && firstChild.children.length > 0 && firstChild.children[0].field) {
+            childField = firstChild.children[0].field;
+          }
+        }
+        
+        // If no field found from children, use parent field (may not be correct)
+        if (!childField) {
+          console.warn(`[addSubBundlePathToHierarchy] No field defined for children of '${partName}', using parent field: ${currentField}`);
+          childField = currentField;
+        }
       }
+      
+      const childLevel = { field: childField, values: valueNode.children };
       
       return ensurePathExists(childLevel, parts, depth + 1);
     }
