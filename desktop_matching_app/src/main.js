@@ -3124,7 +3124,7 @@ ipcMain.handle('move-word-to-sub-bundle', async (event, { ref, targetSubBundle, 
 });
 
 // Move multiple words to different sub-bundle (with optional new sub-bundle creation)
-ipcMain.handle('move-words-to-sub-bundle', async (event, { refs, targetSubBundle, selectedTargetForNewSister, newSubBundleName, returnToOriginal }) => {
+ipcMain.handle('move-words-to-sub-bundle', async (event, { refs, targetSubBundle, returnToOriginal }) => {
   if (bundleType !== 'hierarchical' || !sessionData) {
     return { success: false, error: 'Not a hierarchical bundle' };
   }
@@ -3147,94 +3147,43 @@ ipcMain.handle('move-words-to-sub-bundle', async (event, { refs, targetSubBundle
       return { success: false, error: 'Move word operation requires new hierarchical bundle structure' };
     }
     
-    // Determine the target sub-bundle
-    let finalTargetSubBundle = targetSubBundle;
-    
-    // If creating a new sub-bundle as a sister of the selected target
-    if (newSubBundleName && selectedTargetForNewSister) {
-      // Get the parent path of the selected target
-      const lastSlash = selectedTargetForNewSister.lastIndexOf('/');
-      const parentPath = lastSlash > 0 ? selectedTargetForNewSister.substring(0, lastSlash) : '';
-      
-      // Create new sub-bundle path as sister of selected target
-      finalTargetSubBundle = parentPath ? `${parentPath}/${newSubBundleName}` : newSubBundleName;
-      
-      console.log('[move-words] Creating new sub-bundle as sister of:', selectedTargetForNewSister);
-      console.log('[move-words] Parent path:', parentPath || '(root)');
-      console.log('[move-words] New sub-bundle path:', finalTargetSubBundle);
-      
-      // Check if it already exists
-      const exists = bundleData.subBundles.some(sb => sb.path === finalTargetSubBundle);
-      if (exists) {
-        return { success: false, error: 'Sub-bundle with that name already exists' };
-      }
-      
-      // Validate that we're not trying to move to the same sub-bundle
-      if (currentSubBundle === finalTargetSubBundle) {
-        return { success: false, error: 'Cannot create new sub-bundle with the same path as current sub-bundle' };
-      }
-      
-      // Create the new sub-bundle in hierarchy.json
-      const hierarchyPath = path.join(extractedPath, 'hierarchy.json');
-      const hierarchy = JSON.parse(fs.readFileSync(hierarchyPath, 'utf8'));
-      
-      // Add to hierarchy tree at the same level as the selected target
-      if (!addNewSubBundleToHierarchy(hierarchy, parentPath || null, newSubBundleName)) {
-        return { success: false, error: 'Failed to add new sub-bundle to hierarchy' };
-      }
-      
-      // Save updated hierarchy
-      fs.writeFileSync(hierarchyPath, JSON.stringify(hierarchy, null, 2));
-      
-      // Update in-memory bundleData
-      bundleData.hierarchy = hierarchy;
-      
-      // Create new sub-bundle data entry
-      const newSubBundleData = {
-        path: finalTargetSubBundle,
-        references: [],
-        recordCount: 0,
-        assignedCount: 0
-      };
-      bundleData.subBundles.push(newSubBundleData);
-      
-      // Create new session entry
-      const newSubBundleSession = {
-        path: finalTargetSubBundle,
-        queue: [],
-        groups: [],
-        recordCount: 0,
-        assignedCount: 0
-      };
-      sessionData.subBundles.push(newSubBundleSession);
-      
-      console.log('[move-words] Created new sub-bundle:', finalTargetSubBundle);
+    // Validate target sub-bundle is provided
+    if (!targetSubBundle) {
+      return { success: false, error: 'Target sub-bundle not specified' };
     }
     
-    if (currentSubBundle === finalTargetSubBundle) {
+    // Validate that we're not trying to move to the same sub-bundle
+    if (currentSubBundle === targetSubBundle) {
       return { success: false, error: 'Cannot move to same sub-bundle' };
     }
     
     // Find sub-bundle data and sessions
     const currentSubBundleData = bundleData.subBundles.find(sb => sb.path === currentSubBundle);
-    const targetSubBundleData = bundleData.subBundles.find(sb => sb.path === finalTargetSubBundle);
+    const targetSubBundleData = bundleData.subBundles.find(sb => sb.path === targetSubBundle);
     const currentSession = sessionData.subBundles.find(sb => sb.path === currentSubBundle);
-    const targetSession = sessionData.subBundles.find(sb => sb.path === finalTargetSubBundle);
+    const targetSession = sessionData.subBundles.find(sb => sb.path === targetSubBundle);
     
     if (!currentSubBundleData || !targetSubBundleData || !currentSession || !targetSession) {
       return { success: false, error: 'Sub-bundle not found' };
     }
     
-    console.log(`[move-words] Moving ${refsArray.length} words from ${currentSubBundle} to ${finalTargetSubBundle}`);
+    console.log(`[move-words] Moving ${refsArray.length} words from ${currentSubBundle} to ${targetSubBundle}`);
     
-    // Update hierarchy.json and working_data.xml for each word
+    // Update hierarchy.json and working_data.xml (or linked XML) for each word
     const hierarchyPath = path.join(extractedPath, 'hierarchy.json');
-    const workingXmlPath = path.join(extractedPath, 'xml', 'working_data.xml');
-    const categoryUpdates = getCategoryUpdatesForPath(finalTargetSubBundle, bundleData.hierarchy);
+    
+    // Determine correct XML path based on whether bundle is linked or embedded
+    const workingXmlPath = bundleData.isLinkedBundle && bundleData.linkMetadata?.linkedXmlPath
+      ? bundleData.linkMetadata.linkedXmlPath
+      : path.join(extractedPath, 'xml', 'working_data.xml');
+    
+    console.log(`[move-words] XML path: ${workingXmlPath} (linked: ${bundleData.isLinkedBundle || false})`);
+    
+    const categoryUpdates = getCategoryUpdatesForPath(targetSubBundle, bundleData.hierarchy);
     
     for (const ref of refsArray) {
       // 1. Update hierarchy.json
-      updateHierarchyJsonReferences(hierarchyPath, currentSubBundle, finalTargetSubBundle, ref);
+      updateHierarchyJsonReferences(hierarchyPath, currentSubBundle, targetSubBundle, ref);
       
       // Also update in-memory references
       if (currentSubBundleData.references) {
@@ -3250,7 +3199,7 @@ ipcMain.handle('move-words-to-sub-bundle', async (event, { refs, targetSubBundle
         targetSubBundleData.references.push(ref);
       }
       
-      // 2. Update working_data.xml with category field changes
+      // 2. Update XML with category field changes (works for both embedded and linked)
       updateWorkingDataXmlFields(workingXmlPath, ref, categoryUpdates);
       
       // 3. Update session data
@@ -3285,10 +3234,10 @@ ipcMain.handle('move-words-to-sub-bundle', async (event, { refs, targetSubBundle
       changeTracker.logSubBundleMove(
         ref,
         currentSubBundle,
-        finalTargetSubBundle,
+        targetSubBundle,
         Object.keys(categoryUpdates).join(', '),
         currentSubBundle,
-        finalTargetSubBundle
+        targetSubBundle
       );
     }
     
@@ -3564,20 +3513,23 @@ function updateWorkingDataXmlFields(xmlPath, ref, fieldUpdates) {
 // ============================================================================
 function addNewSubBundleToHierarchy(hierarchy, parentPath, newName) {
   if (!hierarchy || !hierarchy.tree) {
+    console.error('[addNewSubBundleToHierarchy] Invalid hierarchy structure');
     return false;
   }
+  
+  console.log('[addNewSubBundleToHierarchy] parentPath:', parentPath, 'newName:', newName);
+  
+  // Create new value node
+  const newNode = {
+    value: newName,
+    label: newName,
+    references: [],
+    recordCount: 0
+  };
   
   // If parentPath is null or empty, add at root level
   if (!parentPath) {
     console.log('[addNewSubBundleToHierarchy] Adding to root level');
-    
-    // Create new value node
-    const newNode = {
-      value: newName,
-      label: newName,
-      references: [],
-      recordCount: 0
-    };
     
     // Add to root values
     if (hierarchy.tree.values) {
@@ -3590,70 +3542,68 @@ function addNewSubBundleToHierarchy(hierarchy, parentPath, newName) {
     }
   }
   
+  // Navigate to find where to add the sibling
   const pathParts = parentPath.split('/');
   
-  // Navigate to the parent node
-  function findParentNode(node, parts, depth = 0) {
-    if (depth === parts.length) {
-      // We've reached the parent node
-      return node;
+  function findAndAddSibling(node, parts, depth = 0) {
+    if (!node || !node.values) {
+      return false;
     }
     
-    if (!node.values) {
-      return null;
+    // If we've matched all parts, add to this node's values
+    if (depth === parts.length) {
+      if (Array.isArray(node.values)) {
+        node.values.push(newNode);
+        console.log('[addNewSubBundleToHierarchy] Added sibling at depth:', depth);
+        return true;
+      }
+      return false;
     }
     
     const targetValue = parts[depth];
     const matchingValue = node.values.find(v => v.value === targetValue);
     
     if (!matchingValue) {
-      return null;
+      console.error('[addNewSubBundleToHierarchy] Could not find value:', targetValue, 'at depth:', depth);
+      return false;
     }
     
-    // If this is the last part, we want this value node
+    // If this is the last part of the path, add the sibling to the parent of this node
     if (depth === parts.length - 1) {
-      return matchingValue;
+      // We found the target, now add sibling to the parent level (this node's values array)
+      if (Array.isArray(node.values)) {
+        node.values.push(newNode);
+        console.log('[addNewSubBundleToHierarchy] Added sibling to parent of:', targetValue);
+        return true;
+      }
+      return false;
     }
     
-    // Continue to children
+    // Continue deeper - check if this value has children
     if (matchingValue.children && matchingValue.children.length > 0) {
       const firstChild = matchingValue.children[0];
       if (typeof firstChild.field === 'string') {
-        return findParentNode({ field: firstChild.field, values: matchingValue.children }, parts, depth + 1);
+        // This is a branch node with a field - recurse with new field context
+        return findAndAddSibling({ field: firstChild.field, values: matchingValue.children }, parts, depth + 1);
+      } else {
+        // Children are value nodes directly
+        return findAndAddSibling({ values: matchingValue.children }, parts, depth + 1);
       }
     }
     
-    return null;
-  }
-  
-  const parentNode = findParentNode(hierarchy.tree, pathParts);
-  
-  if (!parentNode) {
-    console.error('[addNewSubBundleToHierarchy] Parent node not found for path:', parentPath);
+    console.error('[addNewSubBundleToHierarchy] No children found for:', targetValue);
     return false;
   }
   
-  // Create new value node
-  const newNode = {
-    value: newName,
-    label: newName,
-    references: [],
-    recordCount: 0
-  };
+  const success = findAndAddSibling(hierarchy.tree, pathParts);
   
-  // Add to parent's children or values
-  if (parentNode.children) {
-    parentNode.children.push(newNode);
-  } else if (parentNode.values) {
-    // Parent is a level node, add to values
-    parentNode.values.push(newNode);
+  if (success) {
+    console.log('[addNewSubBundleToHierarchy] Successfully added new sub-bundle:', newName, 'as sibling in parent path:', parentPath);
   } else {
-    console.error('[addNewSubBundleToHierarchy] Parent node has no children or values array');
-    return false;
+    console.error('[addNewSubBundleToHierarchy] Failed to add new sub-bundle:', newName, 'to parent path:', parentPath);
   }
   
-  console.log('[addNewSubBundleToHierarchy] Added new sub-bundle:', newName, 'to parent:', parentPath);
-  return true;
+  return success;
 }
 
 // ============================================================================

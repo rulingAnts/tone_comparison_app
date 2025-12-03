@@ -2550,14 +2550,6 @@ async function openMoveWordModal(refOrRefs, record) {
   movingWordRef = refOrRefs; // Can be string or array
   selectedTargetSubBundle = null;
   
-  // Reset create new sub-bundle UI
-  const createCheck = document.getElementById('createNewSubBundleCheck');
-  const newSubBundleForm = document.getElementById('newSubBundleForm');
-  const newSubBundleName = document.getElementById('newSubBundleName');
-  if (createCheck) createCheck.checked = false;
-  if (newSubBundleForm) newSubBundleForm.style.display = 'none';
-  if (newSubBundleName) newSubBundleName.value = '';
-  
   // Update modal title and text based on single vs multiple words
   const isMultiple = Array.isArray(movingWordRef);
   const moveWordTitle = document.getElementById('moveWordTitle');
@@ -2611,47 +2603,6 @@ function closeMoveWordModal() {
   if (newSubBundleForm) newSubBundleForm.style.display = 'none';
 }
 
-function toggleCreateNewSubBundle() {
-  const createCheck = document.getElementById('createNewSubBundleCheck');
-  const newSubBundleForm = document.getElementById('newSubBundleForm');
-  const newSubBundlePath = document.getElementById('newSubBundlePath');
-  const confirmMoveBtn = document.getElementById('confirmMoveBtn');
-  
-  if (createCheck.checked) {
-    newSubBundleForm.style.display = 'block';
-    
-    // Show the parent path based on selected target sub-bundle
-    if (selectedTargetSubBundle) {
-      // Get the parent path of the selected target (everything before the last /)
-      const lastSlash = selectedTargetSubBundle.lastIndexOf('/');
-      const parentPath = lastSlash > 0 ? selectedTargetSubBundle.substring(0, lastSlash) : '';
-      
-      if (parentPath) {
-        newSubBundlePath.textContent = `${parentPath}/[new name]`;
-      } else {
-        newSubBundlePath.textContent = '[new name] (at root level)';
-      }
-    } else {
-      newSubBundlePath.textContent = 'Please select a target sub-bundle first';
-    }
-    
-    // Enable button if name is provided AND target is selected
-    const newSubBundleName = document.getElementById('newSubBundleName');
-    newSubBundleName.oninput = () => {
-      confirmMoveBtn.disabled = !newSubBundleName.value.trim() || !selectedTargetSubBundle;
-    };
-    confirmMoveBtn.disabled = !newSubBundleName.value.trim() || !selectedTargetSubBundle;
-    
-    // Don't disable tree selection - user needs to select a target first
-    // (The new sub-bundle will be a sister of the selected target)
-  } else {
-    newSubBundleForm.style.display = 'none';
-    confirmMoveBtn.disabled = !selectedTargetSubBundle;
-    
-    // Re-enable all tree items (no need to disable anything)
-  }
-}
-
 function renderMoveWordTree(hierarchy, subBundles) {
   const treeContainer = document.getElementById('moveWordTree');
   if (!treeContainer) {
@@ -2698,7 +2649,8 @@ function renderMoveWordTree(hierarchy, subBundles) {
           radio.type = 'radio';
           radio.name = 'targetSubBundle';
           radio.value = subBundlePath;
-          radio.disabled = isCurrent;
+          // Don't disable current sub-bundle - user can create a sister of current or select current as target
+          radio.disabled = false;
           radio.onchange = () => selectTargetSubBundle(subBundlePath);
           
           const label = document.createElement('span');
@@ -2717,12 +2669,11 @@ function renderMoveWordTree(hierarchy, subBundles) {
           itemDiv.appendChild(label);
           itemDiv.appendChild(info);
           
-          if (!isCurrent) {
-            itemDiv.onclick = () => {
-              radio.checked = true;
-              selectTargetSubBundle(subBundlePath);
-            };
-          }
+          // Make entire item clickable
+          itemDiv.onclick = () => {
+            radio.checked = true;
+            selectTargetSubBundle(subBundlePath);
+          };
           
           treeContainer.appendChild(itemDiv);
         }
@@ -2781,25 +2732,10 @@ function selectTargetSubBundle(subBundlePath) {
 async function confirmMoveWord() {
   console.log('[confirmMoveWord] movingWordRef:', movingWordRef, 'selectedTargetSubBundle:', selectedTargetSubBundle);
   
-  const createCheck = document.getElementById('createNewSubBundleCheck');
-  const isCreatingNew = createCheck?.checked;
-  const newSubBundleName = document.getElementById('newSubBundleName')?.value.trim();
-  
   // Validate input
-  if (isCreatingNew) {
-    if (!newSubBundleName) {
-      alert('Please enter a name for the new sub-bundle');
-      return;
-    }
-    if (!selectedTargetSubBundle) {
-      alert('Please select a target sub-bundle (the new sub-bundle will be created as a sister of the selected one)');
-      return;
-    }
-  } else {
-    if (!movingWordRef || !selectedTargetSubBundle) {
-      alert('Please select a target sub-bundle');
-      return;
-    }
+  if (!movingWordRef || !selectedTargetSubBundle) {
+    alert('Please select a target sub-bundle');
+    return;
   }
   
   // Save the current sub-bundle to return to after move
@@ -2812,19 +2748,15 @@ async function confirmMoveWord() {
   // Call backend to move word(s)
   const result = await ipcRenderer.invoke('move-words-to-sub-bundle', {
     refs: refs,
-    targetSubBundle: isCreatingNew ? null : selectedTargetSubBundle,
-    selectedTargetForNewSister: isCreatingNew ? selectedTargetSubBundle : null,
-    newSubBundleName: isCreatingNew ? newSubBundleName : null,
+    targetSubBundle: selectedTargetSubBundle,
     returnToOriginal: true
   });
   
   if (result.success) {
     // Save target name before closing modal
-    const targetName = isCreatingNew 
-      ? newSubBundleName 
-      : (selectedTargetSubBundle.includes('/') 
-        ? selectedTargetSubBundle.split('/').pop() 
-        : selectedTargetSubBundle);
+    const targetName = selectedTargetSubBundle.includes('/') 
+      ? selectedTargetSubBundle.split('/').pop() 
+      : selectedTargetSubBundle;
     
     // Update session
     session = result.session;
@@ -2835,6 +2767,12 @@ async function confirmMoveWord() {
     // Clear selection if moving multiple
     if (isMultiple) {
       selectedQueueWords.clear();
+    }
+    
+    // Refresh queue modal if it's open
+    const queueModal = document.getElementById('queueModal');
+    if (queueModal && !queueModal.classList.contains('hidden')) {
+      await renderQueueList();
     }
     
     // Show success message
