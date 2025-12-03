@@ -28,7 +28,10 @@
     <div class="page-header">
         <div class="container">
             <h1>Download Tone Matching Suite</h1>
-            <p>Version 1.0.0 - Free and open source</p>
+            <p>Version 2.1.0-alpha - Free and open source</p>
+            <div class="warning-box" style="margin-top: 1rem;">
+                <strong>⚠️ Alpha Release Warning:</strong> This is an alpha release and is expected to have bugs. The most reliable workflow is using <strong>linked bundles</strong> that work directly with your Dekereke XML database file. Always maintain backups of your data.
+            </div>
         </div>
     </div>
 
@@ -53,12 +56,11 @@
 
                 <h3 id="bundler-windows">Windows Download</h3>
                 <p>
-                    <a href="https://github.com/rulingAnts/tone_comparison_app/releases/download/v1.0.0/Tone.Matching.Bundler.Setup.1.0.0.exe" class="btn btn-download">
-                        📥 Tone Matching Bundler Setup 1.0.0.exe
+                    <a href="https://github.com/rulingAnts/tone_comparison_app/releases/download/v2.1.0/Tone.Matching.Bundler-2.1.0-win-arm64.exe" class="btn btn-download">
+                        📥 Tone Matching Bundler-2.1.0-win-arm64.exe
                     </a>
                 </p>
-                <p><strong>File size:</strong> ~211 MB</p>
-                <p><strong>SHA256:</strong> <code>f53811fb6126f8f3eced0ca0e810be01492690ceabd9ad5f20acd369f38fdd41</code></p>
+                <p><strong>Note:</strong> ARM64 build - works on Windows 11 ARM devices and via emulation on x64 Windows.</p>
 
                 <div class="info-box">
                     <h3>Windows Installation</h3>
@@ -72,12 +74,11 @@
 
                 <h3 id="bundler-mac">macOS Download</h3>
                 <p>
-                    <a href="https://github.com/rulingAnts/tone_comparison_app/releases/download/v1.0.0/Tone.Matching.Bundler-1.0.0-universal.dmg" class="btn btn-download">
-                        📥 Tone Matching Bundler-1.0.0-universal.dmg
+                    <a href="https://github.com/rulingAnts/tone_comparison_app/releases/download/v2.1.0/Tone.Matching.Bundler-2.1.0-mac-universal.dmg" class="btn btn-download">
+                        📥 Tone Matching Bundler-2.1.0-mac-universal.dmg
                     </a>
                 </p>
-                <p><strong>File size:</strong> ~291 MB</p>
-                <p><strong>SHA256:</strong> <code>9a7d990de2169b430c8983800596d21c4b340cb7108d4f694320b307d4c095f4</code></p>
+                <p><strong>Note:</strong> Universal build - works on both Intel and Apple Silicon Macs.</p>
 
                 <div class="info-box">
                     <h3>macOS Installation</h3>
@@ -107,21 +108,19 @@
 
                 <h3 id="desktop-windows">Windows Download</h3>
                 <p>
-                    <a href="https://github.com/rulingAnts/tone_comparison_app/releases/download/v1.0.0/Tone.Matching.Desktop.Setup.1.0.0.exe" class="btn btn-download">
-                        📥 Tone Matching Desktop Setup 1.0.0.exe
+                    <a href="https://github.com/rulingAnts/tone_comparison_app/releases/download/v2.1.0/Tone.Matching.Desktop-2.1.0-win-arm64.exe" class="btn btn-download">
+                        📥 Tone Matching Desktop-2.1.0-win-arm64.exe
                     </a>
                 </p>
-                <p><strong>File size:</strong> ~93 MB</p>
-                <p><strong>SHA256:</strong> <code>5d668482d5cccbe159661d042a6c9adcb36a8ef2305a504f4a68ffee2c2ea746</code></p>
+                <p><strong>Note:</strong> ARM64 build - works on Windows 11 ARM devices and via emulation on x64 Windows.</p>
 
                 <h3 id="desktop-mac">macOS Download</h3>
                 <p>
-                    <a href="https://github.com/rulingAnts/tone_comparison_app/releases/download/v1.0.0/Tone.Matching.Desktop-1.0.0-universal.dmg" class="btn btn-download">
-                        📥 Tone Matching Desktop-1.0.0-universal.dmg
+                    <a href="https://github.com/rulingAnts/tone_comparison_app/releases/download/v2.1.0/Tone.Matching.Desktop-2.1.0-mac-universal.dmg" class="btn btn-download">
+                        📥 Tone Matching Desktop-2.1.0-mac-universal.dmg
                     </a>
                 </p>
-                <p><strong>File size:</strong> ~194 MB</p>
-                <p><strong>SHA256:</strong> <code>06cdf0dff285e496034d92b2344b559a5605e9c35852c3e444311df3e211add0</code></p>
+                <p><strong>Note:</strong> Universal build - works on both Intel and Apple Silicon Macs.</p>
 
                 <div class="info-box">
                     <p>Installation instructions are the same as for the Bundler App above.</p>
@@ -143,13 +142,14 @@
                 </div>
 
                 <h3 id="mobile-android">Android Download</h3>
+                <div class="warning-box">
+                    <strong>⚠️ Not Updated in v2.1.0-alpha:</strong> The mobile app has not been updated for this alpha release. The linked bundle workflow (desktop apps only) is the focus of this release. Mobile app will be updated in future releases.
+                </div>
                 <p>
                     <a href="https://github.com/rulingAnts/tone_comparison_app/releases/download/v1.0.0/Tone.Matching-1.0.0%2B1.apk" class="btn btn-download">
-                        📥 Tone Matching-1.0.0+1.apk
+                        📥 Tone Matching-1.0.0+1.apk (Previous Version)
                     </a>
                 </p>
-                <p><strong>File size:</strong> ~50 MB</p>
-                <p><strong>SHA256:</strong> <code>fb90a0628783bd5e81e412ca04dac1dc1ee57b8d652bf5b37d889371361b2764</code></p>
 
                 <div class="info-box">
                     <h3>Android Installation</h3>
@@ -182,22 +182,24 @@
                 </div>
 
                 <h3 id="comparison-windows">Windows Download</h3>
+                <div class="warning-box">
+                    <strong>⚠️ Not Updated in v2.1.0-alpha:</strong> The comparison app has not been rebuilt for this alpha release. The v1.0.0 version below should still work for comparing results.
+                </div>
                 <p>
                     <a href="https://github.com/rulingAnts/tone_comparison_app/releases/download/v1.0.0/Tone.Matching.Comparison.Setup.1.0.0.exe" class="btn btn-download">
                         📥 Tone Matching Comparison Setup 1.0.0.exe
                     </a>
                 </p>
-                <p><strong>File size:</strong> ~93 MB</p>
-                <p><strong>SHA256:</strong> <code>9be296ff78efb17a6c3286be1da9f5724ea6e059f9f543c84c4d407260989017</code></p>
 
                 <h3 id="comparison-mac">macOS Download</h3>
+                <div class="warning-box">
+                    <strong>⚠️ Not Updated in v2.1.0-alpha:</strong> The comparison app has not been rebuilt for this alpha release. The v1.0.0 version below should still work for comparing results.
+                </div>
                 <p>
                     <a href="https://github.com/rulingAnts/tone_comparison_app/releases/download/v1.0.0/Tone.Matching.Comparison-1.0.0-universal.dmg" class="btn btn-download">
                         📥 Tone Matching Comparison-1.0.0-universal.dmg
                     </a>
                 </p>
-                <p><strong>File size:</strong> ~194 MB</p>
-                <p><strong>SHA256:</strong> <code>86611ad0e7db856d017784196b10026e047c7f9a41a1feb9438a38867e14bc73</code></p>
 
                 <div class="info-box">
                     <p>Installation instructions are the same as for the Bundler App above.</p>
@@ -207,21 +209,26 @@
             <!-- Verification -->
             <div style="margin-top: 4rem;">
                 <h2>Verifying Your Download</h2>
-                <p>For security, you can verify that your downloaded file matches the official release using the SHA256 checksum:</p>
+                <p>For security, you can verify your downloaded files using SHA256 checksums. Visit the <a href="https://github.com/rulingAnts/tone_comparison_app/releases/tag/v2.1.0" target="_blank" rel="noopener">v2.1.0 release page</a> for checksums.</p>
 
                 <h3>Windows</h3>
-                <pre><code>certutil -hashfile "Tone Matching Bundler Setup 1.0.0.exe" SHA256</code></pre>
+                <pre><code>certutil -hashfile "Tone Matching Bundler-2.1.0-win-arm64.exe" SHA256</code></pre>
 
                 <h3>macOS/Linux</h3>
-                <pre><code>shasum -a 256 "Tone Matching Bundler-1.0.0-universal.dmg"</code></pre>
-
-                <p>Compare the output with the SHA256 values listed above. They should match exactly.</p>
+                <pre><code>shasum -a 256 "Tone Matching Bundler-2.1.0-mac-universal.dmg"</code></pre>
             </div>
 
             <!-- Download Source -->
             <div id="download-note" class="info-box" style="margin-top: 4rem;">
                 <h3>📦 Download Source</h3>
-                <p>All downloads are hosted on <a href="https://github.com/rulingAnts/tone_comparison_app/releases/tag/v1.0.0" target="_blank" rel="noopener">GitHub Releases</a>. You can also view the source code and contribute to the project on <a href="https://github.com/rulingAnts/tone_comparison_app" target="_blank" rel="noopener">GitHub</a>.</p>
+                <p>All downloads are hosted on <a href="https://github.com/rulingAnts/tone_comparison_app/releases/tag/v2.1.0" target="_blank" rel="noopener">GitHub Releases (v2.1.0-alpha)</a>. You can also view the source code, report bugs, and contribute to the project on <a href="https://github.com/rulingAnts/tone_comparison_app" target="_blank" rel="noopener">GitHub</a>.</p>
+                <h3>⚠️ What's New in v2.1.0-alpha</h3>
+                <ul>
+                    <li><strong>Linked Bundle Workflow:</strong> Desktop Matching app can now work directly with your Dekereke XML database and audio folder</li>
+                    <li><strong>Blank Value Handling:</strong> Empty/blank values now display as "(blank)" in hierarchy trees and filters</li>
+                    <li><strong>Multi-Word Move:</strong> Select and move multiple words at once in the Manage Queue modal</li>
+                </ul>
+                <p>See the <a href="https://github.com/rulingAnts/tone_comparison_app/releases/tag/v2.1.0" target="_blank" rel="noopener">full release notes</a> for details.</p>
             </div>
 
             <!-- Additional Help -->
