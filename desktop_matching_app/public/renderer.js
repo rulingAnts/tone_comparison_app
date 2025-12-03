@@ -1225,6 +1225,58 @@ function moveGroupDown(index) {
   renderGroups();
 }
 
+// Toggle group collapse state
+function toggleGroupCollapse(groupId) {
+  if (!session.groupsCollapsedState) {
+    session.groupsCollapsedState = {};
+  }
+  
+  session.groupsCollapsedState[groupId] = !session.groupsCollapsedState[groupId];
+  
+  // Save to session
+  ipcRenderer.invoke('update-session', { groupsCollapsedState: session.groupsCollapsedState });
+  
+  // Re-render and update button
+  renderGroups();
+  updateCollapseAllButton();
+}
+
+// Toggle collapse state for all groups
+function toggleCollapseAll() {
+  if (!session.groupsCollapsedState) {
+    session.groupsCollapsedState = {};
+  }
+  
+  // Check if all are currently collapsed
+  const allCollapsed = session.groups.every(g => session.groupsCollapsedState[g.id]);
+  
+  // Toggle all to opposite state
+  session.groups.forEach(group => {
+    session.groupsCollapsedState[group.id] = !allCollapsed;
+  });
+  
+  // Save to session
+  ipcRenderer.invoke('update-session', { groupsCollapsedState: session.groupsCollapsedState });
+  
+  // Re-render and update button
+  renderGroups();
+  updateCollapseAllButton();
+}
+
+// Update the collapse all button text based on current state
+function updateCollapseAllButton() {
+  const btn = document.getElementById('collapseAllBtn');
+  if (!btn) return;
+  
+  if (!session.groupsCollapsedState) {
+    btn.textContent = 'Collapse All';
+    return;
+  }
+  
+  const allCollapsed = session.groups.every(g => session.groupsCollapsedState[g.id]);
+  btn.textContent = allCollapsed ? 'Expand All' : 'Collapse All';
+}
+
 function getMemberDisplayLines(ref) {
   // Priority: gloss > user spelling > written form
   const record = session.records[ref] || {};
@@ -1267,6 +1319,11 @@ async function renderGroups() {
   
   groupsList.innerHTML = '';
   
+  // Initialize collapsed state if not set
+  if (!session.groupsCollapsedState) {
+    session.groupsCollapsedState = {};
+  }
+  
   for (let idx = 0; idx < session.groups.length; idx++) {
     const group = session.groups[idx];
     const card = document.createElement('div');
@@ -1295,6 +1352,21 @@ async function renderGroups() {
     headerActions.style.display = 'flex';
     headerActions.style.gap = '8px';
     headerActions.style.alignItems = 'center';
+    
+    // Expand/collapse button
+    const isCollapsed = session.groupsCollapsedState[group.id] || false;
+    const collapseBtn = document.createElement('button');
+    collapseBtn.textContent = isCollapsed ? '▶' : '▼';
+    collapseBtn.className = 'secondary';
+    collapseBtn.style.fontSize = '14px';
+    collapseBtn.style.padding = '4px 10px';
+    collapseBtn.style.fontWeight = 'bold';
+    collapseBtn.title = isCollapsed ? 'Expand group' : 'Collapse group';
+    collapseBtn.onclick = (e) => {
+      e.stopPropagation();
+      toggleGroupCollapse(group.id);
+    };
+    headerActions.appendChild(collapseBtn);
     
     // Move up button
     const moveUpBtn = document.createElement('button');
@@ -1466,27 +1538,70 @@ async function renderGroups() {
     
     card.appendChild(imageContainer);
     
+    // Hide image container if collapsed
+    if (isCollapsed) {
+      imageContainer.style.display = 'none';
+    }
+    
     // Members
     if (group.members && group.members.length > 0) {
       const membersList = document.createElement('div');
       membersList.className = 'members-list';
       
-      // Batch fetch all records for this group
-      const memberRecords = await Promise.all(
-        group.members.map(ref => getCachedRecord(ref))
-      );
-      
-      for (let i = 0; i < group.members.length; i++) {
-        const ref = group.members[i];
-        const record = memberRecords[i];
-        const memberItem = document.createElement('div');
-        memberItem.className = 'member-item';
-        memberItem.draggable = true;
-        memberItem.dataset.ref = ref;
-        memberItem.dataset.groupId = group.id;
+      // If collapsed, show summary and make card a drop target
+      if (isCollapsed) {
+        membersList.innerHTML = `<div style="padding: 10px; color: #666; font-style: italic; text-align: center;">${group.members.length} word(s) - Drop words here to add</div>`;
         
-        // Drag and drop handlers for reordering within group
-        memberItem.addEventListener('dragstart', (e) => {
+        // Make the entire card a drop zone when collapsed
+        card.classList.add('collapsed-drop-zone');
+        card.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const ref = e.dataTransfer.getData('text/plain');
+          if (ref) {
+            e.dataTransfer.dropEffect = 'move';
+            card.style.backgroundColor = '#e3f2fd';
+          }
+        });
+        
+        card.addEventListener('dragleave', (e) => {
+          if (!card.contains(e.relatedTarget)) {
+            card.style.backgroundColor = '';
+          }
+        });
+        
+        card.addEventListener('drop', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          card.style.backgroundColor = '';
+          
+          const ref = e.dataTransfer.getData('text/plain');
+          const sourceGroupId = e.dataTransfer.getData('application/group-id');
+          
+          if (ref && sourceGroupId && sourceGroupId !== group.id) {
+            await moveWordBetweenGroups(ref, sourceGroupId, group.id);
+          }
+        });
+        
+        card.appendChild(membersList);
+      } else {
+        // Normal expanded view - continue with existing code
+        // Batch fetch all records for this group
+        const memberRecords = await Promise.all(
+          group.members.map(ref => getCachedRecord(ref))
+        );
+        
+        for (let i = 0; i < group.members.length; i++) {
+          const ref = group.members[i];
+          const record = memberRecords[i];
+          const memberItem = document.createElement('div');
+          memberItem.className = 'member-item';
+          memberItem.draggable = true;
+          memberItem.dataset.ref = ref;
+          memberItem.dataset.groupId = group.id;
+        
+          // Drag and drop handlers for reordering within group
+          memberItem.addEventListener('dragstart', (e) => {
           e.stopPropagation(); // Prevent bubbling to card
           memberItem.classList.add('dragging');
           e.dataTransfer.effectAllowed = 'move';
@@ -1629,11 +1744,12 @@ async function renderGroups() {
         };
         actions.appendChild(removeBtn);
         
-        memberItem.appendChild(actions);
-        membersList.appendChild(memberItem);
-      }
-      
-      card.appendChild(membersList);
+          memberItem.appendChild(actions);
+          membersList.appendChild(memberItem);
+        }
+        
+        card.appendChild(membersList);
+      } // End of collapsed else block
     } else {
       const emptyMsg = document.createElement('div');
       emptyMsg.style.color = '#999';
@@ -1648,6 +1764,9 @@ async function renderGroups() {
   
   // Update review status display
   updateReviewStatusDisplay();
+  
+  // Update collapse all button text
+  updateCollapseAllButton();
 }
 
 async function exportBundle() {

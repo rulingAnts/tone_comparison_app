@@ -233,6 +233,14 @@
     .group-card:hover {
       border-color: #007bff;
     }
+    
+    .group-card.collapsed-drop-zone {
+      transition: background-color 0.2s;
+    }
+    
+    .group-card.collapsed-drop-zone:hover {
+      background-color: #f8f9fa;
+    }
 
     .group-header {
       display: flex;
@@ -1066,7 +1074,10 @@
     <div class="groups-panel">
       <div class="groups-header">
         <h2 data-i18n="tm_toneGroups">Tone Groups</h2>
-        <button onclick="createNewGroup()" data-i18n="tm_newGroup">+ New Group</button>
+        <div style="display: flex; gap: 8px;">
+          <button onclick="toggleCollapseAll()" id="collapseAllBtn" class="secondary" style="font-size: 12px; padding: 6px 12px;">Collapse All</button>
+          <button onclick="createNewGroup()" data-i18n="tm_newGroup">+ New Group</button>
+        </div>
       </div>
       
       <div class="groups-list" id="groupsList">
