@@ -124,7 +124,7 @@ async function restoreBundleFromSession() {
     if (bundleType === 'hierarchical') {
       // Restore hierarchical bundle - check for new structure first
       const xmlFolder = path.join(extractedPath, 'xml');
-      const audioFolder = path.join(extractedPath, 'audio');
+      let audioFolder = path.join(extractedPath, 'audio');
       const hierarchyPath = path.join(extractedPath, 'hierarchy.json');
       const settingsPath = path.join(extractedPath, 'settings.json');
       
@@ -151,10 +151,43 @@ async function restoreBundleFromSession() {
       
       console.log('[desktop_matching] Restoring new hierarchical structure bundle');
       
-      // Load XML data
-      const workingXmlPath = path.join(xmlFolder, 'working_data.xml');
-      const originalXmlPath = path.join(xmlFolder, 'original_data.xml');
-      const xmlPath = fs.existsSync(workingXmlPath) ? workingXmlPath : originalXmlPath;
+      // Check for linked bundle metadata
+      const linkMetadataPath = path.join(extractedPath, 'link_metadata.json');
+      const isLinkedBundle = fs.existsSync(linkMetadataPath);
+      let linkMetadata = null;
+      let xmlPath;
+      
+      if (isLinkedBundle) {
+        // LINKED BUNDLE: Use paths from link_metadata.json
+        console.log('[desktop_matching] Restoring LINKED hierarchical bundle');
+        linkMetadata = JSON.parse(fs.readFileSync(linkMetadataPath, 'utf8'));
+        
+        xmlPath = linkMetadata.linkedXmlPath;
+        audioFolder = linkMetadata.linkedAudioFolder;
+        
+        // Verify linked files still exist
+        if (!fs.existsSync(xmlPath)) {
+          console.error(`[desktop_matching] Linked XML file not found: ${xmlPath}`);
+          console.log('[desktop_matching] Cannot restore - linked files missing');
+          return;
+        }
+        if (!fs.existsSync(audioFolder)) {
+          console.error(`[desktop_matching] Linked audio folder not found: ${audioFolder}`);
+          console.log('[desktop_matching] Cannot restore - linked files missing');
+          return;
+        }
+        
+        console.log('[desktop_matching] Linked XML:', xmlPath);
+        console.log('[desktop_matching] Linked audio folder:', audioFolder);
+      } else {
+        // EMBEDDED BUNDLE: Use files from bundle
+        console.log('[desktop_matching] Restoring EMBEDDED hierarchical bundle');
+        
+        // Load XML data
+        const workingXmlPath = path.join(xmlFolder, 'working_data.xml');
+        const originalXmlPath = path.join(xmlFolder, 'original_data.xml');
+        xmlPath = fs.existsSync(workingXmlPath) ? workingXmlPath : originalXmlPath;
+      }
       
       if (!fs.existsSync(xmlPath)) {
         console.log('[desktop_matching] No XML data found, cannot restore');
@@ -222,8 +255,11 @@ async function restoreBundleFromSession() {
         bundleId: settings.bundleId,
         bundleType: 'hierarchical',
         xmlPath: xmlPath,
+        audioFolder: audioFolder,
         allDataForms: allDataForms,
         usesNewStructure: true,
+        isLinkedBundle: isLinkedBundle,
+        linkMetadata: linkMetadata,
       };
       
       // If currently in a sub-bundle, restore its records
