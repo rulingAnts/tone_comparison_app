@@ -2620,34 +2620,35 @@ function toggleCreateNewSubBundle() {
   if (createCheck.checked) {
     newSubBundleForm.style.display = 'block';
     
-    // Show current sub-bundle path as the parent
-    if (session.currentSubBundle) {
-      newSubBundlePath.textContent = `${session.currentSubBundle}/[new name]`;
+    // Show the parent path based on selected target sub-bundle
+    if (selectedTargetSubBundle) {
+      // Get the parent path of the selected target (everything before the last /)
+      const lastSlash = selectedTargetSubBundle.lastIndexOf('/');
+      const parentPath = lastSlash > 0 ? selectedTargetSubBundle.substring(0, lastSlash) : '';
+      
+      if (parentPath) {
+        newSubBundlePath.textContent = `${parentPath}/[new name]`;
+      } else {
+        newSubBundlePath.textContent = '[new name] (at root level)';
+      }
     } else {
-      newSubBundlePath.textContent = '[new name]';
+      newSubBundlePath.textContent = 'Please select a target sub-bundle first';
     }
     
-    // Enable button if name is provided
+    // Enable button if name is provided AND target is selected
     const newSubBundleName = document.getElementById('newSubBundleName');
     newSubBundleName.oninput = () => {
-      confirmMoveBtn.disabled = !newSubBundleName.value.trim();
+      confirmMoveBtn.disabled = !newSubBundleName.value.trim() || !selectedTargetSubBundle;
     };
-    confirmMoveBtn.disabled = !newSubBundleName.value.trim();
+    confirmMoveBtn.disabled = !newSubBundleName.value.trim() || !selectedTargetSubBundle;
     
-    // Disable tree selection
-    document.querySelectorAll('.move-tree-sub-bundle input[type="radio"]').forEach(radio => {
-      radio.disabled = true;
-    });
+    // Don't disable tree selection - user needs to select a target first
+    // (The new sub-bundle will be a sister of the selected target)
   } else {
     newSubBundleForm.style.display = 'none';
     confirmMoveBtn.disabled = !selectedTargetSubBundle;
     
-    // Re-enable tree selection
-    document.querySelectorAll('.move-tree-sub-bundle input[type="radio"]').forEach(radio => {
-      const subBundlePath = radio.value;
-      const isCurrent = subBundlePath === session.currentSubBundle;
-      radio.disabled = isCurrent;
-    });
+    // Re-enable all tree items (no need to disable anything)
   }
 }
 
@@ -2790,6 +2791,10 @@ async function confirmMoveWord() {
       alert('Please enter a name for the new sub-bundle');
       return;
     }
+    if (!selectedTargetSubBundle) {
+      alert('Please select a target sub-bundle (the new sub-bundle will be created as a sister of the selected one)');
+      return;
+    }
   } else {
     if (!movingWordRef || !selectedTargetSubBundle) {
       alert('Please select a target sub-bundle');
@@ -2808,6 +2813,7 @@ async function confirmMoveWord() {
   const result = await ipcRenderer.invoke('move-words-to-sub-bundle', {
     refs: refs,
     targetSubBundle: isCreatingNew ? null : selectedTargetSubBundle,
+    selectedTargetForNewSister: isCreatingNew ? selectedTargetSubBundle : null,
     newSubBundleName: isCreatingNew ? newSubBundleName : null,
     returnToOriginal: true
   });
