@@ -12,6 +12,27 @@ const { validateBundleAudio, checkDuplicateReferences } = require('./validator')
 const { applyFilters } = require('./filter-engine');
 const pathResolve = (...p) => path.resolve(...p);
 
+// Constant for representing blank/empty/null values
+const BLANK_VALUE = '(blank)';
+
+// Normalize blank values: null, undefined, empty string, whitespace-only -> BLANK_VALUE
+function normalizeBlankValue(value) {
+  if (value === null || value === undefined || value === '') {
+    return BLANK_VALUE;
+  }
+  if (typeof value === 'string' && value.trim() === '') {
+    return BLANK_VALUE;
+  }
+  return value;
+}
+
+// Check if a value is blank (for comparison)
+function isBlankValue(value) {
+  return value === null || value === undefined || value === '' || 
+         (typeof value === 'string' && value.trim() === '') ||
+         value === BLANK_VALUE;
+}
+
 // Prefer embedded normalizer to avoid brittle path resolution
 const liteNormalizer = (() => {
   try {
@@ -760,8 +781,12 @@ async function createLegacyBundle(config, event) {
       for (const k of keys) {
         if (k === tgKey || k === tgIdKey) continue; // strip previous tone grouping
         const v = rec[k];
-        if (v == null) continue;
-        parts.push(`  <${k}>${escapeXml(v)}</${k}>`);
+        // For blank values (null, undefined, empty), output self-closing tag
+        if (isBlankValue(v)) {
+          parts.push(`  <${k}/>`);
+        } else {
+          parts.push(`  <${k}>${escapeXml(v)}</${k}>`);
+        }
       }
       return ['<data_form>', ...parts, '</data_form>'].join('\n');
     };
@@ -1292,7 +1317,8 @@ async function createHierarchicalBundle(config, event) {
             
             for (const valueConfig of includedGroupValues) {
               // Filter records for this specific value
-              const valueRecords = records.filter(r => r[field] === valueConfig.value);
+              const normalizedValueConfig = normalizeBlankValue(valueConfig.value);
+              const valueRecords = records.filter(r => normalizeBlankValue(r[field]) === normalizedValueConfig);
               
               if (valueRecords.length > 0) {
                 const childNode = {
@@ -1334,7 +1360,8 @@ async function createHierarchicalBundle(config, event) {
           const includedUnassigned = node.unassignedValues.filter(v => v.included !== false);
           
           for (const valueConfig of includedUnassigned) {
-            const valueRecords = records.filter(r => r[field] === valueConfig.value);
+            const normalizedValueConfig = normalizeBlankValue(valueConfig.value);
+            const valueRecords = records.filter(r => normalizeBlankValue(r[field]) === normalizedValueConfig);
             
             if (valueRecords.length > 0) {
               const valueNode = {
@@ -1374,9 +1401,10 @@ async function createHierarchicalBundle(config, event) {
       // Group records by value
       const valueGroups = new Map();
       for (const record of records) {
-        const value = record[field];
+        const rawValue = record[field];
+        const value = normalizeBlankValue(rawValue);
         const valueConfig = includedValues.find(v => v.value === value);
-        if (value && valueConfig) {
+        if (valueConfig) {
           if (!valueGroups.has(value)) {
             valueGroups.set(value, { records: [], valueConfig });
           }

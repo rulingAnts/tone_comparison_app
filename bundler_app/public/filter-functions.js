@@ -433,10 +433,12 @@ function getUniqueFieldValues(fieldName) {
     const values = new Set();
     
     parsedXmlData.records.forEach(record => {
-      const value = record[fieldName];
-      if (value !== undefined && value !== null && value !== '') {
-        values.add(String(value));
-      }
+      const rawValue = record[fieldName];
+      // Normalize blank values using the same logic as hierarchy
+      const value = typeof normalizeBlankValue === 'function' 
+        ? normalizeBlankValue(rawValue)
+        : (rawValue || '');
+      values.add(String(value));
     });
     
     return Array.from(values).sort();
@@ -451,10 +453,12 @@ function getUniqueFieldValues(fieldName) {
     const values = new Set();
     
     dataForms.forEach(form => {
-      const value = form[fieldName];
-      if (value !== undefined && value !== null && value !== '') {
-        values.add(String(value));
-      }
+      const rawValue = form[fieldName];
+      // Normalize blank values using the same logic as hierarchy
+      const value = typeof normalizeBlankValue === 'function'
+        ? normalizeBlankValue(rawValue)
+        : (rawValue || '');
+      values.add(String(value));
     });
     
     return Array.from(values).sort();
