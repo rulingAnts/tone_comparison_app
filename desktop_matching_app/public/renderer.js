@@ -2553,15 +2553,10 @@ async function openMoveWordModal(refOrRefs, record) {
   // Reset create new sub-bundle UI
   const createCheck = document.getElementById('createNewSubBundleCheck');
   const newSubBundleForm = document.getElementById('newSubBundleForm');
-  const newSubBundlePathInput = document.getElementById('newSubBundlePath');
-  const createAsSiblingCheck = document.getElementById('createAsSiblingCheck');
-  const siblingPreview = document.getElementById('siblingPreview');
-  
+  const newSubBundleName = document.getElementById('newSubBundleName');
   if (createCheck) createCheck.checked = false;
   if (newSubBundleForm) newSubBundleForm.style.display = 'none';
-  if (newSubBundlePathInput) newSubBundlePathInput.value = '';
-  if (createAsSiblingCheck) createAsSiblingCheck.checked = true;
-  if (siblingPreview) siblingPreview.textContent = '';
+  if (newSubBundleName) newSubBundleName.value = '';
   
   // Update modal title and text based on single vs multiple words
   const isMultiple = Array.isArray(movingWordRef);
@@ -2619,30 +2614,30 @@ function closeMoveWordModal() {
 function toggleCreateNewSubBundle() {
   const createCheck = document.getElementById('createNewSubBundleCheck');
   const newSubBundleForm = document.getElementById('newSubBundleForm');
-  const newSubBundlePathInput = document.getElementById('newSubBundlePath');
-  const createAsSiblingCheck = document.getElementById('createAsSiblingCheck');
-  const siblingPreview = document.getElementById('siblingPreview');
+  const newSubBundlePath = document.getElementById('newSubBundlePath');
   const confirmMoveBtn = document.getElementById('confirmMoveBtn');
   
   if (createCheck.checked) {
     newSubBundleForm.style.display = 'block';
     
-    // Enable button if path is provided
-    newSubBundlePathInput.oninput = () => {
-      confirmMoveBtn.disabled = !newSubBundlePathInput.value.trim();
-      updateSiblingPreview();
+    // Show current sub-bundle path as the parent
+    if (session.currentSubBundle) {
+      newSubBundlePath.textContent = `${session.currentSubBundle}/[new name]`;
+    } else {
+      newSubBundlePath.textContent = '[new name]';
+    }
+    
+    // Enable button if name is provided
+    const newSubBundleName = document.getElementById('newSubBundleName');
+    newSubBundleName.oninput = () => {
+      confirmMoveBtn.disabled = !newSubBundleName.value.trim();
     };
+    confirmMoveBtn.disabled = !newSubBundleName.value.trim();
     
-    // Handle sibling checkbox changes
-    createAsSiblingCheck.onchange = () => {
-      updateSiblingPreview();
-      updateTreeSelectionState();
-    };
-    
-    confirmMoveBtn.disabled = !newSubBundlePathInput.value.trim();
-    
-    // Disable tree selection when creating new (unless creating as sibling)
-    updateTreeSelectionState();
+    // Disable tree selection
+    document.querySelectorAll('.move-tree-sub-bundle input[type="radio"]').forEach(radio => {
+      radio.disabled = true;
+    });
   } else {
     newSubBundleForm.style.display = 'none';
     confirmMoveBtn.disabled = !selectedTargetSubBundle;
@@ -2653,56 +2648,6 @@ function toggleCreateNewSubBundle() {
       const isCurrent = subBundlePath === session.currentSubBundle;
       radio.disabled = isCurrent;
     });
-  }
-}
-
-function updateTreeSelectionState() {
-  const createAsSiblingCheck = document.getElementById('createAsSiblingCheck');
-  const isCreatingSibling = createAsSiblingCheck && createAsSiblingCheck.checked;
-  
-  document.querySelectorAll('.move-tree-sub-bundle input[type="radio"]').forEach(radio => {
-    const subBundlePath = radio.value;
-    const isCurrent = subBundlePath === session.currentSubBundle;
-    
-    if (isCreatingSibling) {
-      // Enable selection to choose which sub-bundle to be sibling of
-      radio.disabled = isCurrent;
-    } else {
-      // Creating standalone path, disable selection
-      radio.disabled = true;
-    }
-  });
-}
-
-function updateSiblingPreview() {
-  const newSubBundlePathInput = document.getElementById('newSubBundlePath');
-  const createAsSiblingCheck = document.getElementById('createAsSiblingCheck');
-  const siblingPreview = document.getElementById('siblingPreview');
-  
-  const inputPath = newSubBundlePathInput.value.trim();
-  
-  if (!inputPath) {
-    siblingPreview.textContent = '';
-    return;
-  }
-  
-  if (createAsSiblingCheck.checked && selectedTargetSubBundle) {
-    // Calculate sibling path
-    const selectedParts = selectedTargetSubBundle.split('/');
-    selectedParts.pop(); // Remove last part (sibling name)
-    
-    if (selectedParts.length > 0) {
-      const siblingPath = `${selectedParts.join('/')}/${inputPath}`;
-      siblingPreview.textContent = `Will create: ${siblingPath}`;
-    } else {
-      siblingPreview.textContent = `Will create: ${inputPath}`;
-    }
-  } else if (createAsSiblingCheck.checked) {
-    siblingPreview.textContent = 'Select a sub-bundle to create sibling of';
-    siblingPreview.style.color = '#999';
-  } else {
-    siblingPreview.textContent = `Will create: ${inputPath}`;
-    siblingPreview.style.color = '#007bff';
   }
 }
 
@@ -2830,9 +2775,6 @@ function selectTargetSubBundle(subBundlePath) {
   
   // Enable move button
   document.getElementById('confirmMoveBtn').disabled = false;
-  
-  // Update sibling preview if creating new
-  updateSiblingPreview();
 }
 
 async function confirmMoveWord() {
@@ -2840,40 +2782,13 @@ async function confirmMoveWord() {
   
   const createCheck = document.getElementById('createNewSubBundleCheck');
   const isCreatingNew = createCheck?.checked;
-  const newSubBundlePathInput = document.getElementById('newSubBundlePath');
-  const createAsSiblingCheck = document.getElementById('createAsSiblingCheck');
-  
-  let newSubBundlePath = null;
-  let createAsSibling = false;
+  const newSubBundleName = document.getElementById('newSubBundleName')?.value.trim();
   
   // Validate input
   if (isCreatingNew) {
-    const inputPath = newSubBundlePathInput?.value.trim();
-    if (!inputPath) {
-      alert('Please enter a path for the new sub-bundle');
+    if (!newSubBundleName) {
+      alert('Please enter a name for the new sub-bundle');
       return;
-    }
-    
-    createAsSibling = createAsSiblingCheck?.checked || false;
-    
-    if (createAsSibling) {
-      if (!selectedTargetSubBundle) {
-        alert('Please select a sub-bundle to create sibling of');
-        return;
-      }
-      
-      // Calculate sibling path
-      const selectedParts = selectedTargetSubBundle.split('/');
-      selectedParts.pop(); // Remove last part
-      
-      if (selectedParts.length > 0) {
-        newSubBundlePath = `${selectedParts.join('/')}/${inputPath}`;
-      } else {
-        newSubBundlePath = inputPath;
-      }
-    } else {
-      // Standalone path
-      newSubBundlePath = inputPath;
     }
   } else {
     if (!movingWordRef || !selectedTargetSubBundle) {
@@ -2893,14 +2808,14 @@ async function confirmMoveWord() {
   const result = await ipcRenderer.invoke('move-words-to-sub-bundle', {
     refs: refs,
     targetSubBundle: isCreatingNew ? null : selectedTargetSubBundle,
-    newSubBundlePath: newSubBundlePath,
+    newSubBundleName: isCreatingNew ? newSubBundleName : null,
     returnToOriginal: true
   });
   
   if (result.success) {
     // Save target name before closing modal
     const targetName = isCreatingNew 
-      ? newSubBundlePath.split('/').pop()
+      ? newSubBundleName 
       : (selectedTargetSubBundle.includes('/') 
         ? selectedTargetSubBundle.split('/').pop() 
         : selectedTargetSubBundle);
