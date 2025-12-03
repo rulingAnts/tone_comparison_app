@@ -7,8 +7,9 @@ let currentWord = null;
 let currentGroupId = null;
 let recordCache = new Map(); // Cache for fetched records
 let editingGroupId = null; // For edit modal
-let movingWordRef = null; // For move word modal
+let movingWordRef = null; // For move word modal (can be string ref or array of refs)
 let selectedTargetSubBundle = null; // For move word modal
+let selectedQueueWords = new Set(); // For multi-select in queue modal
 let bundleType = null; // Track bundle type (hierarchical vs legacy)
 let currentSubBundle = null; // Track current sub-bundle for hierarchical bundles
 let lastMergeReportPath = null; // Track last merge report path
@@ -2173,6 +2174,7 @@ async function renderQueueList() {
   const queueList = document.getElementById('queueList');
   const queueModalCount = document.getElementById('queueModalCount');
   const moveToEndBtn = document.getElementById('moveToEndBtn');
+  const moveSelectedContainer = document.getElementById('moveSelectedContainer');
   
   queueModalCount.textContent = session.queue.length;
   
@@ -2181,6 +2183,11 @@ async function renderQueueList() {
   const isCurrentInQueue = currentRef && session.queue.includes(currentRef);
   if (moveToEndBtn) {
     moveToEndBtn.style.display = isCurrentInQueue ? 'block' : 'none';
+  }
+  
+  // Show multi-select controls only for hierarchical bundles
+  if (moveSelectedContainer) {
+    moveSelectedContainer.style.display = session.bundleType === 'hierarchical' ? 'block' : 'none';
   }
   
   if (session.queue.length === 0) {
@@ -2203,6 +2210,23 @@ async function renderQueueList() {
     // Highlight current word
     if (ref === currentRef) {
       queueItem.classList.add('current-word');
+    }
+    
+    // Add selection highlight
+    if (selectedQueueWords.has(ref)) {
+      queueItem.classList.add('selected');
+    }
+    
+    // Checkbox for multi-select (only for hierarchical bundles)
+    if (session.bundleType === 'hierarchical') {
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = selectedQueueWords.has(ref);
+      checkbox.onchange = (e) => {
+        e.stopPropagation();
+        toggleQueueWordSelection(ref);
+      };
+      queueItem.appendChild(checkbox);
     }
     
     // Drag handle
@@ -2293,6 +2317,9 @@ async function renderQueueList() {
     
     queueList.appendChild(queueItem);
   }
+  
+  // Update selected count display
+  updateSelectedWordCount();
 }
 
 function getDragAfterElement(container, y) {
@@ -2365,6 +2392,76 @@ async function moveCurrentWordToEnd() {
   await loadCurrentWord();
   updateProgressIndicator();
   renderGroups();
+}
+
+// Queue selection management functions
+function toggleQueueWordSelection(ref) {
+  if (selectedQueueWords.has(ref)) {
+    selectedQueueWords.delete(ref);
+  } else {
+    selectedQueueWords.add(ref);
+  }
+  updateSelectedWordCount();
+  
+  // Update visual state
+  const queueItem = document.querySelector(`.queue-item[data-ref="${ref}"]`);
+  if (queueItem) {
+    if (selectedQueueWords.has(ref)) {
+      queueItem.classList.add('selected');
+    } else {
+      queueItem.classList.remove('selected');
+    }
+  }
+}
+
+function selectAllQueueWords() {
+  selectedQueueWords.clear();
+  session.queue.forEach(ref => selectedQueueWords.add(ref));
+  renderQueueList();
+}
+
+function deselectAllQueueWords() {
+  selectedQueueWords.clear();
+  renderQueueList();
+}
+
+function updateSelectedWordCount() {
+  const selectedCount = document.getElementById('selectedCount');
+  const moveSelectedBtn = document.getElementById('moveSelectedBtn');
+  
+  if (selectedCount) {
+    selectedCount.textContent = selectedQueueWords.size;
+  }
+  
+  if (moveSelectedBtn) {
+    moveSelectedBtn.disabled = selectedQueueWords.size === 0;
+  }
+}
+
+async function initiateMultiWordMove() {
+  if (selectedQueueWords.size === 0) {
+    alert('Please select at least one word to move');
+    return;
+  }
+  
+  // Check if any selected words are in groups
+  const wordsInGroups = [];
+  for (const ref of selectedQueueWords) {
+    const isInGroup = session.groups.some(group => 
+      group.members && group.members.includes(ref)
+    );
+    if (isInGroup) {
+      wordsInGroups.push(ref);
+    }
+  }
+  
+  if (wordsInGroups.length > 0) {
+    alert(`The following words must be removed from all tone groups before moving:\n${wordsInGroups.join(', ')}`);
+    return;
+  }
+  
+  // Open move modal with multiple words
+  await openMoveWordModal(Array.from(selectedQueueWords), null);
 }
 
 async function saveGroupEdits() {
@@ -2444,24 +2541,47 @@ document.addEventListener('keydown', (e) => {
 
 // Move Word Modal Functions (Hierarchical bundles only)
 
-async function openMoveWordModal(ref, record) {
+async function openMoveWordModal(refOrRefs, record) {
   // Only for hierarchical bundles
   if (session.bundleType !== 'hierarchical') {
     return;
   }
   
-  movingWordRef = ref;
+  movingWordRef = refOrRefs; // Can be string or array
   selectedTargetSubBundle = null;
   
-  // Get word display text
-  let wordText = ref;
-  if (record) {
-    const glossText = bundleSettings.glossElement && record[bundleSettings.glossElement];
-    const userSpelling = session.records[ref]?.userSpelling;
-    wordText = glossText || userSpelling || ref;
-  }
+  // Reset create new sub-bundle UI
+  const createCheck = document.getElementById('createNewSubBundleCheck');
+  const newSubBundleForm = document.getElementById('newSubBundleForm');
+  const newSubBundleName = document.getElementById('newSubBundleName');
+  if (createCheck) createCheck.checked = false;
+  if (newSubBundleForm) newSubBundleForm.style.display = 'none';
+  if (newSubBundleName) newSubBundleName.value = '';
   
-  document.getElementById('moveWordText').textContent = wordText;
+  // Update modal title and text based on single vs multiple words
+  const isMultiple = Array.isArray(movingWordRef);
+  const moveWordTitle = document.getElementById('moveWordTitle');
+  const moveWordText = document.getElementById('moveWordText');
+  const confirmMoveText = document.getElementById('confirmMoveText');
+  
+  if (isMultiple) {
+    moveWordTitle.textContent = 'Move Words to Sub-Bundle';
+    moveWordText.innerHTML = `Select the target sub-bundle for <strong>${movingWordRef.length} words</strong>`;
+    confirmMoveText.textContent = `Move ${movingWordRef.length} Words`;
+  } else {
+    moveWordTitle.textContent = 'Move Word to Sub-Bundle';
+    
+    // Get word display text
+    let wordText = movingWordRef;
+    if (record) {
+      const glossText = bundleSettings.glossElement && record[bundleSettings.glossElement];
+      const userSpelling = session.records[movingWordRef]?.userSpelling;
+      wordText = glossText || userSpelling || movingWordRef;
+    }
+    
+    moveWordText.innerHTML = `Select the target sub-bundle for word: <strong>${wordText}</strong>`;
+    confirmMoveText.textContent = 'Move Word';
+  }
   
   // Get hierarchy data from session or backend
   const hierarchyData = await ipcRenderer.invoke('get-hierarchy-data');
@@ -2483,6 +2603,52 @@ function closeMoveWordModal() {
   document.getElementById('moveWordModal').classList.add('hidden');
   movingWordRef = null;
   selectedTargetSubBundle = null;
+  
+  // Reset create new UI
+  const createCheck = document.getElementById('createNewSubBundleCheck');
+  const newSubBundleForm = document.getElementById('newSubBundleForm');
+  if (createCheck) createCheck.checked = false;
+  if (newSubBundleForm) newSubBundleForm.style.display = 'none';
+}
+
+function toggleCreateNewSubBundle() {
+  const createCheck = document.getElementById('createNewSubBundleCheck');
+  const newSubBundleForm = document.getElementById('newSubBundleForm');
+  const newSubBundlePath = document.getElementById('newSubBundlePath');
+  const confirmMoveBtn = document.getElementById('confirmMoveBtn');
+  
+  if (createCheck.checked) {
+    newSubBundleForm.style.display = 'block';
+    
+    // Show current sub-bundle path as the parent
+    if (session.currentSubBundle) {
+      newSubBundlePath.textContent = `${session.currentSubBundle}/[new name]`;
+    } else {
+      newSubBundlePath.textContent = '[new name]';
+    }
+    
+    // Enable button if name is provided
+    const newSubBundleName = document.getElementById('newSubBundleName');
+    newSubBundleName.oninput = () => {
+      confirmMoveBtn.disabled = !newSubBundleName.value.trim();
+    };
+    confirmMoveBtn.disabled = !newSubBundleName.value.trim();
+    
+    // Disable tree selection
+    document.querySelectorAll('.move-tree-sub-bundle input[type="radio"]').forEach(radio => {
+      radio.disabled = true;
+    });
+  } else {
+    newSubBundleForm.style.display = 'none';
+    confirmMoveBtn.disabled = !selectedTargetSubBundle;
+    
+    // Re-enable tree selection
+    document.querySelectorAll('.move-tree-sub-bundle input[type="radio"]').forEach(radio => {
+      const subBundlePath = radio.value;
+      const isCurrent = subBundlePath === session.currentSubBundle;
+      radio.disabled = isCurrent;
+    });
+  }
 }
 
 function renderMoveWordTree(hierarchy, subBundles) {
@@ -2614,26 +2780,45 @@ function selectTargetSubBundle(subBundlePath) {
 async function confirmMoveWord() {
   console.log('[confirmMoveWord] movingWordRef:', movingWordRef, 'selectedTargetSubBundle:', selectedTargetSubBundle);
   
-  if (!movingWordRef || !selectedTargetSubBundle) {
-    alert('Please select a target sub-bundle');
-    return;
+  const createCheck = document.getElementById('createNewSubBundleCheck');
+  const isCreatingNew = createCheck?.checked;
+  const newSubBundleName = document.getElementById('newSubBundleName')?.value.trim();
+  
+  // Validate input
+  if (isCreatingNew) {
+    if (!newSubBundleName) {
+      alert('Please enter a name for the new sub-bundle');
+      return;
+    }
+  } else {
+    if (!movingWordRef || !selectedTargetSubBundle) {
+      alert('Please select a target sub-bundle');
+      return;
+    }
   }
   
   // Save the current sub-bundle to return to after move
   const originalSubBundle = session.currentSubBundle;
   
-  // Call backend to move word
-  const result = await ipcRenderer.invoke('move-word-to-sub-bundle', {
-    ref: movingWordRef,
-    targetSubBundle: selectedTargetSubBundle,
+  // Determine if moving single or multiple words
+  const isMultiple = Array.isArray(movingWordRef);
+  const refs = isMultiple ? movingWordRef : [movingWordRef];
+  
+  // Call backend to move word(s)
+  const result = await ipcRenderer.invoke('move-words-to-sub-bundle', {
+    refs: refs,
+    targetSubBundle: isCreatingNew ? null : selectedTargetSubBundle,
+    newSubBundleName: isCreatingNew ? newSubBundleName : null,
     returnToOriginal: true
   });
   
   if (result.success) {
-    // Save target name before closing modal (which clears selectedTargetSubBundle)
-    const targetName = selectedTargetSubBundle.includes('/') 
-      ? selectedTargetSubBundle.split('/').pop() 
-      : selectedTargetSubBundle;
+    // Save target name before closing modal
+    const targetName = isCreatingNew 
+      ? newSubBundleName 
+      : (selectedTargetSubBundle.includes('/') 
+        ? selectedTargetSubBundle.split('/').pop() 
+        : selectedTargetSubBundle);
     
     // Update session
     session = result.session;
@@ -2641,15 +2826,22 @@ async function confirmMoveWord() {
     // Close modal
     closeMoveWordModal();
     
+    // Clear selection if moving multiple
+    if (isMultiple) {
+      selectedQueueWords.clear();
+    }
+    
     // Show success message
-    alert(`Moved word to ${targetName}. You can return to this word later.`);
+    const wordCount = refs.length;
+    const wordText = wordCount === 1 ? 'word' : `${wordCount} words`;
+    alert(`Moved ${wordText} to ${targetName}. You can return to ${wordCount === 1 ? 'this word' : 'these words'} later.`);
     
     // Re-render UI - should still be in original sub-bundle
     updateProgressIndicator();
     renderGroups();
     await loadCurrentWord();
   } else {
-    alert(`Failed to move word: ${result.error}`);
+    alert(`Failed to move word${isMultiple ? 's' : ''}: ${result.error}`);
   }
 }
 

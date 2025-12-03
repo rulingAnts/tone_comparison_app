@@ -355,6 +355,17 @@
       gap: 10px;
     }
 
+    .queue-item.selected {
+      background: #e3f2fd;
+      border-color: #2196f3;
+    }
+
+    .queue-item input[type="checkbox"] {
+      cursor: pointer;
+      width: 18px;
+      height: 18px;
+    }
+
     .queue-item:hover {
       background: #f8f9fa;
       border-color: #007bff;
@@ -1204,6 +1215,20 @@
           </button>
         </div>
         
+        <div style="margin-bottom: 15px; display: none;" id="moveSelectedContainer">
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <button onclick="selectAllQueueWords()" class="secondary" style="flex: 1;">
+              Select All
+            </button>
+            <button onclick="deselectAllQueueWords()" class="secondary" style="flex: 1;">
+              Deselect All
+            </button>
+            <button onclick="initiateMultiWordMove()" id="moveSelectedBtn" disabled style="flex: 2;">
+              📦 Move Selected Words (<span id="selectedCount">0</span>)
+            </button>
+          </div>
+        </div>
+        
         <div style="max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 10px;">
           <div id="queueList"></div>
         </div>
@@ -1225,8 +1250,19 @@
       
       <div class="modal-body">
         <p style="margin-bottom: 15px;">
-          Select the target sub-bundle for word: <strong id="moveWordText"></strong>
+          <span id="moveWordText"></span>
         </p>
+        
+        <div style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 4px;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="checkbox" id="createNewSubBundleCheck" onchange="toggleCreateNewSubBundle()">
+            <span style="font-weight: 500;">Create New Sub-Bundle</span>
+          </label>
+          <div id="newSubBundleForm" style="display: none; margin-top: 10px; padding-left: 26px;">
+            <input type="text" id="newSubBundleName" placeholder="Enter sub-bundle name" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+            <div style="font-size: 12px; color: #666; margin-top: 5px;">New sub-bundle will be created at: <span id="newSubBundlePath"></span></div>
+          </div>
+        </div>
         
         <div id="moveWordTree" class="move-word-tree">
           <!-- Tree will be populated by JavaScript -->
@@ -1235,7 +1271,7 @@
 
       <div class="modal-footer">
         <button class="secondary" onclick="closeMoveWordModal()">Cancel</button>
-        <button id="confirmMoveBtn" onclick="confirmMoveWord()" disabled>Move Word</button>
+        <button id="confirmMoveBtn" onclick="confirmMoveWord()" disabled><span id="confirmMoveText">Move Word</span></button>
       </div>
     </div>
   </div>
