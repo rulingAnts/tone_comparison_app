@@ -12,6 +12,27 @@ const {
 const { changeTracker, ChangeTracker } = require('./utils/changeTracker');
 const { updateLinkedXml, buildUpdatesFromSession } = require('./utils/linkedXmlWriter');
 
+// Constant for representing blank/empty/null values
+const BLANK_VALUE = '(blank)';
+
+// Normalize blank values: null, undefined, empty string, whitespace-only -> BLANK_VALUE
+function normalizeBlankValue(value) {
+  if (value === null || value === undefined || value === '') {
+    return BLANK_VALUE;
+  }
+  if (typeof value === 'string' && value.trim() === '') {
+    return BLANK_VALUE;
+  }
+  return value;
+}
+
+// Check if a value is blank (for comparison)
+function isBlankValue(value) {
+  return value === null || value === undefined || value === '' || 
+         (typeof value === 'string' && value.trim() === '') ||
+         value === BLANK_VALUE;
+}
+
 let mainWindow;
 let sessionData = null;
 let bundleData = null;
@@ -3353,7 +3374,7 @@ function getCategoryUpdatesForPath(targetPath, hierarchy) {
     return updates;
   }
   
-  // Split path like "Noun/CVCV" into parts
+  // Split path like "Noun/CVCV" or "Noun/(blank)/CVCV" into parts
   const pathParts = targetPath.split('/');
   
   // Walk the tree to find field assignments at each level
@@ -3364,8 +3385,9 @@ function getCategoryUpdatesForPath(targetPath, hierarchy) {
     const field = currentLevel.field;
     
     // Assign the field value for this level
+    // If part is (blank), assign undefined which will output as self-closing tag
     if (field) {
-      updates[field] = part;
+      updates[field] = part === BLANK_VALUE ? undefined : part;
     }
     
     // Find the matching value node

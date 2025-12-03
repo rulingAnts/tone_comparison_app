@@ -1,5 +1,26 @@
 const { ipcRenderer } = require('electron');
 
+// Constant for representing blank/empty/null values
+const BLANK_VALUE = '(blank)';
+
+// Normalize blank values: null, undefined, empty string, whitespace-only -> BLANK_VALUE
+function normalizeBlankValue(value) {
+  if (value === null || value === undefined || value === '') {
+    return BLANK_VALUE;
+  }
+  if (typeof value === 'string' && value.trim() === '') {
+    return BLANK_VALUE;
+  }
+  return value;
+}
+
+// Check if a value is blank (for comparison)
+function isBlankValue(value) {
+  return value === null || value === undefined || value === '' || 
+         (typeof value === 'string' && value.trim() === '') ||
+         value === BLANK_VALUE;
+}
+
 let availableFields = [];
 let xmlFilePath = null;
 let audioFolderPath = null;
@@ -1013,10 +1034,9 @@ function updateNodeField(path, field) {
       const valueCounts = new Map();
       
       filteredRecords.forEach(record => {
-        const value = record[field];
-        if (value) {
-          valueCounts.set(value, (valueCounts.get(value) || 0) + 1);
-        }
+        const rawValue = record[field];
+        const value = normalizeBlankValue(rawValue);
+        valueCounts.set(value, (valueCounts.get(value) || 0) + 1);
       });
       
       // Get parent's audioVariants for inheritance
@@ -1043,10 +1063,9 @@ function updateNodeField(path, field) {
       const valueCounts = new Map();
       const filteredRecords = getFilteredRecords();
       filteredRecords.forEach(record => {
-        const value = record[field];
-        if (value) {
-          valueCounts.set(value, (valueCounts.get(value) || 0) + 1);
-        }
+        const rawValue = record[field];
+        const value = normalizeBlankValue(rawValue);
+        valueCounts.set(value, (valueCounts.get(value) || 0) + 1);
       });
       
       node.values = Array.from(valueCounts.entries())
@@ -1122,10 +1141,9 @@ function toggleOrganizationalNode(path, isOrganizational) {
       const valueCounts = new Map();
       
       filteredRecords.forEach(record => {
-        const val = record[childNode.field];
-        if (val) {
-          valueCounts.set(val, (valueCounts.get(val) || 0) + 1);
-        }
+        const rawVal = record[childNode.field];
+        const val = normalizeBlankValue(rawVal);
+        valueCounts.set(val, (valueCounts.get(val) || 0) + 1);
       });
       
       const parentValue = path.length > 0 ? getNodeAtPath(path) : null;
@@ -1345,10 +1363,9 @@ function addOrganizationalLevelToGroup(nodePath, groupIndex, baseField) {
     // Get unique values from the base field
     const valueCounts = new Map();
     filteredRecords.forEach(record => {
-      const val = record[baseField.trim()];
-      if (val) {
-        valueCounts.set(val, (valueCounts.get(val) || 0) + 1);
-      }
+      const rawVal = record[baseField.trim()];
+      const val = normalizeBlankValue(rawVal);
+      valueCounts.set(val, (valueCounts.get(val) || 0) + 1);
     });
     
     // Create organizational child node
@@ -1390,10 +1407,9 @@ function addXMLFieldToGroup(nodePath, groupIndex, fieldName) {
     // Get unique values from the field
     const valueCounts = new Map();
     filteredRecords.forEach(record => {
-      const val = record[fieldName];
-      if (val) {
-        valueCounts.set(val, (valueCounts.get(val) || 0) + 1);
-      }
+      const rawVal = record[fieldName];
+      const val = normalizeBlankValue(rawVal);
+      valueCounts.set(val, (valueCounts.get(val) || 0) + 1);
     });
     
     const parentAudioVariants = value.audioVariants || [];
@@ -1534,10 +1550,9 @@ function recalculateChildCounts(path) {
     const valueCounts = new Map();
     
     filteredRecords.forEach(record => {
-      const val = record[field];
-      if (val) {
-        valueCounts.set(val, (valueCounts.get(val) || 0) + 1);
-      }
+      const rawVal = record[field];
+      const val = normalizeBlankValue(rawVal);
+      valueCounts.set(val, (valueCounts.get(val) || 0) + 1);
     });
     
     // Update counts
@@ -1561,10 +1576,9 @@ function refreshHierarchyCounts() {
   const valueCounts = new Map();
   
   filteredRecords.forEach(record => {
-    const value = record[hierarchyTree.field];
-    if (value) {
-      valueCounts.set(value, (valueCounts.get(value) || 0) + 1);
-    }
+    const rawValue = record[hierarchyTree.field];
+    const value = normalizeBlankValue(rawValue);
+    valueCounts.set(value, (valueCounts.get(value) || 0) + 1);
   });
   
   // Update root counts
@@ -1586,10 +1600,9 @@ function refreshHierarchyCounts() {
         
         if (!value.children.isOrganizational) {
           pathRecords.forEach(record => {
-            const val = record[value.children.field];
-            if (val) {
-              childValueCounts.set(val, (childValueCounts.get(val) || 0) + 1);
-            }
+            const rawVal = record[value.children.field];
+            const val = normalizeBlankValue(rawVal);
+            childValueCounts.set(val, (childValueCounts.get(val) || 0) + 1);
           });
           
           value.children.values.forEach(childValue => {
