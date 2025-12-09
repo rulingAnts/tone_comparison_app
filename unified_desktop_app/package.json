@@ -1,0 +1,97 @@
+{
+  "name": "tone-matching-suite",
+  "version": "3.0.0",
+  "description": "Unified desktop app for creating tone matching bundles and performing tone group assignment",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "debug": "ELECTRON_ENABLE_LOGGING=1 electron --remote-debugging-port=9222 .",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac dmg --universal --publish never",
+    "build:win": "electron-builder --win nsis --x64 --publish never",
+    "build:linux": "electron-builder --linux AppImage",
+    "build:all": "electron-builder -m -w"
+  },
+  "keywords": [
+    "phonology",
+    "tone",
+    "linguistics",
+    "bundler",
+    "matching"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "adm-zip": "^0.5.10",
+    "archiver": "^6.0.1",
+    "fast-xml-parser": "^4.3.2",
+    "ffmpeg-static": "^5.2.0",
+    "ffprobe-static": "^3.1.0",
+    "node-machine-id": "^1.1.12"
+  },
+  "devDependencies": {
+    "electron": "^39.0.0",
+    "electron-builder": "^24.6.4"
+  },
+  "build": {
+    "appId": "com.tonematching.suite",
+    "productName": "Tone Matching Suite",
+    "directories": {
+      "output": "../dist/unified"
+    },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "generateUpdatesFilesForAllChannels": false,
+    "removePackageScripts": true,
+    "files": [
+      "src/**/*",
+      "public/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../bundler_app/win32-resources/ffmpeg-static.zip",
+        "to": "win32-resources/ffmpeg-static.zip",
+        "filter": ["ffmpeg-static.zip"]
+      }
+    ],
+    "afterPack": "../bundler_app/scripts/afterPack.cjs",
+    "asarUnpack": [
+      "**/node_modules/ffmpeg-static/**",
+      "**/node_modules/ffprobe-static/**"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "installerIcon": "build/installer-icon.ico",
+      "uninstallerIcon": "build/installer-icon.ico",
+      "installerHeaderIcon": "build/installer-icon.ico",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "perMachine": false,
+      "allowElevation": true,
+      "deleteAppDataOnUninstall": true,
+      "include": "build/installer.nsh"
+    },
+    "mac": {
+      "icon": "build/icon.icns",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["universal"]
+        }
+      ]
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "build/icon.png"
+    }
+  }
+}

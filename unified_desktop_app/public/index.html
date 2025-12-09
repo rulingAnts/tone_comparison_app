@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tone Matching Suite</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: #f5f5f5;
+    }
+
+    /* Tab Navigation */
+    .tab-container {
+      display: flex;
+      background: #2c3e50;
+      border-bottom: 2px solid #1a252f;
+      padding: 0 1rem;
+      -webkit-app-region: drag;
+    }
+
+    .tab {
+      padding: 0.875rem 1.5rem;
+      cursor: pointer;
+      color: #95a5a6;
+      font-weight: 500;
+      border-bottom: 3px solid transparent;
+      transition: all 0.2s;
+      -webkit-app-region: no-drag;
+      user-select: none;
+    }
+
+    .tab:hover {
+      color: #ecf0f1;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .tab.active {
+      color: #fff;
+      border-bottom-color: #3498db;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    /* View Container */
+    .view-container {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .view {
+      display: none;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+    }
+
+    .view.active {
+      display: block;
+    }
+
+    /* Welcome Screen */
+    .welcome {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      padding: 2rem;
+      text-align: center;
+    }
+
+    .welcome h1 {
+      color: #2c3e50;
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .welcome p {
+      color: #7f8c8d;
+      font-size: 1.125rem;
+      max-width: 600px;
+      line-height: 1.6;
+    }
+
+    .welcome-cards {
+      display: flex;
+      gap: 2rem;
+      margin-top: 3rem;
+    }
+
+    .welcome-card {
+      background: white;
+      border-radius: 8px;
+      padding: 2rem;
+      width: 250px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .welcome-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .welcome-card h3 {
+      color: #2c3e50;
+      font-size: 1.25rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .welcome-card p {
+      color: #7f8c8d;
+      font-size: 0.95rem;
+    }
+
+    .icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <!-- Tab Navigation -->
+  <div class="tab-container">
+    <div class="tab active" data-view="bundler">📦 Bundler</div>
+    <div class="tab" data-view="matching">🎯 Matching</div>
+  </div>
+
+  <!-- View Container -->
+  <div class="view-container">
+    <!-- Bundler View -->
+    <div id="bundler-view" class="view active">
+      <iframe src="views/bundler.html" style="width: 100%; height: 100%; border: none;"></iframe>
+    </div>
+
+    <!-- Matching View -->
+    <div id="matching-view" class="view">
+      <iframe src="views/matching.html" style="width: 100%; height: 100%; border: none;"></iframe>
+    </div>
+  </div>
+
+  <script src="main-window.js"></script>
+</body>
+</html>

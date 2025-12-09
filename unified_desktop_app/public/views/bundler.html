@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bundler</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+      padding: 2rem;
+      background: #f5f5f5;
+      margin: 0;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 8px;
+      padding: 2rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    h1 {
+      color: #2c3e50;
+      margin-bottom: 1rem;
+    }
+
+    .description {
+      color: #7f8c8d;
+      margin-bottom: 2rem;
+      line-height: 1.6;
+    }
+
+    .section {
+      margin-bottom: 2rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid #ecf0f1;
+    }
+
+    .section:last-child {
+      border-bottom: none;
+    }
+
+    .section h2 {
+      color: #34495e;
+      font-size: 1.25rem;
+      margin-bottom: 1rem;
+    }
+
+    .file-selector {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .file-path {
+      flex: 1;
+      padding: 0.75rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: #f9f9f9;
+      color: #666;
+      font-family: monospace;
+      font-size: 0.9rem;
+    }
+
+    .file-path.empty {
+      color: #999;
+      font-style: italic;
+    }
+
+    button {
+      padding: 0.75rem 1.5rem;
+      background: #3498db;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background: #2980b9;
+    }
+
+    button:disabled {
+      background: #95a5a6;
+      cursor: not-allowed;
+    }
+
+    button.secondary {
+      background: #95a5a6;
+    }
+
+    button.secondary:hover {
+      background: #7f8c8d;
+    }
+
+    .placeholder {
+      padding: 3rem;
+      text-align: center;
+      color: #95a5a6;
+      background: #f9f9f9;
+      border-radius: 4px;
+      border: 2px dashed #ddd;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📦 Bundle Creator</h1>
+    <p class="description">
+      Create tone matching bundles from your Dekereke XML database and audio files.
+      Configure hierarchy settings and filters to prepare data for tone group assignment.
+    </p>
+
+    <!-- Source Files Section -->
+    <div class="section">
+      <h2>Source Files</h2>
+      
+      <div class="file-selector">
+        <label style="min-width: 100px;">XML File:</label>
+        <div id="xml-path" class="file-path empty">No file selected</div>
+        <button id="browse-xml">Browse...</button>
+      </div>
+
+      <div class="file-selector">
+        <label style="min-width: 100px;">Audio Folder:</label>
+        <div id="audio-path" class="file-path empty">No folder selected</div>
+        <button id="browse-audio">Browse...</button>
+      </div>
+    </div>
+
+    <!-- Settings Section -->
+    <div class="section">
+      <h2>Bundle Settings</h2>
+      <div class="placeholder">
+        Hierarchy and filter settings will appear here
+      </div>
+    </div>
+
+    <!-- Create Bundle Section -->
+    <div class="section">
+      <h2>Create Bundle</h2>
+      <div style="display: flex; gap: 1rem; align-items: center;">
+        <button id="create-bundle" disabled>Create Bundle</button>
+        <button id="open-in-matching" class="secondary" disabled>Create & Open in Matching</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Placeholder functionality - will be connected to IPC later
+    document.getElementById('browse-xml').addEventListener('click', () => {
+      console.log('Browse XML clicked');
+    });
+
+    document.getElementById('browse-audio').addEventListener('click', () => {
+      console.log('Browse audio clicked');
+    });
+
+    document.getElementById('create-bundle').addEventListener('click', () => {
+      console.log('Create bundle clicked');
+    });
+
+    document.getElementById('open-in-matching').addEventListener('click', () => {
+      console.log('Create & open in matching clicked');
+    });
+  </script>
+</body>
+</html>
