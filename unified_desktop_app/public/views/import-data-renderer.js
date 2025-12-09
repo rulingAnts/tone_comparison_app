@@ -1,4 +1,8 @@
 // Use the exposed electronAPI from preload
+if (!window.electronAPI) {
+  console.error('[import-data] window.electronAPI is not defined! Preload script may not have loaded correctly.');
+  console.error('[import-data] window object keys:', Object.keys(window));
+}
 const ipcRenderer = window.electronAPI;
 
 // Constant for representing blank/empty/null values
@@ -41,21 +45,33 @@ let isLinkedBundle = true; // Always create linked bundles in new workflow
 let draggedValueContainer = null;
 let draggedValuePath = null;
 
-window.addEventListener('DOMContentLoaded', async () => {
-  await loadPersistedSettings();
-  setupToneFieldToggles();
-  attachChangePersistence();
-  setupModalHandlers();
-  updateCompressionEstimate(); // Initialize compression estimate display
-});
+// Initialize after a short delay to ensure DOM and electronAPI are ready
+console.log('[import-data] Scheduling initialization...');
+setTimeout(async () => {
+  console.log('[import-data] Initializing import-data-renderer...');
+  try {
+    await loadPersistedSettings();
+    setupToneFieldToggles();
+    attachChangePersistence();
+    setupModalHandlers();
+    console.log('[import-data] Initialization complete');
+  } catch (error) {
+    console.error('[import-data] Initialization error:', error);
+  }
+}, 100);
 
 function setupModalHandlers() {
+  console.log('[import-data] Setting up modal handlers...');
+  
   // Add grouping value modal
   const addGroupingForm = document.getElementById('addGroupingValueForm');
   const cancelAddGroupingBtn = document.getElementById('cancelAddGroupingValueBtn');
   
   if (addGroupingForm) {
+    console.log('[import-data] Attaching submit handler to addGroupingValueForm');
     addGroupingForm.addEventListener('submit', handleAddGroupingValueSubmit);
+  } else {
+    console.warn('[import-data] addGroupingValueForm not found!');
   }
   
   if (cancelAddGroupingBtn) {
@@ -94,7 +110,33 @@ function setupModalHandlers() {
     });
   }
   
-  // Close on Escape key
+  // Save profile modal
+  const saveProfileForm = document.getElementById('saveProfileForm');
+  const cancelSaveProfileBtn = document.getElementById('cancelSaveProfileBtn');
+  
+  if (saveProfileForm) {
+    console.log('[import-data] Attaching submit handler to saveProfileForm');
+    saveProfileForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = document.getElementById('profileNameInput');
+      confirmSaveProfile(input ? input.value : '');
+    });
+  } else {
+    console.warn('[import-data] saveProfileForm not found!');
+  }
+  
+  if (cancelSaveProfileBtn) {
+    cancelSaveProfileBtn.addEventListener('click', () => closeSaveProfileModal());
+  }
+  
+  const saveProfileOverlay = document.getElementById('saveProfileOverlay');
+  if (saveProfileOverlay) {
+    saveProfileOverlay.addEventListener('click', (e) => {
+      if (e.target === saveProfileOverlay) closeSaveProfileModal();
+    });
+  }
+  
+  // Close modals on Escape key
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       if (addGroupingOverlay && addGroupingOverlay.style.display === 'flex') {
@@ -103,8 +145,13 @@ function setupModalHandlers() {
       if (addChildLevelOverlay && addChildLevelOverlay.style.display === 'flex') {
         closeAddChildLevelModal();
       }
+      if (saveProfileOverlay && saveProfileOverlay.style.display !== 'none') {
+        closeSaveProfileModal();
+      }
     }
   });
+  
+  console.log('[import-data] Modal handlers setup complete');
 }
 
 
@@ -168,17 +215,25 @@ function handleLinkedBundleChange() {
 
 async function loadPersistedSettings() {
   try {
+    console.log('[import-data] Loading persisted settings...');
     persisted = await ipcRenderer.invoke('bundler:get-settings');
-  } catch {
+    console.log('[import-data] Got persisted settings:', persisted);
+  } catch (error) {
+    console.error('[import-data] Error loading settings:', error);
     persisted = null;
   }
-  if (!persisted) return;
+  if (!persisted) {
+    console.log('[import-data] No persisted settings found');
+    return;
+  }
 
   if (persisted.xmlPath) {
+    console.log('[import-data] Restoring XML path:', persisted.xmlPath);
     xmlFilePath = persisted.xmlPath;
     document.getElementById('xmlPath').value = persisted.xmlPath;
     const result = await ipcRenderer.invoke('bundler:parse-xml', persisted.xmlPath);
     if (result && result.success) {
+      console.log('[import-data] XML parsed successfully, records:', result.recordCount);
       availableFields = result.fields;
       parsedXmlData = result; // Store for hierarchy analysis
       updateWrittenFormElements(persisted.settings?.writtenFormElements || []);
@@ -195,11 +250,12 @@ async function loadPersistedSettings() {
 
   if (persisted.audioFolder) {
     audioFolderPath = persisted.audioFolder;
-    document.getElementById('audioFolder').value = persisted.audioFolder;
+    const audioFolderEl = document.getElementById('audioFolder');
+    if (audioFolderEl) audioFolderEl.value = persisted.audioFolder;
   }
+  // outputPath element removed from UI - not needed for linked bundles
   if (persisted.outputPath) {
     outputFilePath = persisted.outputPath;
-    document.getElementById('outputPath').value = persisted.outputPath;
   }
 
   const s = persisted.settings || {};
@@ -290,20 +346,12 @@ async function loadPersistedSettings() {
   
   document.getElementById('bundleDescription').value = s.bundleDescription || '';
   
-  // Compression level
+  // compressionLevel element removed from UI - value stored but not displayed
   const compressionLevel = s.compressionLevel !== undefined ? s.compressionLevel : 6;
-  const compressionSlider = document.getElementById('compressionLevel');
-  if (compressionSlider) {
-    compressionSlider.value = compressionLevel;
-  }
   
-  // Audio processing defaults
-  const ap = s.audioProcessing || {};
-  const apFlac = !!ap.convertToFlac;
-  const flacEl = document.getElementById('convertToFlac');
-  if (flacEl) flacEl.checked = apFlac;
-  const refs = Array.isArray(s.referenceNumbers) ? s.referenceNumbers : [];
-  document.getElementById('referenceNumbers').value = refs.join('\n');
+  // Audio processing elements removed from UI
+  // referenceNumbers element removed from UI
+  
   if (s.glossElement) {
     const glossSel = document.getElementById('glossElement');
     if (glossSel) glossSel.value = s.glossElement;
@@ -321,8 +369,10 @@ async function loadPersistedSettings() {
   // Restore hierarchy levels
   // Restore hierarchy tree (supports both old hierarchyLevels format and new hierarchyTree format)
   if (s.hierarchyTree) {
+    console.log('[import-data] Restoring hierarchy tree:', s.hierarchyTree);
     hierarchyTree = restoreTreeNode(s.hierarchyTree);
     renderHierarchyTree();
+    console.log('[import-data] Hierarchy tree rendered');
   } else if (Array.isArray(s.hierarchyLevels) && s.hierarchyLevels.length > 0) {
     // Migrate old format to new tree format (best effort - first level only)
     const firstLevel = s.hierarchyLevels[0];
@@ -343,6 +393,7 @@ async function loadPersistedSettings() {
   
   // Restore filter groups
   if (Array.isArray(s.filterGroups) && s.filterGroups.length > 0) {
+    console.log('[import-data] Restoring filter groups:', s.filterGroups.length, 'groups');
     filterGroups = s.filterGroups;
     
     // Migrate old format to new format if needed (conditions -> items)
@@ -355,8 +406,12 @@ async function loadPersistedSettings() {
     nextFilterGroupId = maxGroupId + 1;
     nextFilterConditionId = maxConditionId + 1;
     renderFilterGroups();
+    console.log('[import-data] Filter groups rendered');
+  } else {
+    console.log('[import-data] No filter groups to restore');
   }
 
+  console.log('[import-data] Settings restoration complete');
   checkFormValid();
 }
 
@@ -506,6 +561,15 @@ function attachChangePersistence() {
       persistSettings();
     });
   }
+  
+  const importBtn = document.getElementById('importAudioVariantsBtn');
+  if (importBtn) {
+    importBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleImportAudioVariantsMenu();
+    });
+  }
 }
 
 function collectCurrentSettings() {
@@ -543,7 +607,7 @@ function collectCurrentSettings() {
       showWrittenForm,
       audioFileSuffix: firstSuffix === '' ? null : firstSuffix,
       audioFileVariants: variants,
-      referenceNumbers: parseReferenceNumbers(document.getElementById('referenceNumbers').value),
+      referenceNumbers: [], // Removed from UI - always empty
       requireUserSpelling: document.getElementById('requireUserSpelling').checked,
       showReferenceNumbers: document.getElementById('showReferenceNumbers').checked,
       userSpellingElement: document.getElementById('userSpellingElement').value.trim(),
@@ -563,9 +627,9 @@ function collectCurrentSettings() {
       audioProcessing: {
         autoTrim: false, // Always disabled
         autoNormalize: false, // Always disabled
-        convertToFlac: !!document.getElementById('convertToFlac')?.checked,
+        convertToFlac: false, // Removed from UI - always false
       },
-      compressionLevel: parseInt(document.getElementById('compressionLevel')?.value || 6),
+      compressionLevel: 6, // Removed from UI - use default value
     },
   };
 }
@@ -576,34 +640,42 @@ async function persistSettings() {
 }
 
 async function selectXmlFile() {
-  const path = await ipcRenderer.invoke('bundler:select-xml-file');
-  if (path) {
-    xmlFilePath = path;
-    document.getElementById('xmlPath').value = path;
-    
-    // Parse XML to get available fields
-    const result = await ipcRenderer.invoke('bundler:parse-xml', path);
-    
-    if (result.success) {
-      availableFields = result.fields;
-      parsedXmlData = result; // Store for hierarchy analysis
-      const pre = persisted?.settings?.writtenFormElements || [];
-      updateWrittenFormElements(pre);
-      updateGlossOptions();
-      updateToneFieldOptions();
-      updateUserSpellingOptions();
-      renderFilterGroups(); // Initialize filter UI with available fields
-      renderHierarchyTree();
-      document.getElementById('xmlInfo').textContent = 
-        `✓ Loaded ${result.recordCount} records`;
-      document.getElementById('xmlInfo').style.color = 'green';
-      checkFormValid();
-      await persistSettings();
-    } else {
-      document.getElementById('xmlInfo').textContent = 
-        `✗ Error: ${result.error}`;
-      document.getElementById('xmlInfo').style.color = 'red';
+  try {
+    console.log('[import-data] Calling bundler:select-xml-file');
+    const path = await ipcRenderer.invoke('bundler:select-xml-file');
+    console.log('[import-data] Got path:', path);
+    if (path) {
+      xmlFilePath = path;
+      document.getElementById('xmlPath').value = path;
+      
+      // Parse XML to get available fields
+      const result = await ipcRenderer.invoke('bundler:parse-xml', path);
+      
+      if (result.success) {
+        availableFields = result.fields;
+        parsedXmlData = result; // Store for hierarchy analysis
+        const pre = persisted?.settings?.writtenFormElements || [];
+        updateWrittenFormElements(pre);
+        updateGlossOptions();
+        updateToneFieldOptions();
+        updateUserSpellingOptions();
+        renderFilterGroups(); // Initialize filter UI with available fields
+        renderHierarchyTree();
+        document.getElementById('xmlInfo').textContent = 
+          `✓ Loaded ${result.recordCount} records`;
+        document.getElementById('xmlInfo').style.color = 'green';
+        checkFormValid();
+        await persistSettings();
+      } else {
+        document.getElementById('xmlInfo').textContent = 
+          `✗ Error: ${result.error}`;
+        document.getElementById('xmlInfo').style.color = 'red';
+      }
     }
+  } catch (error) {
+    console.error('[import-data] Error in selectXmlFile:', error);
+    document.getElementById('xmlInfo').textContent = `✗ Error: ${error.message}`;
+    document.getElementById('xmlInfo').style.color = 'red';
   }
 }
 
@@ -1191,18 +1263,31 @@ function addOrganizationalValue(path) {
 
 // Handle the add grouping value form submission
 function handleAddGroupingValueSubmit(e) {
+  console.log('[import-data] handleAddGroupingValueSubmit called');
   e.preventDefault();
   
-  const path = window.pendingOrganizationalValuePath;
-  if (!path) return;
-  
-  const node = path.length === 0 ? hierarchyTree : getNodeAtPath(path);
-  if (!node || !node.children || !node.children.isOrganizational) return;
-  
-  const groupName = document.getElementById('groupingValueInput').value.trim();
-  if (!groupName) return;
-  
-  const childNode = node.children;
+  try {
+    const path = window.pendingOrganizationalValuePath;
+    if (!path) {
+      console.error('[import-data] No pending path!');
+      return;
+    }
+    
+    const node = path.length === 0 ? hierarchyTree : getNodeAtPath(path);
+    if (!node || !node.children || !node.children.isOrganizational) {
+      console.error('[import-data] Invalid node or not organizational');
+      return;
+    }
+    
+    const groupName = document.getElementById('groupingValueInput').value.trim();
+    if (!groupName) {
+      console.warn('[import-data] Empty group name');
+      return;
+    }
+    
+    console.log('[import-data] Adding organizational group:', groupName);
+    
+    const childNode = node.children;
   
   // Initialize organizational groups array if needed
   if (!childNode.organizationalGroups) {
@@ -1230,11 +1315,20 @@ function handleAddGroupingValueSubmit(e) {
   
   childNode.organizationalGroups.push(newGroup);
   
+  console.log('[import-data] Organizational group added, rendering tree...');
   renderHierarchyTree();
+  
+  console.log('[import-data] Persisting settings...');
   persistSettings();
   
   // Close modal
+  console.log('[import-data] Closing modal...');
   closeAddGroupingValueModal();
+  console.log('[import-data] Done!');
+  } catch (error) {
+    console.error('[import-data] Error in handleAddGroupingValueSubmit:', error);
+    alert(`Error adding organizational group: ${error.message}`);
+  }
 }
 
 function closeAddGroupingValueModal() {
@@ -2884,12 +2978,19 @@ function renderNode(node, path, depth) {
 }
 
 async function selectAudioFolder() {
-  const path = await ipcRenderer.invoke('bundler:select-audio-folder');
-  if (path) {
-    audioFolderPath = path;
-    document.getElementById('audioFolder').value = path;
-    checkFormValid();
-    await persistSettings();
+  try {
+    console.log('[import-data] Calling bundler:select-audio-folder');
+    const path = await ipcRenderer.invoke('bundler:select-audio-folder');
+    console.log('[import-data] Got path:', path);
+    if (path) {
+      audioFolderPath = path;
+      document.getElementById('audioFolder').value = path;
+      checkFormValid();
+      await persistSettings();
+    }
+  } catch (error) {
+    console.error('[import-data] Error in selectAudioFolder:', error);
+    alert(`Error selecting audio folder: ${error.message}`);
   }
 }
 
@@ -3300,6 +3401,115 @@ function getAudioVariantsFromDOM() {
   }));
 }
 
+// Import audio variants from clipboard
+async function importAudioVariantsFromClipboard() {
+  try {
+    // Close the dropdown menu
+    const menu = document.getElementById('importAudioVariantsMenu');
+    if (menu) menu.style.display = 'none';
+    
+    // Check if clipboard API is available
+    if (!window.electronAPI || !window.electronAPI.clipboard) {
+      alert('Clipboard API not available. Please ensure the app has proper permissions.');
+      console.error('[import-data] window.electronAPI.clipboard not available');
+      return;
+    }
+    
+    // Read clipboard text
+    const clipboardText = window.electronAPI.clipboard.readText();
+    console.log('[import-data] Clipboard text:', clipboardText);
+    
+    if (!clipboardText || !clipboardText.trim()) {
+      alert('Clipboard is empty. Please copy tab-separated values (Description\\tSuffix) and try again.');
+      return;
+    }
+    
+    // Parse tab-separated values
+    const lines = clipboardText.trim().split('\n');
+    const variants = [];
+    const errors = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue; // Skip empty lines
+      
+      const parts = line.split('\t');
+      
+      if (parts.length !== 2) {
+        errors.push(`Line ${i + 1}: Expected 2 columns (Description\\tSuffix), found ${parts.length}`);
+        continue;
+      }
+      
+      const description = parts[0].trim();
+      const suffix = parts[1].trim();
+      
+      if (!description) {
+        errors.push(`Line ${i + 1}: Description cannot be empty`);
+        continue;
+      }
+      
+      variants.push({
+        description: description,
+        suffix: suffix
+      });
+    }
+    
+    // Show validation errors if any
+    if (errors.length > 0) {
+      alert(`Found ${errors.length} error(s):\\n\\n${errors.join('\\n')}\\n\\nNo variants were imported.`);
+      return;
+    }
+    
+    if (variants.length === 0) {
+      alert('No valid audio variants found in clipboard. Please ensure your data is tab-separated with 2 columns:\\nDescription\\tSuffix');
+      return;
+    }
+    
+    // Confirm overwrite
+    const currentCount = audioVariants.length;
+    const message = `This will replace your current ${currentCount} audio variant(s) with ${variants.length} new variant(s).\\n\\nContinue?`;
+    
+    if (!confirm(message)) {
+      return;
+    }
+    
+    // Import the variants
+    audioVariants = variants;
+    renderAudioVariants();
+    await persistSettings();
+    
+    showStatus('success', `Imported ${variants.length} audio variant(s) from clipboard`);
+  } catch (error) {
+    console.error('[import-data] Error importing audio variants:', error);
+    alert(`Error importing audio variants: ${error.message}`);
+  }
+}
+
+// Toggle import dropdown menu
+function toggleImportAudioVariantsMenu() {
+  const menu = document.getElementById('importAudioVariantsMenu');
+  if (!menu) return;
+  
+  if (menu.style.display === 'none') {
+    menu.style.display = 'block';
+  } else {
+    menu.style.display = 'none';
+  }
+}
+
+// Close import menu when clicking outside
+document.addEventListener('click', (e) => {
+  const btn = document.getElementById('importAudioVariantsBtn');
+  const menu = document.getElementById('importAudioVariantsMenu');
+  
+  if (!btn || !menu) return;
+  
+  // If clicking outside both button and menu, close the menu
+  if (!btn.contains(e.target) && !menu.contains(e.target)) {
+    menu.style.display = 'none';
+  }
+});
+
 function showStatus(type, message) {
   const statusEl = document.getElementById('status');
   statusEl.className = `status ${type}`;
@@ -3354,28 +3564,6 @@ async function confirmSaveProfile(name) {
   closeSaveProfileModal();
 }
 
-// Modal wiring
-window.addEventListener('DOMContentLoaded', () => {
-  const form = document.getElementById('saveProfileForm');
-  const cancelBtn = document.getElementById('cancelSaveProfileBtn');
-  if (form) {
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const input = document.getElementById('profileNameInput');
-      confirmSaveProfile(input ? input.value : '');
-    });
-  }
-  if (cancelBtn) {
-    cancelBtn.addEventListener('click', () => closeSaveProfileModal());
-  }
-  const overlay = document.getElementById('saveProfileOverlay');
-  if (overlay) {
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) closeSaveProfileModal();
-    });
-  }
-});
-
 async function loadProfile() {
   const result = await ipcRenderer.invoke('bundler:open-profile');
   if (!result || !result.success) {
@@ -3402,9 +3590,11 @@ async function loadProfile() {
     }
   }
   audioFolderPath = profile.audioFolder || null;
-  document.getElementById('audioFolder').value = profile.audioFolder || '';
+  const audioFolderEl = document.getElementById('audioFolder');
+  if (audioFolderEl) audioFolderEl.value = profile.audioFolder || '';
+  
+  // outputPath element removed from UI - not needed for linked bundles
   outputFilePath = profile.outputPath || null;
-  document.getElementById('outputPath').value = profile.outputPath || '';
 
   const s = profile.settings || {};
   document.getElementById('showWrittenForm').checked = !!s.showWrittenForm;
@@ -3459,8 +3649,7 @@ async function loadProfile() {
     if (radio) radio.checked = true;
   }
   
-  const refs = Array.isArray(s.referenceNumbers) ? s.referenceNumbers : [];
-  document.getElementById('referenceNumbers').value = refs.join('\n');
+  // referenceNumbers element removed from UI
   if (s.glossElement) {
     const glossSel = document.getElementById('glossElement');
     if (glossSel) glossSel.value = s.glossElement;
@@ -3475,16 +3664,8 @@ async function loadProfile() {
     : [{ description: 'Default', suffix: (s.audioFileSuffix || '') }];
   renderAudioVariants();
 
-  // Restore audio processing
-  const ap = s.audioProcessing || {};
-  const flacEl = document.getElementById('convertToFlac');
-  if (flacEl) flacEl.checked = !!ap.convertToFlac;
-
-  // Restore compression level
-  const compressionLevel = s.compressionLevel !== undefined ? s.compressionLevel : 6;
-  const compressionSlider = document.getElementById('compressionLevel');
-  if (compressionSlider) compressionSlider.value = compressionLevel;
-
+  // Audio processing and compression elements removed from UI
+  
   // Restore bundle type
   if (s.bundleType) {
     bundleType = s.bundleType;

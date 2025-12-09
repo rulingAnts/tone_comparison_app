@@ -256,12 +256,8 @@
       border-radius: 4px;
     }
     
-    /* Hierarchical section (initially hidden) */
+    /* Hierarchical section - always visible now since we always create hierarchical bundles */
     .hierarchical-only {
-      display: none;
-    }
-    
-    .hierarchical-only.visible {
       display: block;
     }
     
@@ -592,6 +588,7 @@
 </head>
 <body>
   <script src="import-data-renderer.js"></script>
+  <script src="../filter-functions.js"></script>
   <div class="container">
     <h1>Import Data</h1>
 
@@ -605,7 +602,7 @@
       <p class="info" style="margin-top: 10px;">Or configure new data below using your Dekereke XML and audio folder...</p>
     </div>
 
-    <!-- Bundle type is now always linked - hidden from user -->idden from user -->
+    <!-- Bundle type is now always linked - hidden from user -->
     <div class="section" style="display: none;">
       <h2>Bundle Type</h2>
       <div class="bundle-type-toggle">
@@ -720,8 +717,16 @@
         <label>Audio Variants</label>
         <div class="info">Add one or more variants. Each variant can optionally add a suffix before the file extension (e.g., sound.wav → sound-phon.wav). The first variant is used by older app versions.</div>
         <div id="audioVariants"></div>
-        <div style="margin-top:10px;">
+        <div style="margin-top:10px; display: flex; gap: 10px; align-items: center;">
           <button class="btn-secondary" id="addAudioVariantBtn">Add Variant</button>
+          <div style="position: relative;">
+            <button class="btn-secondary" id="importAudioVariantsBtn">Import Existing ▼</button>
+            <div id="importAudioVariantsMenu" style="display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; background: white; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 100; min-width: 200px;">
+              <button onclick="importAudioVariantsFromClipboard()" style="display: block; width: 100%; padding: 10px 16px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px;" onmouseover="this.style.background='#f0f0f0'" onmouseout="this.style.background='none'">📋 Paste Text</button>
+              <button onclick="alert('Coming soon!')" style="display: block; width: 100%; padding: 10px 16px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; color: #999;" onmouseover="this.style.background='#f0f0f0'" onmouseout="this.style.background='none'">📄 Import Text File (TODO)</button>
+              <button onclick="alert('Coming soon!')" style="display: block; width: 100%; padding: 10px 16px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; color: #999;" onmouseover="this.style.background='#f0f0f0'" onmouseout="this.style.background='none'">⚙️ Import from Dekereke DB (TODO)</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -743,17 +748,8 @@
       </div>
     </div>
 
-    <div class="section" id="referenceNumbersSection">
-      <h2>4. Record Filtering</h2>
-      <div class="form-group">
-        <label>Reference Numbers (one per line, or comma/space separated)</label>
-        <textarea id="referenceNumbers" placeholder="Leave empty to include all records&#10;Or enter specific reference numbers like:&#10;001&#10;002&#10;003"></textarea>
-        <div class="info">Only records with these reference numbers will be included. For hierarchical bundles, use the hierarchy tree above instead.</div>
-      </div>
-    </div>
-
     <div class="section">
-      <h2>5. User Input Settings</h2>
+      <h2>4. User Input Settings</h2>
       <div class="form-group">
         <div class="checkbox-group">
           <input type="checkbox" id="requireUserSpelling">
@@ -883,40 +879,8 @@
     </div>
 
     <div class="section">
-      <h2>6. Audio Processing</h2>
-      <div class="form-group">
-        <div class="checkbox-group">
-          <input type="checkbox" id="convertToFlac">
-          <label for="convertToFlac">Convert to FLAC</label>
-        </div>
-        <div class="info">Converts audio files to FLAC format (lossless compression, smaller than WAV, fully compatible with mobile app).</div>
-      </div>
-    </div>
-
-    <div class="section">
-      <h2>7. Output</h2>
-      <div class="form-group">
-        <label>Output Bundle File</label>
-        <div class="file-selector">
-          <input type="text" id="outputPath" readonly placeholder="No output file selected">
-          <button onclick="selectOutputFile()">Browse</button>
-        </div>
-      </div>
-      <div class="form-group" style="margin-top:16px;">
-        <label for="compressionLevel">Compression Level: <span id="compressionLevelValue">6</span></label>
-        <input type="range" id="compressionLevel" min="0" max="9" value="6" 
-               oninput="updateCompressionEstimate()" 
-               style="width: 100%; margin: 8px 0;">
-        <div style="display: flex; justify-content: space-between; font-size: 11px; color: #666; margin-bottom: 8px;">
-          <span>0 (fastest)</span>
-          <span>5 (balanced)</span>
-          <span>9 (smallest)</span>
-        </div>
-        <div id="compressionEstimate" class="info" style="font-size: 12px; padding: 8px; background: #f8f9fa; border-radius: 4px; margin-top: 4px;">
-          <strong>Estimated:</strong> File size ~100% | Processing time ~1.0x
-        </div>
-      </div>
-      <div class="form-group" style="margin-top:12px; display:flex; gap:10px; align-items:center;">
+      <h2>5. Profile Management</h2>
+      <div class="form-group" style="display:flex; gap:10px; align-items:center;">
         <button class="btn-secondary" onclick="saveProfile()">Save Profile</button>
         <button class="btn-secondary" onclick="loadProfile()">Load Profile</button>
         <span class="info">Profiles store all settings including a persistent Bundle ID.</span>
@@ -1054,8 +1018,5 @@
       </form>
     </div>
   </div>
-
-  <script src="filter-functions.js"></script>
-  <script src="renderer.js"></script>
 </body>
 </html>

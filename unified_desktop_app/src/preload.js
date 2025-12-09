@@ -4,7 +4,7 @@
  * Exposes safe IPC communication to renderer processes
  */
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, clipboard } = require('electron');
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
@@ -51,6 +51,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
   
+  removeAllListeners: (channel) => {
+    // Whitelist allowed channels
+    const validChannels = [
+      'switch-view',
+      'audio-processing-progress',
+      'archive-progress',
+      'bundle-loaded',
+    ];
+    
+    if (validChannels.includes(channel)) {
+      ipcRenderer.removeAllListeners(channel);
+    } else {
+      throw new Error(`Invalid IPC channel: ${channel}`);
+    }
+  },
+  
   // View Management (legacy, keeping for compatibility)
   switchView: (viewName) => ipcRenderer.invoke('switch-view', viewName),
   getCurrentView: () => ipcRenderer.invoke('get-current-view'),
@@ -68,5 +84,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   matching: {
     loadBundle: () => ipcRenderer.invoke('matching:load-bundle'),
     onBundleLoaded: (callback) => ipcRenderer.on('bundle-loaded', (event, data) => callback(data)),
+  },
+  
+  // Clipboard API
+  clipboard: {
+    readText: () => clipboard.readText(),
+    writeText: (text) => clipboard.writeText(text),
   },
 });

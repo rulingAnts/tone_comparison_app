@@ -220,25 +220,33 @@ ipcMain.handle('bundler:set-settings', async (event, patch) => {
 });
 
 ipcMain.handle('bundler:select-xml-file', async () => {
+  console.log('[bundler] select-xml-file called, mainWindow:', !!mainWindow);
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
     filters: [{ name: 'XML Files', extensions: ['xml'] }],
   });
+  console.log('[bundler] dialog result:', result);
   
   if (!result.canceled && result.filePaths.length > 0) {
+    console.log('[bundler] returning path:', result.filePaths[0]);
     return result.filePaths[0];
   }
+  console.log('[bundler] returning null (canceled or no selection)');
   return null;
 });
 
 ipcMain.handle('bundler:select-audio-folder', async () => {
+  console.log('[bundler] select-audio-folder called, mainWindow:', !!mainWindow);
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory'],
   });
+  console.log('[bundler] dialog result:', result);
   
   if (!result.canceled && result.filePaths.length > 0) {
+    console.log('[bundler] returning path:', result.filePaths[0]);
     return result.filePaths[0];
   }
+  console.log('[bundler] returning null (canceled or no selection)');
   return null;
 });
 
