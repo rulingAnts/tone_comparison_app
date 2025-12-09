@@ -1,174 +1,1050 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bundler</title>
+  <title>Tone Matching Bundler</title>
   <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-      padding: 2rem;
-      background: #f5f5f5;
+    * {
       margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
     }
 
     .container {
-      max-width: 1200px;
+      max-width: 900px;
       margin: 0 auto;
       background: white;
+      padding: 30px;
       border-radius: 8px;
-      padding: 2rem;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     }
 
     h1 {
-      color: #2c3e50;
-      margin-bottom: 1rem;
-    }
-
-    .description {
-      color: #7f8c8d;
-      margin-bottom: 2rem;
-      line-height: 1.6;
+      color: #333;
+      margin-bottom: 30px;
+      text-align: center;
     }
 
     .section {
-      margin-bottom: 2rem;
-      padding-bottom: 2rem;
-      border-bottom: 1px solid #ecf0f1;
-    }
-
-    .section:last-child {
-      border-bottom: none;
+      margin-bottom: 25px;
+      padding: 20px;
+      background: #f9f9f9;
+      border-radius: 6px;
     }
 
     .section h2 {
-      color: #34495e;
-      font-size: 1.25rem;
-      margin-bottom: 1rem;
+      color: #555;
+      margin-bottom: 15px;
+      font-size: 18px;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: #666;
+      font-weight: 500;
+    }
+
+    input[type="text"],
+    textarea,
+    select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    textarea {
+      min-height: 100px;
+      font-family: monospace;
     }
 
     .file-selector {
       display: flex;
-      gap: 1rem;
+      gap: 10px;
       align-items: center;
-      margin-bottom: 1rem;
     }
 
-    .file-path {
+    .file-selector input {
       flex: 1;
-      padding: 0.75rem;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      background: #f9f9f9;
-      color: #666;
-      font-family: monospace;
-      font-size: 0.9rem;
-    }
-
-    .file-path.empty {
-      color: #999;
-      font-style: italic;
     }
 
     button {
-      padding: 0.75rem 1.5rem;
-      background: #3498db;
+      background: #007bff;
       color: white;
       border: none;
+      padding: 10px 20px;
       border-radius: 4px;
       cursor: pointer;
-      font-weight: 500;
-      transition: background 0.2s;
+      font-size: 14px;
     }
 
     button:hover {
-      background: #2980b9;
+      background: #0056b3;
     }
 
     button:disabled {
-      background: #95a5a6;
+      background: #ccc;
       cursor: not-allowed;
     }
 
-    button.secondary {
-      background: #95a5a6;
+    .btn-secondary {
+      background: #6c757d;
     }
 
-    button.secondary:hover {
-      background: #7f8c8d;
+    .btn-secondary:hover {
+      background: #545b62;
     }
 
-    .placeholder {
-      padding: 3rem;
-      text-align: center;
-      color: #95a5a6;
-      background: #f9f9f9;
+    .btn-success {
+      background: #28a745;
+    }
+
+    .btn-success:hover {
+      background: #218838;
+    }
+
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .checkbox-group input[type="checkbox"] {
+      width: auto;
+    }
+
+    .multi-select {
+      border: 1px solid #ddd;
       border-radius: 4px;
-      border: 2px dashed #ddd;
+      padding: 10px;
+      max-height: 150px;
+      overflow-y: auto;
+      background: white;
+    }
+
+    .multi-select label {
+      display: flex;
+      align-items: center;
+      padding: 5px;
+      margin-bottom: 5px;
+      cursor: pointer;
+    }
+
+    .multi-select input[type="checkbox"] {
+      width: auto;
+      margin-right: 8px;
+    }
+
+    .status {
+      padding: 15px;
+      border-radius: 4px;
+      margin-top: 20px;
+      display: none;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    
+    .status.scrollable {
+      max-height: 500px;
+      overflow-y: auto;
+    }
+
+    /* Processing progress */
+    .proc-container { margin-top: 16px; display: none; }
+    .proc-label { font-size: 13px; color: #555; margin-bottom: 6px; }
+    .progress {
+      width: 100%;
+      height: 10px;
+      background: #eee;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: #007bff;
+      transition: width 0.2s ease;
+    }
+    
+    @keyframes progress-animation {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    
+    .proc-meta { font-size: 12px; color: #666; margin-top: 6px; }
+
+    .status.success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+
+    .status.error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+
+    .status.warning {
+      background: #fff3cd;
+      color: #856404;
+      border: 1px solid #ffeaa7;
+    }
+
+    .info {
+      color: #666;
+      font-size: 13px;
+      margin-top: 5px;
+    }
+
+    .create-bundle-btn {
+      width: 100%;
+      padding: 15px;
+      font-size: 16px;
+      margin-top: 20px;
+    }
+    
+    /* Bundle type toggle */
+    .bundle-type-section {
+      background: #e7f3ff;
+      border: 2px solid #007bff;
+      margin-bottom: 25px;
+    }
+    
+    .bundle-type-toggle {
+      display: flex;
+      gap: 30px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    
+    .bundle-type-toggle label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+    }
+    
+    .bundle-type-toggle input[type="radio"] {
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+    }
+    
+    .bundle-type-info {
+      color: #666;
+      font-size: 14px;
+      margin-top: 10px;
+      padding: 10px;
+      background: #fff;
+      border-radius: 4px;
+    }
+    
+    /* Hierarchical section (initially hidden) */
+    .hierarchical-only {
+      display: none;
+    }
+    
+    .hierarchical-only.visible {
+      display: block;
+    }
+    
+    /* Tree builder styles */
+    .tree-builder {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 15px;
+      background: #fafafa;
+    }
+    
+    .tree-level {
+      margin-left: 20px;
+      border-left: 2px solid #ccc;
+      padding-left: 15px;
+      margin-top: 10px;
+    }
+    
+    .tree-node {
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+    
+    .tree-node.organizational {
+      background: #fff8e1;
+      border: 1px dashed #ffa726;
+    }
+    
+    .tree-node-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    
+    .tree-node-field {
+      flex: 1;
+    }
+    
+    .tree-node-field select {
+      width: 100%;
+    }
+    
+    .tree-node-values {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+      padding: 8px;
+      background: #f5f5f5;
+      border-radius: 4px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    
+    .tree-value-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      font-size: 13px;
+    }
+    
+    .tree-value-item input[type="checkbox"] {
+      width: auto;
+      margin: 0;
+    }
+    
+    .tree-value-count {
+      color: #666;
+      font-size: 11px;
+      margin-left: 4px;
+    }
+    
+    .tree-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    
+    .btn-tree {
+      padding: 6px 12px;
+      font-size: 13px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    .btn-tree.add {
+      background: #28a745;
+      color: white;
+    }
+    
+    .btn-tree.remove {
+      background: #dc3545;
+      color: white;
+    }
+    
+    .btn-tree:hover {
+      opacity: 0.8;
+    }
+    
+    /* Drag and drop styles */
+    .value-drag-handle {
+      cursor: grab;
+      padding: 4px 6px;
+      color: #999;
+      font-size: 16px;
+      user-select: none;
+    }
+    
+    .value-drag-handle:hover {
+      color: #333;
+      background: #f0f0f0;
+      border-radius: 3px;
+    }
+    
+    .value-drag-handle:active {
+      cursor: grabbing;
+    }
+    
+    .value-item-dragging {
+      opacity: 0.5;
+      background: #e3f2fd !important;
+      border: 2px dashed #2196f3 !important;
+    }
+    
+    .value-item-drag-over {
+      border-top: 3px solid #2196f3 !important;
+    }
+    
+    /* Collapse/expand styles */
+    .collapse-toggle {
+      cursor: pointer;
+      padding: 4px 8px;
+      color: #666;
+      font-size: 14px;
+      user-select: none;
+      font-weight: bold;
+      margin-right: 5px;
+      display: inline-block;
+      width: 20px;
+      text-align: center;
+      transition: transform 0.2s ease;
+    }
+    
+    .collapse-toggle:hover {
+      color: #333;
+      background: #f0f0f0;
+      border-radius: 3px;
+    }
+    
+    .collapse-toggle.collapsed {
+      transform: rotate(-90deg);
+    }
+    
+    .value-children-container {
+      margin-top: 10px;
+      margin-left: 20px;
+      border-left: 2px solid #e0e0e0;
+      padding-left: 15px;
+      transition: all 0.2s ease;
+    }
+    
+    .value-children-container.collapsed {
+      display: none;
+    }
+    
+    /* Organizational node drop zones */
+    .org-drop-zone {
+      transition: background-color 0.2s ease;
+    }
+    
+    .org-drop-zone-over {
+      background-color: #e3f2fd !important;
+      border-color: #2196f3 !important;
+    }
+    
+    /* Insertion indicators for reordering within groups */
+    .org-insert-before {
+      border-left: 3px solid #2196f3 !important;
+      padding-left: 7px !important;
+    }
+    
+    .org-insert-after {
+      border-right: 3px solid #2196f3 !important;
+      padding-right: 7px !important;
+    }
+    
+    /* Group reordering indicators */
+    .org-group-drag-over-before {
+      border-top: 4px solid #ff9800 !important;
+      margin-top: 4px;
+    }
+    
+    .org-group-drag-over-after {
+      border-bottom: 4px solid #ff9800 !important;
+      margin-bottom: 4px;
+    }
+    
+    .org-group-container {
+      transition: opacity 0.2s ease;
+    }
+    
+    .org-group-container:active {
+      cursor: grabbing;
+    }
+    
+    /* Filter styles */
+    .filter-group {
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      padding: 15px;
+      margin-bottom: 10px;
+      position: relative;
+    }
+    
+    .filter-group-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #dee2e6;
+    }
+    
+    .filter-group-logic {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    
+    .filter-group-logic select {
+      width: auto;
+      padding: 5px 10px;
+      font-weight: 600;
+    }
+    
+    .filter-remove-btn {
+      background: #dc3545;
+      padding: 5px 12px;
+      font-size: 12px;
+    }
+    
+    .filter-condition {
+      background: white;
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      padding: 12px;
+      margin-bottom: 8px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1.5fr auto;
+      gap: 10px;
+      align-items: start;
+    }
+    
+    .filter-condition select,
+    .filter-condition input {
+      width: 100%;
+      padding: 6px 10px;
+    }
+    
+    .filter-condition-not {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      grid-column: span 4;
+      font-size: 13px;
+      color: #666;
+    }
+    
+    .filter-condition-not input[type="checkbox"] {
+      width: auto;
+    }
+    
+    .filter-add-condition {
+      background: #28a745;
+      padding: 6px 12px;
+      font-size: 13px;
+      margin-top: 5px;
+    }
+    
+    .filter-value-container {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    
+    .filter-regex-link {
+      font-size: 11px;
+      color: #007bff;
+      text-decoration: none;
+      margin-top: 2px;
+    }
+    
+    .filter-regex-link:hover {
+      text-decoration: underline;
+    }
+    
+    .filter-list-container {
+      max-height: 150px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 8px;
+      background: white;
+    }
+    
+    .filter-list-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 0;
+      font-size: 13px;
+    }
+    
+    .filter-list-item input[type="checkbox"] {
+      width: auto;
     }
   </style>
 </head>
 <body>
+  <script src="bundler-renderer.js"></script>
   <div class="container">
-    <h1>📦 Bundle Creator</h1>
-    <p class="description">
-      Create tone matching bundles from your Dekereke XML database and audio files.
-      Configure hierarchy settings and filters to prepare data for tone group assignment.
-    </p>
+    <h1>Tone Matching Bundler</h1>
 
-    <!-- Source Files Section -->
-    <div class="section">
-      <h2>Source Files</h2>
+    <div class="section bundle-type-section">
+      <h2>Bundle Type</h2>
+      <div class="bundle-type-toggle">
+        <label>
+          <input type="radio" name="bundleType" value="legacy" checked onchange="handleBundleTypeChange()">
+          Legacy Single Bundle (.tncmp)
+        </label>
+        <label>
+          <input type="radio" name="bundleType" value="hierarchical" onchange="handleBundleTypeChange()">
+          Hierarchical Macro-Bundle (.tnset)
+        </label>
+      </div>
+      <div class="bundle-type-info" id="bundleTypeInfo">
+        <strong>Legacy mode:</strong> Creates a single bundle file with all words. Compatible with all app versions.
+      </div>
       
-      <div class="file-selector">
-        <label style="min-width: 100px;">XML File:</label>
-        <div id="xml-path" class="file-path empty">No file selected</div>
-        <button id="browse-xml">Browse...</button>
-      </div>
-
-      <div class="file-selector">
-        <label style="min-width: 100px;">Audio Folder:</label>
-        <div id="audio-path" class="file-path empty">No folder selected</div>
-        <button id="browse-audio">Browse...</button>
-      </div>
-    </div>
-
-    <!-- Settings Section -->
-    <div class="section">
-      <h2>Bundle Settings</h2>
-      <div class="placeholder">
-        Hierarchy and filter settings will appear here
+      <!-- Linked bundle option (only for hierarchical) -->
+      <div class="form-group hierarchical-only" id="linkedBundleOption" style="margin-top: 15px;">
+        <div class="checkbox-group">
+          <input type="checkbox" id="createLinkedBundle" onchange="handleLinkedBundleChange()">
+          <label for="createLinkedBundle">Create Linked Bundle (link to existing files instead of embedding)</label>
+        </div>
+        <div class="info" id="linkedBundleInfo" style="display: none; margin-top: 8px; padding: 10px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;">
+          <strong>Linked Bundle:</strong> Stores file paths to your XML and audio folder instead of copying the files into the bundle. 
+          The desktop matching app will work directly on the original files, applying changes as you make them. 
+          <strong>Note:</strong> The XML and audio folder must remain in their current locations and be accessible when using this bundle.
+        </div>
       </div>
     </div>
 
-    <!-- Create Bundle Section -->
     <div class="section">
-      <h2>Create Bundle</h2>
-      <div style="display: flex; gap: 1rem; align-items: center;">
-        <button id="create-bundle" disabled>Create Bundle</button>
-        <button id="open-in-matching" class="secondary" disabled>Create & Open in Matching</button>
+      <h2>Record Filters (Optional)</h2>
+      <div class="info" style="margin-bottom: 15px;">
+        Filter which records from the XML file are included in the bundle. Only records that pass these filters will be available for hierarchy setup and bundling. Leave empty to include all records.
+      </div>
+      
+      <div class="form-group">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <label style="margin: 0;">Filter Conditions</label>
+          <button onclick="addFilterGroup()" style="padding: 5px 15px;">Add Filter Group</button>
+        </div>
+        
+        <div id="filterContainer" style="background: white; padding: 15px; border-radius: 4px; border: 1px solid #ddd; min-height: 60px;">
+          <p class="info" style="color: #999; text-align: center; margin: 20px 0;">No filters configured - all records will be included</p>
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <button onclick="testFilters()" style="background: #28a745;">Test Filters</button>
+          <button onclick="clearAllFilters()" style="background: #dc3545;">Clear All Filters</button>
+          <span id="filterTestResult" style="color: #666; font-size: 14px;"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>1. XML File</h2>
+      <div class="form-group">
+        <label>Select Dekereke XML File</label>
+        <div class="file-selector">
+          <input type="text" id="xmlPath" readonly placeholder="No file selected">
+          <button onclick="selectXmlFile()">Browse</button>
+        </div>
+        <div class="info" id="xmlInfo"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>2. Display Settings</h2>
+      <div class="form-group">
+        <label>Bundle Description</label>
+        <input type="text" id="bundleDescription" placeholder="Describe this bundle (e.g., CVCV Nouns)">
+      </div>
+      <div class="form-group">
+        <label>Written Form Elements (select one or more)</label>
+        <div id="writtenFormElements" class="multi-select">
+          <p class="info">Load XML file first to see available fields</p>
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="checkbox-group">
+          <input type="checkbox" id="showWrittenForm" checked>
+          <label for="showWrittenForm">Show written forms to user</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="checkbox-group">
+          <input type="checkbox" id="showGloss">
+          <label for="showGloss">Include gloss</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Gloss element (data_form child)</label>
+        <select id="glossElement">
+          <option value="">— Select element —</option>
+        </select>
+        <div class="info">Pick which element in each data_form contains the gloss/meaning (e.g., "Gloss").</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>3. Audio Settings</h2>
+      <div class="form-group">
+        <label>Audio Folder</label>
+        <div class="file-selector">
+          <input type="text" id="audioFolder" readonly placeholder="No folder selected">
+          <button onclick="selectAudioFolder()">Browse</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Audio Variants</label>
+        <div class="info">Add one or more variants. Each variant can optionally add a suffix before the file extension (e.g., sound.wav → sound-phon.wav). The first variant is used by older app versions.</div>
+        <div id="audioVariants"></div>
+        <div style="margin-top:10px;">
+          <button class="btn-secondary" id="addAudioVariantBtn">Add Variant</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section hierarchical-only">
+      <h2>3b. Hierarchical Organization</h2>
+      <div class="info" style="margin-bottom: 15px;">
+        Build a category hierarchy to organize words into sub-bundles. Each level filters by an XML field, 
+        and each value becomes a sub-bundle. Select which values to include at each level.
+      </div>
+      <div class="tree-builder">
+        <div id="hierarchyTree">
+          <!-- Tree will be rendered here dynamically -->
+        </div>
+        <div class="tree-actions">
+          <!-- Tree will be rendered here by JavaScript -->
+          <!-- Initial state handled in renderer.js renderHierarchyTree() -->
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="referenceNumbersSection">
+      <h2>4. Record Filtering</h2>
+      <div class="form-group">
+        <label>Reference Numbers (one per line, or comma/space separated)</label>
+        <textarea id="referenceNumbers" placeholder="Leave empty to include all records&#10;Or enter specific reference numbers like:&#10;001&#10;002&#10;003"></textarea>
+        <div class="info">Only records with these reference numbers will be included. For hierarchical bundles, use the hierarchy tree above instead.</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>5. User Input Settings</h2>
+      <div class="form-group">
+        <div class="checkbox-group">
+          <input type="checkbox" id="requireUserSpelling">
+          <label for="requireUserSpelling">Require user to type spelling for each word</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="checkbox-group">
+          <input type="checkbox" id="showReferenceNumbers">
+          <label for="showReferenceNumbers">Show reference numbers in matching apps</label>
+        </div>
+        <div class="info">Display reference numbers alongside words during matching sessions</div>
+      </div>
+      <div class="form-group">
+        <label>Element to store user spelling</label>
+        <select id="userSpellingElement">
+          <option value="">— Select element —</option>
+        </select>
+        <div id="userSpellingWarning" style="color: #d9534f; font-size: 12px; margin-top: 6px; display: none;"></div>
+      </div>
+      <div class="form-group">
+        <label>Element to store tone group assignment</label>
+        <select id="toneGroupElement">
+          <option value="">— Select element —</option>
+        </select>
+      </div>
+      <div class="form-group hierarchical-only">
+        <label style="font-weight: bold; margin-bottom: 8px; display: block;">Optional Tone Fields</label>
+        <div class="info" style="margin-bottom: 12px;">Configure additional fields for tone group metadata (Hierarchical bundles only)</div>
+        
+        <div style="display: flex; align-items: center; margin-bottom: 8px;">
+          <input type="checkbox" id="enableToneGroupId" style="width: auto; margin-right: 8px;">
+          <label for="enableToneGroupId" style="flex: 0 0 120px; margin: 0;">ID Field:</label>
+          <select id="toneGroupIdField" style="flex: 1;" disabled>
+            <option value="">— Select element —</option>
+          </select>
+        </div>
+        
+        <div style="display: flex; align-items: center; margin-bottom: 8px;">
+          <input type="checkbox" id="enablePitchField" style="width: auto; margin-right: 8px;">
+          <label for="enablePitchField" style="flex: 0 0 120px; margin: 0;">Pitch Field:</label>
+          <select id="pitchField" style="flex: 1;" disabled>
+            <option value="">— Select element —</option>
+          </select>
+        </div>
+        
+        <div style="display: flex; align-items: center; margin-bottom: 8px;">
+          <input type="checkbox" id="enableAbbreviationField" style="width: auto; margin-right: 8px;">
+          <label for="enableAbbreviationField" style="flex: 0 0 120px; margin: 0;">Abbreviation Field:</label>
+          <select id="abbreviationField" style="flex: 1;" disabled>
+            <option value="">— Select element —</option>
+          </select>
+        </div>
+        
+        <div style="display: flex; align-items: center; margin-bottom: 8px;">
+          <input type="checkbox" id="enableExemplarField" style="width: auto; margin-right: 8px;">
+          <label for="enableExemplarField" style="flex: 0 0 120px; margin: 0;">Exemplar Field:</label>
+          <select id="exemplarField" style="flex: 1;" disabled>
+            <option value="">— Select element —</option>
+          </select>
+        </div>
+      </div>
+      
+      <div class="form-group hierarchical-only">
+        <label style="font-weight: bold; margin-bottom: 8px; display: block;">Pre-populate Tone Groups from Existing Data</label>
+        <div class="info" style="margin-bottom: 12px;">
+          If your XML already has tone group data, select which field to use as the primary basis for grouping. 
+          Words with matching values in this field will be grouped together. The matching app will then check 
+          for inconsistencies in other fields and report conflicts before allowing export.
+        </div>
+        
+        <div style="margin-bottom: 12px;">
+          <label style="font-weight: 500; margin-bottom: 6px; display: block;">Group words by:</label>
+          
+          <div style="display: flex; align-items: center; margin-bottom: 6px;">
+            <input type="radio" name="groupingField" id="loadGroupsFromNone" value="none" style="width: auto; margin-right: 8px;" checked>
+            <label for="loadGroupsFromNone" style="flex: 0 0 180px; margin: 0;">Don't pre-populate</label>
+            <div class="info" style="flex: 1; margin: 0; font-size: 11px;">
+              Start with empty groups (default)
+            </div>
+          </div>
+          
+          <div style="display: flex; align-items: center; margin-bottom: 6px;">
+            <input type="radio" name="groupingField" id="loadGroupsFromId" value="id" style="width: auto; margin-right: 8px;">
+            <label for="loadGroupsFromId" style="flex: 0 0 180px; margin: 0;">Group ID field</label>
+            <div class="info" style="flex: 1; margin: 0; font-size: 11px;">
+              Group by unique identifier (most reliable)
+            </div>
+          </div>
+          
+          <div style="display: flex; align-items: center; margin-bottom: 6px;">
+            <input type="radio" name="groupingField" id="loadGroupsFromPitch" value="pitch" style="width: auto; margin-right: 8px;">
+            <label for="loadGroupsFromPitch" style="flex: 0 0 180px; margin: 0;">Pitch field</label>
+            <div class="info" style="flex: 1; margin: 0; font-size: 11px;">
+              Group words with identical pitch transcriptions
+            </div>
+          </div>
+          
+          <div style="display: flex; align-items: center; margin-bottom: 6px;">
+            <input type="radio" name="groupingField" id="loadGroupsFromAbbreviation" value="abbreviation" style="width: auto; margin-right: 8px;">
+            <label for="loadGroupsFromAbbreviation" style="flex: 0 0 180px; margin: 0;">Abbreviation field</label>
+            <div class="info" style="flex: 1; margin: 0; font-size: 11px;">
+              Group words with identical tone abbreviations
+            </div>
+          </div>
+          
+          <div style="display: flex; align-items: center; margin-bottom: 6px;">
+            <input type="radio" name="groupingField" id="loadGroupsFromExemplar" value="exemplar" style="width: auto; margin-right: 8px;">
+            <label for="loadGroupsFromExemplar" style="flex: 0 0 180px; margin: 0;">Exemplar field</label>
+            <div class="info" style="flex: 1; margin: 0; font-size: 11px;">
+              Group words with matching exemplar values
+            </div>
+          </div>
+        </div>
+        
+        <div style="background: #d1ecf1; border: 1px solid #bee5eb; border-radius: 4px; padding: 12px; margin-bottom: 12px;">
+          <strong>ℹ️ Conflict Detection:</strong> Before export, the matching app will analyze all configured 
+          fields and report any inconsistencies within groups. You'll see which words have conflicting values 
+          and can choose whether to overwrite them with the group's majority values or cancel to fix the data manually.
+        </div>
+        
+        <button id="checkConflictsBtn" onclick="checkConflicts()" style="width: 100%; padding: 10px; background: #17a2b8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
+          🔍 Check for Conflicts Now
+        </button>
+        <div id="conflictCheckResult" style="margin-top: 12px; display: none;"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>6. Audio Processing</h2>
+      <div class="form-group">
+        <div class="checkbox-group">
+          <input type="checkbox" id="convertToFlac">
+          <label for="convertToFlac">Convert to FLAC</label>
+        </div>
+        <div class="info">Converts audio files to FLAC format (lossless compression, smaller than WAV, fully compatible with mobile app).</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>7. Output</h2>
+      <div class="form-group">
+        <label>Output Bundle File</label>
+        <div class="file-selector">
+          <input type="text" id="outputPath" readonly placeholder="No output file selected">
+          <button onclick="selectOutputFile()">Browse</button>
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:16px;">
+        <label for="compressionLevel">Compression Level: <span id="compressionLevelValue">6</span></label>
+        <input type="range" id="compressionLevel" min="0" max="9" value="6" 
+               oninput="updateCompressionEstimate()" 
+               style="width: 100%; margin: 8px 0;">
+        <div style="display: flex; justify-content: space-between; font-size: 11px; color: #666; margin-bottom: 8px;">
+          <span>0 (fastest)</span>
+          <span>5 (balanced)</span>
+          <span>9 (smallest)</span>
+        </div>
+        <div id="compressionEstimate" class="info" style="font-size: 12px; padding: 8px; background: #f8f9fa; border-radius: 4px; margin-top: 4px;">
+          <strong>Estimated:</strong> File size ~100% | Processing time ~1.0x
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:12px; display:flex; gap:10px; align-items:center;">
+        <button class="btn-secondary" onclick="saveProfile()">Save Profile</button>
+        <button class="btn-secondary" onclick="loadProfile()">Load Profile</button>
+        <span class="info">Profiles store all settings including a persistent Bundle ID.</span>
+      </div>
+    </div>
+
+    <div id="procProgress" class="proc-container" aria-live="polite">
+      <div class="proc-label">Processing audio…</div>
+      <div class="progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div id="procBar" class="progress-bar"></div>
+      </div>
+      <div id="procMeta" class="proc-meta">0% — 0/0 — elapsed 0:00 — remaining 0:00</div>
+      <div id="procCancelHint" class="proc-meta" aria-live="off" style="color:#888;">To cancel processing, quit the application.</div>
+    </div>
+
+    <button class="btn-success create-bundle-btn" onclick="createBundle()" id="createBtn" disabled>
+      Create Bundle
+    </button>
+
+    <div class="status" id="status"></div>
+  </div>
+
+  <!-- Save Profile Modal -->
+  <div id="saveProfileOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.35); align-items:center; justify-content:center; z-index: 1000;">
+    <div role="dialog" aria-modal="true" aria-labelledby="saveProfileTitle" style="background:#fff; width:min(520px, 92vw); border-radius:8px; box-shadow:0 12px 32px rgba(0,0,0,0.2);">
+      <div style="padding:16px 20px; border-bottom:1px solid #eee;">
+        <h2 id="saveProfileTitle" style="font-size:18px; color:#333;">Save Profile</h2>
+      </div>
+      <form id="saveProfileForm" style="padding:18px 20px;">
+        <label for="profileNameInput" style="display:block; color:#555; margin-bottom:8px;">Profile name (used as filename)</label>
+        <input id="profileNameInput" type="text" placeholder="e.g., CVCV_Nouns_Study_A" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; font-size:14px;" required>
+        <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:16px;">
+          <button type="button" class="btn-secondary" id="cancelSaveProfileBtn">Cancel</button>
+          <button type="submit" class="btn-success" id="confirmSaveProfileBtn">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Grouping Value Modal -->
+  <div id="addGroupingValueOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.35); align-items:center; justify-content:center; z-index: 1000;">
+    <div role="dialog" aria-modal="true" aria-labelledby="addGroupingValueTitle" style="background:#fff; width:min(520px, 92vw); border-radius:8px; box-shadow:0 12px 32px rgba(0,0,0,0.2);">
+      <div style="padding:16px 20px; border-bottom:1px solid #eee;">
+        <h2 id="addGroupingValueTitle" style="font-size:18px; color:#333;">Add Organizational Grouping</h2>
+      </div>
+      <form id="addGroupingValueForm" style="padding:18px 20px;">
+        <label for="groupingValueInput" style="display:block; color:#555; margin-bottom:8px;">Grouping name</label>
+        <input id="groupingValueInput" type="text" placeholder='e.g., "1 Syllable", "High Tone", "Common Words"' style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; font-size:14px;" required>
+        <div style="color:#666; font-size:12px; margin-top:8px; font-style:italic;">
+          This creates a virtual grouping that doesn't correspond to an XML field.
+        </div>
+        <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:16px;">
+          <button type="button" class="btn-secondary" id="cancelAddGroupingValueBtn">Cancel</button>
+          <button type="submit" class="btn-success" id="confirmAddGroupingValueBtn">Add Grouping</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Child Level Modal -->
+  <div id="addChildLevelOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.35); align-items:center; justify-content:center; z-index: 1000;">
+    <div role="dialog" aria-modal="true" aria-labelledby="addChildLevelTitle" style="background:#fff; width:min(520px, 92vw); border-radius:8px; box-shadow:0 12px 32px rgba(0,0,0,0.2);">
+      <div style="padding:16px 20px; border-bottom:1px solid #eee;">
+        <h2 id="addChildLevelTitle" style="font-size:18px; color:#333;">Add Child Level to Group</h2>
+        <div id="addChildLevelGroupName" style="font-size:14px; color:#666; margin-top:4px;"></div>
+      </div>
+      <div style="padding:18px 20px;">
+        <label style="display:block; color:#555; margin-bottom:12px; font-weight: 600;">Choose child level type:</label>
+        
+        <!-- Option 1: XML Field -->
+        <div style="margin-bottom: 16px;">
+          <label style="display: flex; align-items: start; cursor: pointer; padding: 12px; border: 2px solid #ddd; border-radius: 6px; background: #f9f9f9;">
+            <input type="radio" name="childLevelType" value="xmlField" style="margin-top: 3px; margin-right: 10px;" checked>
+            <div>
+              <div style="font-weight: 600; margin-bottom: 4px;">XML Field</div>
+              <div style="font-size: 12px; color: #666;">Add a standard hierarchy level based on an XML field (e.g., Tone, Category)</div>
+              <div style="margin-top: 8px;">
+                <label for="childFieldSelect" style="display: block; font-size: 12px; color: #555; margin-bottom: 4px;">Select field:</label>
+                <select id="childFieldSelect" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px;">
+                  <option value="">-- Select XML field --</option>
+                </select>
+              </div>
+            </div>
+          </label>
+        </div>
+        
+        <!-- Option 2: Organizational Level -->
+        <div style="margin-bottom: 16px;">
+          <label style="display: flex; align-items: start; cursor: pointer; padding: 12px; border: 2px solid #ddd; border-radius: 6px; background: #f9f9f9;">
+            <input type="radio" name="childLevelType" value="organizational" style="margin-top: 3px; margin-right: 10px;">
+            <div>
+              <div style="font-weight: 600; margin-bottom: 4px;">Organizational Level</div>
+              <div style="font-size: 12px; color: #666;">Create another organizational grouping level (nested virtual groups)</div>
+              <div style="margin-top: 8px;">
+                <label for="orgBaseFieldSelect" style="display: block; font-size: 12px; color: #555; margin-bottom: 4px;">Field to organize:</label>
+                <select id="orgBaseFieldSelect" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px;">
+                  <option value="">-- Select XML field --</option>
+                </select>
+              </div>
+            </div>
+          </label>
+        </div>
+        
+        <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:16px;">
+          <button type="button" class="btn-secondary" id="cancelAddChildLevelBtn">Cancel</button>
+          <button type="button" class="btn-success" id="confirmAddChildLevelBtn">Add Child Level</button>
+        </div>
       </div>
     </div>
   </div>
 
-  <script>
-    // Placeholder functionality - will be connected to IPC later
-    document.getElementById('browse-xml').addEventListener('click', () => {
-      console.log('Browse XML clicked');
-    });
+  <!-- Add Custom Field Modal -->
+  <div id="addCustomFieldOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.35); align-items:center; justify-content:center; z-index: 1000;">
+    <div role="dialog" aria-modal="true" aria-labelledby="addCustomFieldTitle" style="background:#fff; width:min(520px, 92vw); border-radius:8px; box-shadow:0 12px 32px rgba(0,0,0,0.2);">
+      <div style="padding:16px 20px; border-bottom:1px solid #eee;">
+        <h2 id="addCustomFieldTitle" style="font-size:18px; color:#333;">Add Custom XML Field</h2>
+      </div>
+      <form id="addCustomFieldForm" style="padding:18px 20px;">
+        <label for="customFieldInput" style="display:block; color:#555; margin-bottom:8px;">Field name</label>
+        <input id="customFieldInput" type="text" placeholder="e.g., MyCustomField" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; font-size:14px;" required pattern="[A-Za-z][A-Za-z0-9_]*">
+        <div style="color:#666; font-size:12px; margin-top:8px;">
+          <strong>Field naming rules:</strong><br>
+          • Must start with a letter (A-Z or a-z)<br>
+          • Can contain letters, numbers, and underscores<br>
+          • No spaces or special characters<br>
+          • Examples: <code style="background:#f0f0f0; padding:2px 4px; border-radius:3px;">MyToneGroup</code>, <code style="background:#f0f0f0; padding:2px 4px; border-radius:3px;">Custom_Spelling</code>
+        </div>
+        <div style="color:#ff6b6b; font-size:12px; margin-top:12px; padding:10px; background:#fff5f5; border-left:3px solid #ff6b6b; border-radius:4px;">
+          <strong>Note:</strong> This field will be created in the exported XML even if it doesn't exist in your source data.
+        </div>
+        <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:16px;">
+          <button type="button" class="btn-secondary" id="cancelAddCustomFieldBtn">Cancel</button>
+          <button type="submit" class="btn-success" id="confirmAddCustomFieldBtn">Add Field</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
-    document.getElementById('browse-audio').addEventListener('click', () => {
-      console.log('Browse audio clicked');
-    });
-
-    document.getElementById('create-bundle').addEventListener('click', () => {
-      console.log('Create bundle clicked');
-    });
-
-    document.getElementById('open-in-matching').addEventListener('click', () => {
-      console.log('Create & open in matching clicked');
-    });
-  </script>
+  <script src="filter-functions.js"></script>
+  <script src="renderer.js"></script>
 </body>
 </html>
