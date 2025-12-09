@@ -3698,6 +3698,26 @@ async function loadProfile() {
     renderHierarchyTree();
   }
 
+  // Restore filter groups
+  if (Array.isArray(s.filterGroups) && s.filterGroups.length > 0) {
+    console.log('[import-data] Restoring filter groups from profile:', s.filterGroups.length, 'groups');
+    filterGroups = s.filterGroups;
+    
+    // Migrate old format to new format if needed (conditions -> items)
+    filterGroups = filterGroups.map(group => migrateFilterGroup(group));
+    
+    // Ensure IDs are sequential
+    const allIds = collectAllFilterIds(filterGroups);
+    const maxGroupId = Math.max(...allIds.groupIds, 0);
+    const maxConditionId = Math.max(...allIds.conditionIds, 0);
+    nextFilterGroupId = maxGroupId + 1;
+    nextFilterConditionId = maxConditionId + 1;
+    renderFilterGroups();
+    console.log('[import-data] Filter groups rendered from profile');
+  } else {
+    console.log('[import-data] No filter groups in profile');
+  }
+
   await persistSettings();
   checkFormValid();
 }
