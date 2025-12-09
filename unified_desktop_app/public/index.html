@@ -134,20 +134,32 @@
 <body>
   <!-- Tab Navigation -->
   <div class="tab-container">
-    <div class="tab active" data-view="bundler">📦 Bundler</div>
-    <div class="tab" data-view="matching">🎯 Matching</div>
+    <div class="tab active" data-view="import">📥 Import Data</div>
+    <div class="tab" data-view="analysis">🎯 Tone Analysis</div>
+    <div class="tab" data-view="export">📤 Export to Mobile</div>
+    <div class="tab" data-view="import-mobile">📲 Import from Mobile</div>
   </div>
 
   <!-- View Container -->
   <div class="view-container">
-    <!-- Bundler View -->
-    <div id="bundler-view" class="view active">
-      <iframe src="views/bundler.html" style="width: 100%; height: 100%; border: none;"></iframe>
+    <!-- Import Data View -->
+    <div id="import-view" class="view active">
+      <iframe src="views/import-data.html" style="width: 100%; height: 100%; border: none;"></iframe>
     </div>
 
-    <!-- Matching View -->
-    <div id="matching-view" class="view">
-      <iframe src="views/matching.html" style="width: 100%; height: 100%; border: none;"></iframe>
+    <!-- Tone Analysis View -->
+    <div id="analysis-view" class="view">
+      <iframe src="views/tone-analysis.html" style="width: 100%; height: 100%; border: none;"></iframe>
+    </div>
+
+    <!-- Export to Mobile View -->
+    <div id="export-view" class="view">
+      <iframe src="views/export-mobile.html" style="width: 100%; height: 100%; border: none;"></iframe>
+    </div>
+
+    <!-- Import from Mobile View -->
+    <div id="import-mobile-view" class="view">
+      <iframe src="views/import-mobile.html" style="width: 100%; height: 100%; border: none;"></iframe>
     </div>
   </div>
 

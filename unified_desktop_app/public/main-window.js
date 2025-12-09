@@ -32,14 +32,24 @@ window.electronAPI.onSwitchView((viewName) => {
 
 // Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
-  // Cmd/Ctrl + 1 = Bundler
+  // Cmd/Ctrl + 1 = Import Data
   if ((e.metaKey || e.ctrlKey) && e.key === '1') {
     e.preventDefault();
-    switchView('bundler');
+    switchView('import');
   }
-  // Cmd/Ctrl + 2 = Matching
+  // Cmd/Ctrl + 2 = Tone Analysis
   if ((e.metaKey || e.ctrlKey) && e.key === '2') {
     e.preventDefault();
-    switchView('matching');
+    switchView('analysis');
+  }
+  // Cmd/Ctrl + 3 = Export to Mobile
+  if ((e.metaKey || e.ctrlKey) && e.key === '3') {
+    e.preventDefault();
+    switchView('export');
+  }
+  // Cmd/Ctrl + 4 = Import from Mobile
+  if ((e.metaKey || e.ctrlKey) && e.key === '4') {
+    e.preventDefault();
+    switchView('import-mobile');
   }
 });

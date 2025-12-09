@@ -28,13 +28,14 @@ let audioFolderPath = null;
 let outputFilePath = null;
 let persisted = null; // settings loaded from main
 let audioVariants = [];
-let bundleType = 'legacy'; // 'legacy' or 'hierarchical'
+let bundleType = 'hierarchical'; // Always hierarchical for new workflow
 let hierarchyTree = null; // Root node: {field, values: [{value, label, count, included, audioVariants, children: [nodes], isOrganizational: bool}]}
 // isOrganizational: true means this is a virtual grouping node (not tied to XML field)
 let parsedXmlData = null; // Store full parsed XML data for hierarchy analysis
 let filterGroups = []; // Array of filter groups: [{logic: 'AND'|'OR', conditions: [{field, operator, value, not, valueType}]}]
 let nextFilterGroupId = 1;
 let nextFilterConditionId = 1;
+let isLinkedBundle = true; // Always create linked bundles in new workflow
 
 // Drag and drop state for reordering values
 let draggedValueContainer = null;
@@ -2963,7 +2964,18 @@ function updateCompressionEstimate() {
   }
 }
 
-async function createBundle() {
+// Import existing .tnset bundle
+async function importExistingBundle() {
+  // TODO: Implement bundle import logic
+  // - Open file dialog for .tnset files
+  // - Check if linked or embedded bundle
+  // - If linked: populate UI with settings
+  // - If embedded/legacy: immediately pass to Tone Analysis tab
+  alert('Import .tnset Bundle feature coming soon!\n\nThis will allow you to:\n- Import existing bundles\n- Edit hierarchy and filters\n- Continue sorting where you left off');
+}
+
+// Start Sorting - creates linked bundle and passes to Tone Analysis
+async function startSorting() {
   const statusEl = document.getElementById('status');
   statusEl.style.display = 'none';
   const procContainer = document.getElementById('procProgress');
@@ -3147,9 +3159,24 @@ async function createBundle() {
     } else {
       showStatus('success', message);
     }
+    
+    // NEW WORKFLOW: Switch to Tone Analysis tab after successful bundle creation
+    setTimeout(async () => {
+      try {
+        // Notify Tone Analysis to load the linked bundle
+        await window.electronAPI.invoke('switch-view', 'analysis');
+        // TODO: Pass bundle configuration to Tone Analysis tab
+      } catch (error) {
+        console.error('Failed to switch to Tone Analysis:', error);
+      }
+    }, 1000);
   } else {
     showStatus('error', `Failed to create bundle: ${result.error}`);
   }
+  
+  // Re-enable button
+  document.getElementById('createBtn').disabled = false;
+  document.getElementById('createBtn').textContent = '🚀 Start Sorting!';
 }
 
 function formatDuration(ms) {

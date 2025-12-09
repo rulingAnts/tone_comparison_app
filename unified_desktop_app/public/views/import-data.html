@@ -591,11 +591,22 @@
   </style>
 </head>
 <body>
-  <script src="bundler-renderer.js"></script>
+  <script src="import-data-renderer.js"></script>
   <div class="container">
-    <h1>Tone Matching Bundler</h1>
+    <h1>Import Data</h1>
 
-    <div class="section bundle-type-section">
+    <!-- Import Bundle Alternative -->
+    <div class="section" style="background: #e7f3ff; border-left: 4px solid #007bff;">
+      <h2>Quick Start: Import Existing Bundle</h2>
+      <p style="margin-bottom: 15px; color: #004085;">Already have a .tnset bundle? Click below to import it and jump straight to Tone Analysis.</p>
+      <button class="btn-success" onclick="importExistingBundle()" style="font-size: 16px; padding: 12px 24px;">
+        📥 Import .tnset Bundle
+      </button>
+      <p class="info" style="margin-top: 10px;">Or configure new data below using your Dekereke XML and audio folder...</p>
+    </div>
+
+    <!-- Bundle type is now always linked - hidden from user -->idden from user -->
+    <div class="section" style="display: none;">
       <h2>Bundle Type</h2>
       <div class="bundle-type-toggle">
         <label>
@@ -921,8 +932,8 @@
       <div id="procCancelHint" class="proc-meta" aria-live="off" style="color:#888;">To cancel processing, quit the application.</div>
     </div>
 
-    <button class="btn-success create-bundle-btn" onclick="createBundle()" id="createBtn" disabled>
-      Create Bundle
+    <button class="btn-success create-bundle-btn" onclick="startSorting()" id="createBtn" disabled>
+      🚀 Start Sorting!
     </button>
 
     <div class="status" id="status"></div>

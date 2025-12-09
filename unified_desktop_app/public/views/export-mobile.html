@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Export to Mobile</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+      padding: 2rem;
+      background: #f5f5f5;
+      margin: 0;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 8px;
+      padding: 2rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    h1 {
+      color: #2c3e50;
+      margin-bottom: 1rem;
+    }
+
+    .warning-banner {
+      background: #fff3cd;
+      border: 2px solid #ffc107;
+      border-radius: 6px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+
+    .warning-icon {
+      font-size: 2rem;
+      line-height: 1;
+    }
+
+    .warning-content h2 {
+      color: #856404;
+      font-size: 1.25rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .warning-content p {
+      color: #856404;
+      line-height: 1.6;
+      margin: 0.5rem 0;
+    }
+
+    .feature-section {
+      margin-top: 2rem;
+      padding: 1.5rem;
+      background: #f8f9fa;
+      border-radius: 6px;
+    }
+
+    .feature-section h3 {
+      color: #495057;
+      margin-bottom: 1rem;
+    }
+
+    .feature-list {
+      list-style: none;
+      padding: 0;
+    }
+
+    .feature-list li {
+      padding: 0.5rem 0;
+      color: #6c757d;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .feature-list li::before {
+      content: "⏳";
+      font-size: 1.25rem;
+    }
+
+    .current-exports {
+      margin-top: 2rem;
+      padding-top: 2rem;
+      border-top: 1px solid #dee2e6;
+    }
+
+    .current-exports h3 {
+      color: #2c3e50;
+      margin-bottom: 1rem;
+    }
+
+    .info-box {
+      background: #d1ecf1;
+      border: 1px solid #bee5eb;
+      border-radius: 6px;
+      padding: 1rem;
+      margin-top: 1rem;
+    }
+
+    .info-box p {
+      color: #0c5460;
+      margin: 0.5rem 0;
+      line-height: 1.6;
+    }
+
+    button {
+      background: #6c757d;
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 4px;
+      cursor: not-allowed;
+      font-size: 1rem;
+      margin-top: 1rem;
+      opacity: 0.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📤 Export to Mobile</h1>
+
+    <div class="warning-banner">
+      <div class="warning-icon">🚧</div>
+      <div class="warning-content">
+        <h2>Under Construction</h2>
+        <p>This feature is currently under development. Full bundle export functionality will be available in a future release.</p>
+        <p><strong>Current limitation:</strong> Legacy export buttons below only work when Tone Analysis has loaded a bundle with embedded XML and audio.</p>
+      </div>
+    </div>
+
+    <div class="feature-section">
+      <h3>Planned Features</h3>
+      <ul class="feature-list">
+        <li>Export legacy bundles (.tncmp) from any branch of your hierarchy</li>
+        <li>Export hierarchical bundles (.tnset) with full organizational structure</li>
+        <li>Use Import Data settings + updated Tone Analysis data</li>
+        <li>Choose which audio variants to include</li>
+        <li>Configure compression levels</li>
+        <li>Audio processing options (trim, normalize, convert to FLAC)</li>
+      </ul>
+    </div>
+
+    <div class="current-exports">
+      <h3>Legacy Export (Limited Functionality)</h3>
+      <div class="info-box">
+        <p><strong>Note:</strong> These export buttons were moved from the Tone Analysis tab.</p>
+        <p>They currently only work when you've loaded a .tnset bundle with embedded XML and audio files into Tone Analysis.</p>
+        <p>For the new workflow (linked bundles from Import Data), full export functionality will be implemented here in a future release.</p>
+      </div>
+      
+      <!-- Export buttons will be moved here from tone-analysis.html -->
+      <div id="legacy-export-buttons">
+        <p style="color: #6c757d; margin-top: 1rem; font-style: italic;">Export buttons from Tone Analysis will appear here once implemented.</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
