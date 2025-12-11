@@ -97,10 +97,15 @@ async function loadViewContent(viewName) {
     if (viewName === 'analysis') {
       // Give the scripts time to load and execute
       setTimeout(() => {
+        console.log('[main-window] Attempting to initialize tone analysis view...');
+        console.log('[main-window] window.initializeToneAnalysisView exists?', !!window.initializeToneAnalysisView);
         if (window.initializeToneAnalysisView) {
+          console.log('[main-window] Calling initializeToneAnalysisView()');
           window.initializeToneAnalysisView();
+        } else {
+          console.error('[main-window] initializeToneAnalysisView not found on window');
         }
-      }, 100);
+      }, 200);
     }
   } catch (error) {
     console.error(`Error loading view ${viewName}:`, error);

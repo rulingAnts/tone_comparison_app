@@ -16,54 +16,54 @@ if (!window.toneAnalysisInitialized) {
 
   // Expose initialization function for main-window to call
   window.initializeToneAnalysisView = async function() {
-  console.log('[tone-analysis] Initializing view, checking for active bundle...');
-  
-  // First, initialize the renderer (fonts, event listeners, etc.)
-  await initializeRenderer();
-  
-  // Then, check if there's an active bundle to load from Import tab
-  try {
-    const bundleInfo = await window.electronAPI.invoke('bundler:get-active-bundle');
+    console.log('[tone-analysis] Initializing view, checking for restored bundle...');
     
-    if (bundleInfo && bundleInfo.bundlePath) {
-      console.log('[tone-analysis] Loading bundle from:', bundleInfo.bundlePath);
+    // First, initialize the renderer (fonts, event listeners, etc.)
+    await initializeRenderer();
+    
+    // Then, check if there's an active bundle already loaded (from Import tab)
+    try {
+      const restored = await ipcRenderer.invoke('check-restored-bundle');
+      console.log('[tone-analysis] Restored bundle check:', restored);
       
-      // Load the bundle using the existing load-bundle handler
-      const result = await ipcRenderer.invoke('load-bundle', bundleInfo.bundlePath);
-      
-      if (result.success) {
-        console.log('[tone-analysis] Bundle loaded successfully:', result);
+      if (restored.restored) {
+        console.log('[tone-analysis] Bundle already loaded, type:', restored.bundleType);
         
         // Update global state
-        bundleSettings = result.settings;
-        session = result.session;
-        bundleType = result.bundleType || 'legacy';
+        bundleSettings = restored.settings;
+        session = restored.session;
+        bundleType = restored.bundleType;
         
-        // Show the appropriate screen based on bundle type
-        if (result.bundleType === 'hierarchical' && result.requiresNavigation) {
-          // Show navigation screen for hierarchical bundle
-          document.getElementById('welcomeScreen').classList.add('hidden');
-          document.getElementById('navigationScreen').classList.remove('hidden');
-          document.getElementById('workArea').classList.add('hidden');
-          renderHierarchyTree(result.hierarchy, result.session.subBundles);
-        } else if (result.bundleType === 'hierarchical' && !result.requiresNavigation) {
-          // Resume work in current sub-bundle
-          document.getElementById('welcomeScreen').classList.add('hidden');
-          document.getElementById('navigationScreen').classList.add('hidden');
-          document.getElementById('workArea').classList.remove('hidden');
-          
-          document.getElementById('subBundleIndicator').classList.remove('hidden');
-          document.getElementById('subBundlePath').textContent = session.currentSubBundle;
-          document.getElementById('backToNavBtn').classList.remove('hidden');
-          
-          initializeAudioVariants();
-          updateProgressIndicator();
-          initializeReferenceToggle();
-          
-          await loadCurrentWord();
-          renderGroups();
+        // Show the appropriate screen based on bundle type and state
+        if (bundleType === 'hierarchical') {
+          if (restored.requiresNavigation) {
+            // Show navigation screen - no sub-bundle selected yet
+            console.log('[tone-analysis] Showing hierarchy navigation with', restored.subBundleCount, 'sub-bundles');
+            document.getElementById('welcomeScreen').classList.add('hidden');
+            document.getElementById('navigationScreen').classList.remove('hidden');
+            document.getElementById('workArea').classList.add('hidden');
+            renderHierarchyTree(restored.hierarchy, restored.session.subBundles);
+          } else {
+            // Resume work in current sub-bundle
+            console.log('[tone-analysis] Resuming work in sub-bundle:', session.currentSubBundle);
+            document.getElementById('welcomeScreen').classList.add('hidden');
+            document.getElementById('navigationScreen').classList.add('hidden');
+            document.getElementById('workArea').classList.remove('hidden');
+            
+            document.getElementById('subBundleIndicator').classList.remove('hidden');
+            document.getElementById('subBundlePath').textContent = session.currentSubBundle;
+            document.getElementById('backToNavBtn').classList.remove('hidden');
+            
+            initializeAudioVariants();
+            updateProgressIndicator();
+            initializeReferenceToggle();
+            
+            await loadCurrentWord();
+            renderGroups();
+          }
         } else {
-          // Legacy bundle or single-bundle workflow
+          // Legacy bundle workflow
+          console.log('[tone-analysis] Loading legacy bundle with', restored.recordCount, 'records');
           document.getElementById('welcomeScreen').classList.add('hidden');
           document.getElementById('navigationScreen').classList.add('hidden');
           document.getElementById('workArea').classList.remove('hidden');
@@ -76,16 +76,13 @@ if (!window.toneAnalysisInitialized) {
           renderGroups();
         }
       } else {
-        console.error('[tone-analysis] Failed to load bundle:', result.error);
-        alert(`Failed to load bundle: ${result.error}`);
+        console.log('[tone-analysis] No active bundle - showing welcome screen');
+        // Welcome screen is already visible by default
       }
-    } else {
-      console.log('[tone-analysis] No active bundle found - showing welcome screen');
+    } catch (error) {
+      console.error('[tone-analysis] Error checking for restored bundle:', error);
     }
-  } catch (error) {
-    console.error('[tone-analysis] Error loading bundle:', error);
-  }
-};
+  };
 
 // State
 let bundleSettings = null;
