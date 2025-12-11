@@ -14,45 +14,155 @@ if (!window.toneAnalysisInitialized) {
     }
   };
 
+  // Helper function to query elements within the analysis view container
+  // This prevents ID collisions with other views (especially import-data view)
+  function getElement(id) {
+    const analysisView = document.getElementById('analysis-view');
+    if (!analysisView) {
+      console.warn('[tone-analysis] analysis-view container not found, falling back to document.getElementById');
+      return getElement(id);
+    }
+    const element = analysisView.querySelector(`#${id}`);
+    if (!element) {
+      console.warn(`[tone-analysis] Element #${id} not found in analysis-view`);
+    }
+    return element;
+  }
+
+  // Helper function to query by selector within the analysis view
+  function querySelector(selector) {
+    const analysisView = document.getElementById('analysis-view');
+    if (!analysisView) {
+      console.warn('[tone-analysis] analysis-view container not found for querySelector');
+      return null;
+    }
+    return analysisView.querySelector(selector);
+  }
+
+  // Helper function to query all by selector within the analysis view
+  function querySelectorAll(selector) {
+    const analysisView = document.getElementById('analysis-view');
+    if (!analysisView) {
+      console.warn('[tone-analysis] analysis-view container not found for querySelectorAll');
+      return [];
+    }
+    return analysisView.querySelectorAll(selector);
+  }
+
   // Expose initialization function for main-window to call
   window.initializeToneAnalysisView = async function() {
-    console.log('[tone-analysis] Initializing view, checking for restored bundle...');
+    console.log('[tone-analysis] Initializing view...');
     
     // First, initialize the renderer (fonts, event listeners, etc.)
     await initializeRenderer();
     
-    // Then, check if there's an active bundle already loaded (from Import tab)
+    // Check if there's an active bundle from Import tab that needs to be loaded
     try {
-      const restored = await ipcRenderer.invoke('check-restored-bundle');
-      console.log('[tone-analysis] Restored bundle check:', restored);
+      const bundleMetadata = await ipcRenderer.invoke('bundler:get-active-bundle');
+      console.log('[tone-analysis] Active bundle metadata:', bundleMetadata);
       
-      if (restored.restored) {
-        console.log('[tone-analysis] Bundle already loaded, type:', restored.bundleType);
+      if (bundleMetadata && bundleMetadata.bundlePath) {
+        // Import tab created a bundle - load it now
+        console.log('[tone-analysis] Loading bundle from Import tab:', bundleMetadata.bundlePath);
         
-        // Update global state
-        bundleSettings = restored.settings;
-        session = restored.session;
-        bundleType = restored.bundleType;
+        const result = await ipcRenderer.invoke('load-bundle', bundleMetadata.bundlePath);
+        console.log('[tone-analysis] Bundle load result:', result);
         
-        // Show the appropriate screen based on bundle type and state
-        if (bundleType === 'hierarchical') {
-          if (restored.requiresNavigation) {
-            // Show navigation screen - no sub-bundle selected yet
-            console.log('[tone-analysis] Showing hierarchy navigation with', restored.subBundleCount, 'sub-bundles');
-            document.getElementById('welcomeScreen').classList.add('hidden');
-            document.getElementById('navigationScreen').classList.remove('hidden');
-            document.getElementById('workArea').classList.add('hidden');
-            renderHierarchyTree(restored.hierarchy, restored.session.subBundles);
-          } else {
-            // Resume work in current sub-bundle
+        if (result.success) {
+          // Update global state
+          bundleSettings = result.settings;
+          session = result.session;
+          bundleType = result.bundleType;
+          
+          // Show the appropriate screen based on bundle type
+          if (result.bundleType === 'hierarchical' && result.requiresNavigation) {
+            console.log('[tone-analysis] Showing hierarchy navigation with', result.subBundleCount, 'sub-bundles');
+            console.log('[tone-analysis] result.hierarchy:', result.hierarchy);
+            console.log('[tone-analysis] result.session.subBundles length:', result.session?.subBundles?.length);
+            getElement('welcomeScreen').classList.add('hidden');
+            getElement('navigationScreen').classList.remove('hidden');
+            getElement('workArea').classList.add('hidden');
+            renderHierarchyTree(result.hierarchy, result.session.subBundles);
+          } else if (result.bundleType === 'hierarchical' && !result.requiresNavigation) {
             console.log('[tone-analysis] Resuming work in sub-bundle:', session.currentSubBundle);
-            document.getElementById('welcomeScreen').classList.add('hidden');
-            document.getElementById('navigationScreen').classList.add('hidden');
-            document.getElementById('workArea').classList.remove('hidden');
+            getElement('welcomeScreen').classList.add('hidden');
+            getElement('navigationScreen').classList.add('hidden');
+            getElement('workArea').classList.remove('hidden');
             
-            document.getElementById('subBundleIndicator').classList.remove('hidden');
-            document.getElementById('subBundlePath').textContent = session.currentSubBundle;
-            document.getElementById('backToNavBtn').classList.remove('hidden');
+            getElement('subBundleIndicator').classList.remove('hidden');
+            getElement('subBundlePath').textContent = session.currentSubBundle;
+            getElement('backToNavBtn').classList.remove('hidden');
+            
+            initializeAudioVariants();
+            updateProgressIndicator();
+            initializeReferenceToggle();
+            
+            await loadCurrentWord();
+            renderGroups();
+          } else {
+            console.log('[tone-analysis] Loading legacy bundle with', result.recordCount, 'records');
+            getElement('welcomeScreen').classList.add('hidden');
+            getElement('navigationScreen').classList.add('hidden');
+            getElement('workArea').classList.remove('hidden');
+            
+            initializeAudioVariants();
+            updateProgressIndicator();
+            initializeReferenceToggle();
+            
+            await loadCurrentWord();
+            renderGroups();
+          }
+          
+          // Clear the active bundle metadata now that it's loaded
+          await ipcRenderer.invoke('bundler:set-active-bundle', null);
+        } else {
+          console.error('[tone-analysis] Failed to load bundle:', result.error);
+          alert(`Failed to load bundle: ${result.error}`);
+        }
+      } else {
+        // No bundle from Import - check if there's a restored session
+        console.log('[tone-analysis] No active bundle from Import, checking for restored session...');
+        const restored = await ipcRenderer.invoke('check-restored-bundle');
+        console.log('[tone-analysis] Restored bundle check:', restored);
+        
+        if (restored.restored) {
+          console.log('[tone-analysis] Restoring previous session, type:', restored.bundleType);
+          
+          // Update global state
+          bundleSettings = restored.settings;
+          session = restored.session;
+          bundleType = restored.bundleType;
+          
+          // Show the appropriate screen based on bundle type and state
+          if (bundleType === 'hierarchical') {
+            if (restored.requiresNavigation) {
+              console.log('[tone-analysis] Showing hierarchy navigation with', restored.subBundleCount, 'sub-bundles');
+              getElement('welcomeScreen').classList.add('hidden');
+              getElement('navigationScreen').classList.remove('hidden');
+              getElement('workArea').classList.add('hidden');
+              renderHierarchyTree(restored.hierarchy, restored.session.subBundles);
+            } else {
+              console.log('[tone-analysis] Resuming work in sub-bundle:', session.currentSubBundle);
+              getElement('welcomeScreen').classList.add('hidden');
+              getElement('navigationScreen').classList.add('hidden');
+              getElement('workArea').classList.remove('hidden');
+              
+              getElement('subBundleIndicator').classList.remove('hidden');
+              getElement('subBundlePath').textContent = session.currentSubBundle;
+              getElement('backToNavBtn').classList.remove('hidden');
+              
+              initializeAudioVariants();
+              updateProgressIndicator();
+              initializeReferenceToggle();
+              
+              await loadCurrentWord();
+              renderGroups();
+            }
+          } else {
+            console.log('[tone-analysis] Loading legacy bundle with', restored.recordCount, 'records');
+            getElement('welcomeScreen').classList.add('hidden');
+            getElement('navigationScreen').classList.add('hidden');
+            getElement('workArea').classList.remove('hidden');
             
             initializeAudioVariants();
             updateProgressIndicator();
@@ -62,25 +172,12 @@ if (!window.toneAnalysisInitialized) {
             renderGroups();
           }
         } else {
-          // Legacy bundle workflow
-          console.log('[tone-analysis] Loading legacy bundle with', restored.recordCount, 'records');
-          document.getElementById('welcomeScreen').classList.add('hidden');
-          document.getElementById('navigationScreen').classList.add('hidden');
-          document.getElementById('workArea').classList.remove('hidden');
-          
-          initializeAudioVariants();
-          updateProgressIndicator();
-          initializeReferenceToggle();
-          
-          await loadCurrentWord();
-          renderGroups();
+          console.log('[tone-analysis] No active bundle or restored session - showing welcome screen');
+          // Welcome screen is already visible by default
         }
-      } else {
-        console.log('[tone-analysis] No active bundle - showing welcome screen');
-        // Welcome screen is already visible by default
       }
     } catch (error) {
-      console.error('[tone-analysis] Error checking for restored bundle:', error);
+      console.error('[tone-analysis] Error during initialization:', error);
     }
   };
 
@@ -120,7 +217,7 @@ async function initializeRenderer() {
   try {
     const existingSession = await ipcRenderer.invoke('get-session');
     const initialLocale = existingSession?.locale || 'en';
-    const localeSelect = document.getElementById('localeSelect');
+    const localeSelect = getElement('localeSelect');
     if (localeSelect) {
       localeSelect.value = initialLocale;
     }
@@ -133,7 +230,7 @@ async function initializeRenderer() {
   document.addEventListener('keydown', handleKeyDown);
 
   // Locale change listener
-  const localeSelect = document.getElementById('localeSelect');
+  const localeSelect = getElement('localeSelect');
   if (localeSelect) {
     localeSelect.addEventListener('change', async () => {
       const newLocale = localeSelect.value;
@@ -144,7 +241,7 @@ async function initializeRenderer() {
       updateProgressIndicator();
       if (!currentWord) {
         // If welcome screen, ensure hints translated
-        const addWordHint = document.getElementById('addWordHint');
+        const addWordHint = getElement('addWordHint');
         if (addWordHint && addWordHint.classList.contains('hidden') === false) {
           // text will be replaced automatically if key didn't change
         }
@@ -165,20 +262,20 @@ async function initializeRenderer() {
         // Hierarchical bundle restored
         if (restored.requiresNavigation) {
           // Show navigation screen
-          document.getElementById('welcomeScreen').classList.add('hidden');
-          document.getElementById('navigationScreen').classList.remove('hidden');
-          document.getElementById('workArea').classList.add('hidden');
+          getElement('welcomeScreen').classList.add('hidden');
+          getElement('navigationScreen').classList.remove('hidden');
+          getElement('workArea').classList.add('hidden');
           renderHierarchyTree(restored.hierarchy, restored.session.subBundles);
         } else {
           // Resume work in current sub-bundle
-          document.getElementById('welcomeScreen').classList.add('hidden');
-          document.getElementById('navigationScreen').classList.add('hidden');
-          document.getElementById('workArea').classList.remove('hidden');
+          getElement('welcomeScreen').classList.add('hidden');
+          getElement('navigationScreen').classList.add('hidden');
+          getElement('workArea').classList.remove('hidden');
           
           // Show sub-bundle indicator
-          document.getElementById('subBundleIndicator').classList.remove('hidden');
-          document.getElementById('subBundlePath').textContent = session.currentSubBundle;
-          document.getElementById('backToNavBtn').classList.remove('hidden');
+          getElement('subBundleIndicator').classList.remove('hidden');
+          getElement('subBundlePath').textContent = session.currentSubBundle;
+          getElement('backToNavBtn').classList.remove('hidden');
           
           // Initialize UI
           initializeAudioVariants();
@@ -191,9 +288,9 @@ async function initializeRenderer() {
         }
       } else {
         // Legacy bundle restored
-        document.getElementById('welcomeScreen').classList.add('hidden');
-        document.getElementById('navigationScreen').classList.add('hidden');
-        document.getElementById('workArea').classList.remove('hidden');
+        getElement('welcomeScreen').classList.add('hidden');
+        getElement('navigationScreen').classList.add('hidden');
+        getElement('workArea').classList.remove('hidden');
         
         // Initialize UI
         initializeAudioVariants();
@@ -210,7 +307,7 @@ async function initializeRenderer() {
   }
 
   // Show references toggle listener
-  const showReferencesCheckbox = document.getElementById('showReferencesCheckbox');
+  const showReferencesCheckbox = getElement('showReferencesCheckbox');
   if (showReferencesCheckbox) {
     showReferencesCheckbox.addEventListener('change', async () => {
       const showReferences = showReferencesCheckbox.checked;
@@ -272,15 +369,15 @@ async function loadBundle() {
     bundleType = result.bundleType || (result.requiresNavigation ? 'hierarchical' : 'legacy');
     
     // Show clear bundle button
-    const clearBtn = document.getElementById('clearBundleBtn');
+    const clearBtn = getElement('clearBundleBtn');
     if (clearBtn) clearBtn.style.display = 'inline-block';
     
     // Check if this is a hierarchical bundle
     if (result.requiresNavigation && result.bundleType === 'hierarchical') {
       // Show navigation screen for hierarchical bundles
-      document.getElementById('welcomeScreen').classList.add('hidden');
-      document.getElementById('navigationScreen').classList.remove('hidden');
-      document.getElementById('workArea').classList.add('hidden');
+      getElement('welcomeScreen').classList.add('hidden');
+      getElement('navigationScreen').classList.remove('hidden');
+      getElement('workArea').classList.add('hidden');
       
       // Render hierarchy tree
       renderHierarchyTree(result.hierarchy, result.session.subBundles);
@@ -317,25 +414,25 @@ async function loadBundle() {
     initializeReferenceToggle();
     
     // Show work area
-    document.getElementById('welcomeScreen').classList.add('hidden');
-    document.getElementById('navigationScreen').classList.add('hidden');
-    document.getElementById('workArea').classList.remove('hidden');
+    getElement('welcomeScreen').classList.add('hidden');
+    getElement('navigationScreen').classList.add('hidden');
+    getElement('workArea').classList.remove('hidden');
     
     // Show sub-bundle indicator if hierarchical
     if (session.bundleType === 'hierarchical' && session.currentSubBundle) {
       currentSubBundle = session.currentSubBundle;
-      document.getElementById('subBundleIndicator').classList.remove('hidden');
-      document.getElementById('subBundlePath').textContent = currentSubBundle;
-      document.getElementById('backToNavBtn').classList.remove('hidden');
+      getElement('subBundleIndicator').classList.remove('hidden');
+      getElement('subBundlePath').textContent = currentSubBundle;
+      getElement('backToNavBtn').classList.remove('hidden');
       // Show hierarchical export section
-      document.getElementById('hierarchicalExportSection').classList.remove('hidden');
-      document.getElementById('legacyExportSection').classList.add('hidden');
+      getElement('hierarchicalExportSection').classList.remove('hidden');
+      getElement('legacyExportSection').classList.add('hidden');
     } else {
-      document.getElementById('subBundleIndicator').classList.add('hidden');
-      document.getElementById('backToNavBtn').classList.add('hidden');
+      getElement('subBundleIndicator').classList.add('hidden');
+      getElement('backToNavBtn').classList.add('hidden');
       // Show legacy export section
-      document.getElementById('hierarchicalExportSection').classList.add('hidden');
-      document.getElementById('legacyExportSection').classList.remove('hidden');
+      getElement('hierarchicalExportSection').classList.add('hidden');
+      getElement('legacyExportSection').classList.remove('hidden');
     }
     
     // Load current word and groups
@@ -349,34 +446,77 @@ async function loadBundle() {
 }
 
 function renderHierarchyTree(hierarchy, subBundles) {
-  const treeContainer = document.getElementById('hierarchyTree');
+  console.log('[renderHierarchyTree] Called with:', { hierarchy, subBundles });
+  console.log('[renderHierarchyTree] hierarchy type:', typeof hierarchy, 'subBundles type:', typeof subBundles);
+  console.log('[renderHierarchyTree] subBundles is array?', Array.isArray(subBundles), 'length:', subBundles?.length);
+  
+  // CRITICAL: Query within the analysis view container to avoid finding the Import view's hierarchyTree
+  const analysisView = document.getElementById('analysis-view');
+  if (!analysisView) {
+    console.error('[renderHierarchyTree] analysis-view container not found!');
+    return;
+  }
+  
+  const treeContainer = analysisView.querySelector('#hierarchyTree');
+  if (!treeContainer) {
+    console.error('[renderHierarchyTree] hierarchyTree element not found in analysis-view!');
+    return;
+  }
+  
   treeContainer.innerHTML = '';
   
   // Guard against undefined subBundles
   if (!subBundles || !Array.isArray(subBundles)) {
+    console.error('[renderHierarchyTree] Invalid subBundles:', subBundles);
     treeContainer.innerHTML = '<div class="no-bundle">No sub-bundles available</div>';
     return;
   }
   
+  console.log('[renderHierarchyTree] Building tree structure from', subBundles.length, 'sub-bundles');
+  
   // Build tree structure from flat sub-bundle list
   const tree = buildTreeStructure(subBundles);
+  console.log('[renderHierarchyTree] Tree structure built:', tree);
   
   // Render tree nodes
   const rootNode = document.createElement('div');
   rootNode.className = 'hierarchy-level';
   renderTreeNode(tree, rootNode, subBundles);
-  treeContainer.appendChild(rootNode);
+  
+  console.log('[renderHierarchyTree] About to append rootNode to treeContainer');
+  console.log('[renderHierarchyTree] rootNode.children.length BEFORE append:', rootNode.children.length);
+  
+  try {
+    treeContainer.appendChild(rootNode);
+    console.log('[renderHierarchyTree] Successfully appended rootNode');
+  } catch (err) {
+    console.error('[renderHierarchyTree] ERROR appending rootNode:', err);
+  }
+  
+  console.log('[renderHierarchyTree] Tree rendering complete');
+  console.log('[renderHierarchyTree] treeContainer.children.length:', treeContainer.children.length);
+  console.log('[renderHierarchyTree] rootNode.children.length:', rootNode.children.length);
 }
 
 function buildTreeStructure(subBundles) {
+  console.log('[buildTreeStructure] Starting with', subBundles.length, 'sub-bundles');
+  console.log('[buildTreeStructure] First sub-bundle:', subBundles[0]);
+  
   const tree = {};
   
-  subBundles.forEach(sb => {
+  subBundles.forEach((sb, sbIndex) => {
+    if (!sb || !sb.path) {
+      console.warn('[buildTreeStructure] Invalid sub-bundle at index', sbIndex, ':', sb);
+      return;
+    }
+    
     const parts = sb.path.split('/');
+    console.log('[buildTreeStructure] Processing sub-bundle', sbIndex, 'path parts:', parts);
     let current = tree;
     
     parts.forEach((part, index) => {
       if (!current[part]) {
+        console.log('[buildTreeStructure] Creating node for part:', part, 'at index', index);
         current[part] = {
           name: part,
           isLeaf: false,
@@ -395,6 +535,7 @@ function buildTreeStructure(subBundles) {
       
       // On the last part (leaf), check for organizational group
       if (index === parts.length - 1) {
+        console.log('[buildTreeStructure] Leaf node:', part, 'orgGroup:', sb.organizationalGroup);
         if (sb.organizationalGroup) {
           // Create organizational group node
           const orgGroup = sb.organizationalGroup;
@@ -413,6 +554,9 @@ function buildTreeStructure(subBundles) {
     });
   });
   
+  console.log('[buildTreeStructure] Final tree:', tree);
+  console.log('[buildTreeStructure] Tree keys:', Object.keys(tree));
+  
   return tree;
 }
 
@@ -427,15 +571,20 @@ function buildCategoryPath(node, depth, parentPath = '') {
 }
 
 function renderTreeNode(treeNode, container, subBundles, depth = 0, parentPath = '') {
-  Object.keys(treeNode).forEach(key => {
-    const node = treeNode[key];
-    const currentPath = parentPath ? `${parentPath}/${node.name}` : node.name;
-    
-    if (node.isLeaf && node.subBundle) {
-      // Direct leaf node - render as sub-bundle item
-      const item = createSubBundleItem(node.subBundle);
-      container.appendChild(item);
-    } else {
+  console.log('[renderTreeNode] Called with depth:', depth, 'parentPath:', parentPath, 'keys:', Object.keys(treeNode));
+  try {
+    Object.keys(treeNode).forEach(key => {
+      console.log('[renderTreeNode] Processing key:', key);
+      const node = treeNode[key];
+      console.log('[renderTreeNode] Node:', node);
+      const currentPath = parentPath ? `${parentPath}/${node.name}` : node.name;
+      
+      if (node.isLeaf && node.subBundle) {
+        // Direct leaf node - render as sub-bundle item
+        console.log('[renderTreeNode] Creating sub-bundle item for:', node.subBundle.path);
+        const item = createSubBundleItem(node.subBundle);
+        container.appendChild(item);
+      } else {
       // Category node - render as collapsible category
       const categoryDiv = document.createElement('div');
       categoryDiv.className = 'category-node';
@@ -597,6 +746,10 @@ function renderTreeNode(treeNode, container, subBundles, depth = 0, parentPath =
       renderTreeNode(node.children, childrenDiv, subBundles, depth + 1, currentPath);
     }
   });
+  } catch (error) {
+    console.error('[renderTreeNode] Error rendering tree:', error);
+    console.error('[renderTreeNode] Error stack:', error.stack);
+  }
 }
 
 // Helper function to collect all references from a category and its children
@@ -754,17 +907,17 @@ async function selectSubBundle(subBundlePath) {
     initializeReferenceToggle();
     
     // Show work area
-    document.getElementById('navigationScreen').classList.add('hidden');
-    document.getElementById('workArea').classList.remove('hidden');
+    getElement('navigationScreen').classList.add('hidden');
+    getElement('workArea').classList.remove('hidden');
     
     // Show sub-bundle indicator and back button
-    document.getElementById('subBundleIndicator').classList.remove('hidden');
-    document.getElementById('subBundlePath').textContent = subBundlePath;
-    document.getElementById('backToNavBtn').classList.remove('hidden');
+    getElement('subBundleIndicator').classList.remove('hidden');
+    getElement('subBundlePath').textContent = subBundlePath;
+    getElement('backToNavBtn').classList.remove('hidden');
     
     // Ensure word panel is visible and completion message is hidden before loading
-    document.querySelector('.word-panel').style.display = 'block';
-    document.getElementById('completionMessage').classList.add('hidden');
+    querySelector('.word-panel').style.display = 'block';
+    getElement('completionMessage').classList.add('hidden');
     
     // Load current word and groups
     await loadCurrentWord();
@@ -791,11 +944,11 @@ async function backToNavigation() {
     currentGroupId = null;
     
     // Hide work area and back button
-    document.getElementById('workArea').classList.add('hidden');
-    document.getElementById('backToNavBtn').classList.add('hidden');
+    getElement('workArea').classList.add('hidden');
+    getElement('backToNavBtn').classList.add('hidden');
     
     // Show navigation screen
-    document.getElementById('navigationScreen').classList.remove('hidden');
+    getElement('navigationScreen').classList.remove('hidden');
     
     // Re-render hierarchy tree with updated progress
     renderHierarchyTree(result.hierarchy, result.subBundles);
@@ -806,7 +959,7 @@ async function backToNavigation() {
 }
 
 function initializeAudioVariants() {
-  const select = document.getElementById('audioVariantSelect');
+  const select = getElement('audioVariantSelect');
   select.innerHTML = '';
   
   const variants = bundleSettings.audioFileVariants || [{ description: window.i18n.t('tm_defaultVariant'), suffix: '' }];
@@ -825,7 +978,7 @@ function initializeAudioVariants() {
 }
 
 function initializeReferenceToggle() {
-  const checkbox = document.getElementById('showReferencesCheckbox');
+  const checkbox = getElement('showReferencesCheckbox');
   if (!checkbox) return;
   
   // Priority: session preference > bundleSettings > default (true)
@@ -847,16 +1000,16 @@ function initializeReferenceToggle() {
 function updateProgressIndicator() {
   const total = session.queue.length + getTotalAssignedWords();
   const completed = getTotalAssignedWords();
-  document.getElementById('progressIndicator').textContent = window.i18n.t('tm_progressFormat', { completed, total });
+  getElement('progressIndicator').textContent = window.i18n.t('tm_progressFormat', { completed, total });
   
   // Update queue count in Manage Queue button
-  const queueCountEl = document.getElementById('queueCount');
+  const queueCountEl = getElement('queueCount');
   if (queueCountEl) {
     queueCountEl.textContent = session.queue.length;
   }
   
   // Update Manage Queue button visibility
-  const manageQueueBtn = document.getElementById('manageQueueBtn');
+  const manageQueueBtn = getElement('manageQueueBtn');
   if (manageQueueBtn) {
     manageQueueBtn.style.display = session.queue.length > 0 ? 'inline-block' : 'none';
   }
@@ -872,17 +1025,17 @@ async function loadCurrentWord() {
   if (!currentWord) {
     // No more words - show completion message and hide word panel
     checkCompletion();
-    document.querySelector('.word-panel').style.display = 'none';
-    document.getElementById('completionMessage').classList.remove('hidden');
+    querySelector('.word-panel').style.display = 'none';
+    getElement('completionMessage').classList.remove('hidden');
     return;
   }
   
   // Show word panel and hide completion message if word exists
-  document.querySelector('.word-panel').style.display = 'block';
-  document.getElementById('completionMessage').classList.add('hidden');
+  querySelector('.word-panel').style.display = 'block';
+  getElement('completionMessage').classList.add('hidden');
   
   // Update written form
-  const writtenFormLine = document.getElementById('writtenFormLine');
+  const writtenFormLine = getElement('writtenFormLine');
   if (!writtenFormLine) return; // Guard: element may not exist in navigation view
   
   if (bundleSettings.showWrittenForm && bundleSettings.writtenFormElements) {
@@ -896,7 +1049,7 @@ async function loadCurrentWord() {
   }
   
   // Update gloss
-  const glossLine = document.getElementById('glossLine');
+  const glossLine = getElement('glossLine');
   if (bundleSettings.glossElement && currentWord[bundleSettings.glossElement]) {
     glossLine.textContent = currentWord[bundleSettings.glossElement];
     glossLine.style.display = 'block';
@@ -905,7 +1058,7 @@ async function loadCurrentWord() {
   }
   
   // Update reference number
-  const referenceLine = document.getElementById('referenceLine');
+  const referenceLine = getElement('referenceLine');
   const showReferences = session.showReferenceNumbers !== undefined 
     ? session.showReferenceNumbers 
     : (bundleSettings.showReferenceNumbers !== undefined ? bundleSettings.showReferenceNumbers : true);
@@ -918,7 +1071,7 @@ async function loadCurrentWord() {
   }
   
   // Update spelling section
-  const spellingSection = document.getElementById('spellingSection');
+  const spellingSection = getElement('spellingSection');
   if (bundleSettings.requireUserSpelling) {
     spellingSection.classList.remove('hidden');
     
@@ -944,22 +1097,22 @@ async function loadCurrentWord() {
 }
 
 function showSpellingInput() {
-  document.getElementById('spellingInput').classList.remove('hidden');
-  document.getElementById('spellingDisplay').classList.add('hidden');
-  document.getElementById('spellingTextInput').value = '';
+  getElement('spellingInput').classList.remove('hidden');
+  getElement('spellingDisplay').classList.add('hidden');
+  getElement('spellingTextInput').value = '';
 }
 
 function showSpellingDisplay(spelling) {
-  document.getElementById('spellingInput').classList.add('hidden');
-  document.getElementById('spellingDisplay').classList.remove('hidden');
-  document.getElementById('spellingText').textContent = spelling;
+  getElement('spellingInput').classList.add('hidden');
+  getElement('spellingDisplay').classList.remove('hidden');
+  getElement('spellingText').textContent = spelling;
 }
 
 function editSpelling() {
-  const currentSpelling = document.getElementById('spellingText').textContent;
-  document.getElementById('spellingTextInput').value = currentSpelling;
+  const currentSpelling = getElement('spellingText').textContent;
+  getElement('spellingTextInput').value = currentSpelling;
   showSpellingInput();
-  document.getElementById('spellingTextInput').focus();
+  getElement('spellingTextInput').focus();
 }
 
 function cancelSpellingEdit() {
@@ -969,12 +1122,12 @@ function cancelSpellingEdit() {
   if (edits.userSpelling) {
     showSpellingDisplay(edits.userSpelling);
   } else {
-    document.getElementById('spellingTextInput').value = '';
+    getElement('spellingTextInput').value = '';
   }
 }
 
 async function confirmSpelling() {
-  const input = document.getElementById('spellingTextInput');
+  const input = getElement('spellingTextInput');
   const userSpelling = input.value.trim();
   
   if (!userSpelling) {
@@ -998,8 +1151,8 @@ async function confirmSpelling() {
 }
 
 function updateAddWordButton() {
-  const addWordBtn = document.getElementById('addWordBtn');
-  const addWordHint = document.getElementById('addWordHint');
+  const addWordBtn = getElement('addWordBtn');
+  const addWordHint = getElement('addWordHint');
   
   // Guard: elements may not exist if we're in navigation view
   if (!addWordBtn || !addWordHint) return;
@@ -1032,7 +1185,7 @@ function updateAddWordButton() {
 }
 
 function updateMoveWordButton() {
-  const moveWordBtn = document.getElementById('moveWordBtn');
+  const moveWordBtn = getElement('moveWordBtn');
   
   if (!moveWordBtn) return;
   
@@ -1101,7 +1254,7 @@ async function playAudio() {
     return;
   }
   
-  const audioPlayer = document.getElementById('audioPlayer');
+  const audioPlayer = getElement('audioPlayer');
   audioPlayer.src = `file://${audioPath}`;
   audioPlayer.play().catch(err => console.error('Audio playback error:', err));
 }
@@ -1238,7 +1391,7 @@ async function playMemberAudio(ref) {
   const audioPath = await ipcRenderer.invoke('get-audio-path', record.SoundFile, suffix);
   if (!audioPath) return;
   
-  const audioPlayer = document.getElementById('audioPlayer');
+  const audioPlayer = getElement('audioPlayer');
   audioPlayer.src = `file://${audioPath}`;
   audioPlayer.play().catch(err => console.error('Audio playback error:', err));
 }
@@ -1359,7 +1512,7 @@ function toggleCollapseAll() {
 
 // Update the collapse all button text based on current state
 function updateCollapseAllButton() {
-  const btn = document.getElementById('collapseAllBtn');
+  const btn = getElement('collapseAllBtn');
   if (!btn) return;
   
   if (!session.groupsCollapsedState) {
@@ -1404,7 +1557,7 @@ function getMemberDisplayLines(ref) {
 }
 
 async function renderGroups() {
-  const groupsList = document.getElementById('groupsList');
+  const groupsList = getElement('groupsList');
   
   if (session.groups.length === 0) {
     groupsList.innerHTML = `<div class="no-bundle">${window.i18n.t('tm_noGroups')}.</div>`;
@@ -1525,7 +1678,7 @@ async function renderGroups() {
       moveFlaggedBtn.className = 'secondary';
       moveFlaggedBtn.style.fontSize = '12px';
       moveFlaggedBtn.style.padding = '4px 8px';
-      moveFlaggedBtn.style.background = '#fff3cd';
+      moveFlaggedBtn.style.background = '#f8f9fa';
       moveFlaggedBtn.style.borderColor = '#ffc107';
       moveFlaggedBtn.title = `Move ${flaggedMembers.length} flagged word(s)`;
       moveFlaggedBtn.onclick = (e) => {
@@ -1924,8 +2077,8 @@ async function exportWorkingXmlOnly() {
 
 // Conflict resolution functions
 function showConflictModal(conflictData) {
-  const modal = document.getElementById('conflictModal');
-  const conflictList = document.getElementById('conflictList');
+  const modal = getElement('conflictModal');
+  const conflictList = getElement('conflictList');
   
   // Build conflict display
   let html = '';
@@ -1967,11 +2120,11 @@ function showConflictModal(conflictData) {
 }
 
 function cancelConflictExport() {
-  document.getElementById('conflictModal').style.display = 'none';
+  getElement('conflictModal').style.display = 'none';
 }
 
 async function approveConflictExport() {
-  document.getElementById('conflictModal').style.display = 'none';
+  getElement('conflictModal').style.display = 'none';
   // User approved, proceed with export
   await proceedWithExport();
 }
@@ -2049,8 +2202,8 @@ async function redo() {
 
 async function updateUndoRedoButtons() {
   const state = await ipcRenderer.invoke('get-undo-redo-state');
-  document.getElementById('undoBtn').disabled = !state.canUndo;
-  document.getElementById('redoBtn').disabled = !state.canRedo;
+  getElement('undoBtn').disabled = !state.canUndo;
+  getElement('redoBtn').disabled = !state.canRedo;
 }
 
 // Edit Group Modal Functions
@@ -2062,27 +2215,27 @@ function openEditGroupModal(groupId) {
   editingGroupId = groupId;
   
   // Populate form fields
-  document.getElementById('editGroupTitle').textContent = `Edit Group ${group.groupNumber}`;
-  document.getElementById('pitchTranscriptionInput').value = group.pitchTranscription || '';
-  document.getElementById('toneAbbreviationInput').value = group.toneAbbreviation || '';
-  document.getElementById('exemplarWordInput').value = group.exemplarWord || '';
-  document.getElementById('exemplarWordRefInput').value = group.exemplarWordRef || '';
-  document.getElementById('markReviewedCheckbox').checked = false;
+  getElement('editGroupTitle').textContent = `Edit Group ${group.groupNumber}`;
+  getElement('pitchTranscriptionInput').value = group.pitchTranscription || '';
+  getElement('toneAbbreviationInput').value = group.toneAbbreviation || '';
+  getElement('exemplarWordInput').value = group.exemplarWord || '';
+  getElement('exemplarWordRefInput').value = group.exemplarWordRef || '';
+  getElement('markReviewedCheckbox').checked = false;
   
   // Show modal
-  document.getElementById('editGroupModal').classList.remove('hidden');
+  getElement('editGroupModal').classList.remove('hidden');
 }
 
 function closeEditGroupModal() {
   editingGroupId = null;
-  document.getElementById('editGroupModal').classList.add('hidden');
+  getElement('editGroupModal').classList.add('hidden');
   
   // Clear form
-  document.getElementById('pitchTranscriptionInput').value = '';
-  document.getElementById('toneAbbreviationInput').value = '';
-  document.getElementById('exemplarWordInput').value = '';
-  document.getElementById('exemplarWordRefInput').value = '';
-  document.getElementById('markReviewedCheckbox').checked = false;
+  getElement('pitchTranscriptionInput').value = '';
+  getElement('toneAbbreviationInput').value = '';
+  getElement('exemplarWordInput').value = '';
+  getElement('exemplarWordRefInput').value = '';
+  getElement('markReviewedCheckbox').checked = false;
 }
 
 // Move Flagged Words Modal Functions
@@ -2097,10 +2250,10 @@ function openMoveFlaggedModal(groupId) {
   
   const flaggedMembers = sourceGroup.members?.filter(ref => session.records[ref]?.flagged) || [];
   
-  document.getElementById('moveFlaggedCount').textContent = flaggedMembers.length;
+  getElement('moveFlaggedCount').textContent = flaggedMembers.length;
   
   // Build list of target groups (all groups except source)
-  const targetGroupsList = document.getElementById('targetGroupsList');
+  const targetGroupsList = getElement('targetGroupsList');
   targetGroupsList.innerHTML = '';
   
   const otherGroups = session.groups.filter(g => g.id !== groupId);
@@ -2172,11 +2325,11 @@ function openMoveFlaggedModal(groupId) {
     });
   }
   
-  document.getElementById('moveFlaggedModal').classList.remove('hidden');
+  getElement('moveFlaggedModal').classList.remove('hidden');
 }
 
 function closeMoveFlaggedModal() {
-  document.getElementById('moveFlaggedModal').classList.add('hidden');
+  getElement('moveFlaggedModal').classList.add('hidden');
   moveFlaggedSourceGroupId = null;
 }
 
@@ -2256,18 +2409,18 @@ async function moveFlaggedToNewGroup() {
 
 function openQueueModal() {
   renderQueueList();
-  document.getElementById('queueModal').classList.remove('hidden');
+  getElement('queueModal').classList.remove('hidden');
 }
 
 function closeQueueModal() {
-  document.getElementById('queueModal').classList.add('hidden');
+  getElement('queueModal').classList.add('hidden');
 }
 
 async function renderQueueList() {
-  const queueList = document.getElementById('queueList');
-  const queueModalCount = document.getElementById('queueModalCount');
-  const moveToEndBtn = document.getElementById('moveToEndBtn');
-  const moveSelectedContainer = document.getElementById('moveSelectedContainer');
+  const queueList = getElement('queueList');
+  const queueModalCount = getElement('queueModalCount');
+  const moveToEndBtn = getElement('moveToEndBtn');
+  const moveSelectedContainer = getElement('moveSelectedContainer');
   
   queueModalCount.textContent = session.queue.length;
   
@@ -2392,7 +2545,7 @@ async function renderQueueList() {
     
     queueItem.addEventListener('dragover', (e) => {
       e.preventDefault();
-      const dragging = document.querySelector('.queue-item.dragging');
+      const dragging = querySelector('.queue-item.dragging');
       if (dragging && dragging !== queueItem) {
         const afterElement = getDragAfterElement(queueList, e.clientY);
         if (afterElement == null) {
@@ -2431,7 +2584,7 @@ function getDragAfterElement(container, y) {
 }
 
 async function reorderQueue() {
-  const queueList = document.getElementById('queueList');
+  const queueList = getElement('queueList');
   const items = [...queueList.querySelectorAll('.queue-item')];
   
   // Build new queue order from DOM
@@ -2497,7 +2650,7 @@ function toggleQueueWordSelection(ref) {
   updateSelectedWordCount();
   
   // Update visual state
-  const queueItem = document.querySelector(`.queue-item[data-ref="${ref}"]`);
+  const queueItem = querySelector(`.queue-item[data-ref="${ref}"]`);
   if (queueItem) {
     if (selectedQueueWords.has(ref)) {
       queueItem.classList.add('selected');
@@ -2519,8 +2672,8 @@ function deselectAllQueueWords() {
 }
 
 function updateSelectedWordCount() {
-  const selectedCount = document.getElementById('selectedCount');
-  const moveSelectedBtn = document.getElementById('moveSelectedBtn');
+  const selectedCount = getElement('selectedCount');
+  const moveSelectedBtn = getElement('moveSelectedBtn');
   
   if (selectedCount) {
     selectedCount.textContent = selectedQueueWords.size;
@@ -2564,11 +2717,11 @@ async function saveGroupEdits() {
   if (!group) return;
   
   // Get values from form
-  const pitchTranscription = document.getElementById('pitchTranscriptionInput').value.trim() || null;
-  const toneAbbreviation = document.getElementById('toneAbbreviationInput').value.trim() || null;
-  const exemplarWord = document.getElementById('exemplarWordInput').value.trim() || null;
-  const exemplarWordRef = document.getElementById('exemplarWordRefInput').value.trim() || null;
-  const markReviewed = document.getElementById('markReviewedCheckbox').checked;
+  const pitchTranscription = getElement('pitchTranscriptionInput').value.trim() || null;
+  const toneAbbreviation = getElement('toneAbbreviationInput').value.trim() || null;
+  const exemplarWord = getElement('exemplarWordInput').value.trim() || null;
+  const exemplarWordRef = getElement('exemplarWordRefInput').value.trim() || null;
+  const markReviewed = getElement('markReviewedCheckbox').checked;
   
   // Check if metadata changed (for auto-unmark)
   const metadataChanged = 
@@ -2612,7 +2765,7 @@ async function saveGroupEdits() {
 
 // Close modal when clicking outside
 document.addEventListener('click', (e) => {
-  const modal = document.getElementById('editGroupModal');
+  const modal = getElement('editGroupModal');
   if (e.target === modal) {
     closeEditGroupModal();
   }
@@ -2621,11 +2774,11 @@ document.addEventListener('click', (e) => {
 // Close modal with Escape key
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    const editModal = document.getElementById('editGroupModal');
+    const editModal = getElement('editGroupModal');
     if (!editModal.classList.contains('hidden')) {
       closeEditGroupModal();
     }
-    const moveModal = document.getElementById('moveWordModal');
+    const moveModal = getElement('moveWordModal');
     if (!moveModal.classList.contains('hidden')) {
       closeMoveWordModal();
     }
@@ -2645,9 +2798,9 @@ async function openMoveWordModal(refOrRefs, record) {
   
   // Update modal title and text based on single vs multiple words
   const isMultiple = Array.isArray(movingWordRef);
-  const moveWordTitle = document.getElementById('moveWordTitle');
-  const moveWordText = document.getElementById('moveWordText');
-  const confirmMoveText = document.getElementById('confirmMoveText');
+  const moveWordTitle = getElement('moveWordTitle');
+  const moveWordText = getElement('moveWordText');
+  const confirmMoveText = getElement('confirmMoveText');
   
   if (isMultiple) {
     moveWordTitle.textContent = 'Move Words to Sub-Bundle';
@@ -2679,25 +2832,25 @@ async function openMoveWordModal(refOrRefs, record) {
   renderMoveWordTree(hierarchyData.hierarchy, hierarchyData.subBundles);
   
   // Show modal
-  document.getElementById('moveWordModal').classList.remove('hidden');
-  document.getElementById('confirmMoveBtn').disabled = true;
+  getElement('moveWordModal').classList.remove('hidden');
+  getElement('confirmMoveBtn').disabled = true;
 }
 
 function closeMoveWordModal() {
   // Allow closing - user is canceling the move operation
-  document.getElementById('moveWordModal').classList.add('hidden');
+  getElement('moveWordModal').classList.add('hidden');
   movingWordRef = null;
   selectedTargetSubBundle = null;
   
   // Reset create new UI
-  const createCheck = document.getElementById('createNewSubBundleCheck');
-  const newSubBundleForm = document.getElementById('newSubBundleForm');
+  const createCheck = getElement('createNewSubBundleCheck');
+  const newSubBundleForm = getElement('newSubBundleForm');
   if (createCheck) createCheck.checked = false;
   if (newSubBundleForm) newSubBundleForm.style.display = 'none';
 }
 
 function renderMoveWordTree(hierarchy, subBundles) {
-  const treeContainer = document.getElementById('moveWordTree');
+  const treeContainer = getElement('moveWordTree');
   if (!treeContainer) {
     console.error('[renderMoveWordTree] moveWordTree element not found');
     return;
@@ -2809,17 +2962,17 @@ function selectTargetSubBundle(subBundlePath) {
   selectedTargetSubBundle = subBundlePath;
   
   // Update visual selection
-  document.querySelectorAll('.move-tree-sub-bundle').forEach(item => {
+  querySelectorAll('.move-tree-sub-bundle').forEach(item => {
     item.classList.remove('selected');
   });
   
-  const selectedRadio = document.querySelector(`input[name="targetSubBundle"][value="${subBundlePath}"]`);
+  const selectedRadio = querySelector(`input[name="targetSubBundle"][value="${subBundlePath}"]`);
   if (selectedRadio) {
     selectedRadio.closest('.move-tree-sub-bundle').classList.add('selected');
   }
   
   // Enable move button
-  document.getElementById('confirmMoveBtn').disabled = false;
+  getElement('confirmMoveBtn').disabled = false;
 }
 
 async function confirmMoveWord() {
@@ -2863,7 +3016,7 @@ async function confirmMoveWord() {
     }
     
     // Refresh queue modal if it's open
-    const queueModal = document.getElementById('queueModal');
+    const queueModal = getElement('queueModal');
     if (queueModal && !queueModal.classList.contains('hidden')) {
       await renderQueueList();
     }
@@ -2901,14 +3054,14 @@ async function clearBundle() {
     currentSubBundle = null;
     
     // Hide all screens and show welcome
-    document.getElementById('welcomeScreen').classList.remove('hidden');
-    document.getElementById('navigationScreen').classList.add('hidden');
-    document.getElementById('workArea').classList.add('hidden');
-    document.getElementById('subBundleIndicator').classList.add('hidden');
-    document.getElementById('backToNavBtn').classList.add('hidden');
+    getElement('welcomeScreen').classList.remove('hidden');
+    getElement('navigationScreen').classList.add('hidden');
+    getElement('workArea').classList.add('hidden');
+    getElement('subBundleIndicator').classList.add('hidden');
+    getElement('backToNavBtn').classList.add('hidden');
     
     // Hide clear button
-    const clearBtn = document.getElementById('clearBundleBtn');
+    const clearBtn = getElement('clearBundleBtn');
     if (clearBtn) clearBtn.style.display = 'none';
     
     console.log('[desktop_matching] Bundle cleared');
@@ -2940,18 +3093,18 @@ function checkCompletion() {
       detailsText += `, all reviewed ✓`;
     }
     
-    document.getElementById('completionDetails').textContent = detailsText;
-    document.getElementById('completionMessage').classList.remove('hidden');
+    getElement('completionDetails').textContent = detailsText;
+    getElement('completionMessage').classList.remove('hidden');
     
     // Show mark all reviewed button in header if not all reviewed
-    const markBtn = document.getElementById('markAllReviewedBtn');
+    const markBtn = getElement('markAllReviewedBtn');
     if (markBtn && reviewedGroups < totalGroups) {
       markBtn.style.display = 'block';
     } else if (markBtn) {
       markBtn.style.display = 'none';
     }
   } else {
-    document.getElementById('completionMessage').classList.add('hidden');
+    getElement('completionMessage').classList.add('hidden');
   }
 }
 
@@ -2987,7 +3140,7 @@ async function markAllGroupsReviewed() {
 function updateReviewStatusDisplay() {
   // Update mark all reviewed button visibility
   if (session.bundleType === 'hierarchical') {
-    const markBtn = document.getElementById('markAllReviewedBtn');
+    const markBtn = getElement('markAllReviewedBtn');
     if (markBtn) {
       const allReviewed = session.groups.every(g => !g.requiresReview && g.additionsSinceReview === 0);
       markBtn.style.display = allReviewed ? 'none' : 'block';
@@ -2997,10 +3150,10 @@ function updateReviewStatusDisplay() {
 
 // Export Modal controls
 function openExportModal() {
-  const modal = document.getElementById('exportModal');
+  const modal = getElement('exportModal');
   if (!modal) return;
   // Enable/disable sub-bundle export based on context
-  const subBtn = document.getElementById('exportSubBundleBtn');
+  const subBtn = getElement('exportSubBundleBtn');
   if (subBtn) {
     const canSubExport = bundleType === 'hierarchical' && !!currentSubBundle;
     subBtn.disabled = !canSubExport;
@@ -3009,7 +3162,7 @@ function openExportModal() {
 }
 
 function closeExportModal() {
-  const modal = document.getElementById('exportModal');
+  const modal = getElement('exportModal');
   if (!modal) return;
   modal.classList.add('hidden');
 }
@@ -3030,17 +3183,17 @@ async function openMergePreview() {
     }
     const { preview, sanity } = res;
     // Populate counts
-    const countsEl = document.getElementById('mergeCounts');
+    const countsEl = getElement('mergeCounts');
     countsEl.textContent = `${preview.changedCount} changes across ${preview.totalRecords} records`;
     // Sanity summary
-    const sanityEl = document.getElementById('mergeSanitySummary');
+    const sanityEl = getElement('mergeSanitySummary');
     const warns = (sanity.warnings || []).map(w => `• ${w}`).join('<br>');
     sanityEl.innerHTML = `Change ratio: ${(sanity.changeRatio * 100).toFixed(2)}%${warns ? '<br>' + warns : ''}`;
     // Clear missing records summary (will be populated after apply step if any)
-    const missingEl = document.getElementById('missingRecordsSummary');
+    const missingEl = getElement('missingRecordsSummary');
     if (missingEl) missingEl.textContent = '';
     // Changes list (truncate to 100 entries for display)
-    const listEl = document.getElementById('mergeChangesList');
+    const listEl = getElement('mergeChangesList');
     listEl.innerHTML = '';
     const maxShow = 100;
     const items = preview.changed.slice(0, maxShow);
@@ -3060,14 +3213,14 @@ async function openMergePreview() {
       listEl.appendChild(more);
     }
     // Show modal
-    document.getElementById('mergePreviewModal').classList.remove('hidden');
+    getElement('mergePreviewModal').classList.remove('hidden');
   } catch (err) {
     alert(`Preview error: ${err.message}`);
   }
 }
 
 function closeMergePreview() {
-  document.getElementById('mergePreviewModal').classList.add('hidden');
+  getElement('mergePreviewModal').classList.add('hidden');
 }
 
 async function applyMergeToDekereke() {
@@ -3096,22 +3249,22 @@ async function openSettingsModal() {
     const res = await ipcRenderer.invoke('get-merge-settings');
     if (res.success) {
       const s = res.settings;
-      document.getElementById('maxCountDeltaInput').value = (s.maxCountDelta ?? 0.02).toString();
-      document.getElementById('minChangeRatioInput').value = (s.minChangeRatio ?? 0.001).toString();
-      document.getElementById('maxChangeRatioInput').value = (s.maxChangeRatio ?? 0.8).toString();
+      getElement('maxCountDeltaInput').value = (s.maxCountDelta ?? 0.02).toString();
+      getElement('minChangeRatioInput').value = (s.minChangeRatio ?? 0.001).toString();
+      getElement('maxChangeRatioInput').value = (s.maxChangeRatio ?? 0.8).toString();
     }
   } catch {}
-  document.getElementById('settingsModal').classList.remove('hidden');
+  getElement('settingsModal').classList.remove('hidden');
 }
 
 function closeSettingsModal() {
-  document.getElementById('settingsModal').classList.add('hidden');
+  getElement('settingsModal').classList.add('hidden');
 }
 
 async function saveMergeSettings() {
-  const maxCountDelta = parseFloat(document.getElementById('maxCountDeltaInput').value);
-  const minChangeRatio = parseFloat(document.getElementById('minChangeRatioInput').value);
-  const maxChangeRatio = parseFloat(document.getElementById('maxChangeRatioInput').value);
+  const maxCountDelta = parseFloat(getElement('maxCountDeltaInput').value);
+  const minChangeRatio = parseFloat(getElement('minChangeRatioInput').value);
+  const maxChangeRatio = parseFloat(getElement('maxChangeRatioInput').value);
   const res = await ipcRenderer.invoke('update-merge-settings', { maxCountDelta, minChangeRatio, maxChangeRatio });
   if (!res.success) {
     alert(`Failed to save settings: ${res.error}`);
@@ -3124,7 +3277,7 @@ async function saveMergeSettings() {
 
 // Gear menu
 function toggleGearMenu() {
-  const menu = document.getElementById('gearMenu');
+  const menu = getElement('gearMenu');
   if (menu) {
     menu.classList.toggle('hidden');
   }
@@ -3132,8 +3285,8 @@ function toggleGearMenu() {
 
 // Close gear menu when clicking outside
 document.addEventListener('click', (e) => {
-  const container = document.getElementById('gearMenuContainer');
-  const menu = document.getElementById('gearMenu');
+  const container = getElement('gearMenuContainer');
+  const menu = getElement('gearMenu');
   if (!container || !menu) return;
   if (!container.contains(e.target)) {
     menu.classList.add('hidden');
@@ -3142,7 +3295,7 @@ document.addEventListener('click', (e) => {
 
 // Merge report viewer
 async function openLastMergeReport() {
-  const modal = document.getElementById('mergeReportModal');
+  const modal = getElement('mergeReportModal');
   if (!lastMergeReportPath) {
     alert('No merge report available yet. Apply a merge first.');
     return;
@@ -3157,8 +3310,8 @@ async function openLastMergeReport() {
       }
       lastMergeReportData = res.data;
     }
-    const summaryEl = document.getElementById('mergeReportSummary');
-    const listEl = document.getElementById('mergeReportList');
+    const summaryEl = getElement('mergeReportSummary');
+    const listEl = getElement('mergeReportList');
     const d = lastMergeReportData || {};
     const changedCount = d.changedCount || 0;
     const missingCount = d.missingInTargetCount || 0;
@@ -3185,7 +3338,7 @@ async function openLastMergeReport() {
     }
     modal.classList.remove('hidden');
     // Hide gear dropdown after opening
-    const menu = document.getElementById('gearMenu');
+    const menu = getElement('gearMenu');
     if (menu) menu.classList.add('hidden');
   } catch (err) {
     alert(`Error opening report: ${err.message}`);
@@ -3193,7 +3346,7 @@ async function openLastMergeReport() {
 }
 
 function closeMergeReportModal() {
-  const modal = document.getElementById('mergeReportModal');
+  const modal = getElement('mergeReportModal');
   if (modal) modal.classList.add('hidden');
 }
 
@@ -3277,9 +3430,8 @@ function copyReferencesToClipboard(references) {
   // Join references with spaces, preserving leading zeros
   const refString = references.join(' ');
   
-  // Copy to clipboard using Electron's clipboard API
-  const { clipboard } = require('electron');
-  clipboard.writeText(refString);
+  // Copy to clipboard using Electron's clipboard API via preload bridge
+  window.electronAPI.clipboard.writeText(refString);
   
   // Show feedback
   console.log(`[renderer] Copied ${references.length} references to clipboard`);
@@ -3304,6 +3456,53 @@ function copyReferencesToClipboard(references) {
     notification.remove();
   }, 2000);
 }
+
+// Expose functions globally via namespace for inline onclick handlers in HTML
+// Using namespace to avoid conflicts with other views
+window.toneAnalysis = window.toneAnalysis || {};
+Object.assign(window.toneAnalysis, {
+  playAudio,
+  createNewGroup,
+  moveCurrentWordToEnd,
+  initiateMultiWordMove,
+  loadBundle,
+  clearBundle,
+  backToNavigation,
+  openExportModal,
+  markAllGroupsReviewed,
+  openQueueModal,
+  confirmSpelling,
+  editSpelling,
+  addWordToCurrentGroup,
+  initiateWordMove,
+  undo,
+  redo,
+  resetSession,
+  exportBundle,
+  toggleCollapseAll,
+  closeEditGroupModal,
+  saveGroupEdits,
+  closeMoveFlaggedModal,
+  moveFlaggedToNewGroup,
+  closeQueueModal,
+  selectAllQueueWords,
+  deselectAllQueueWords,
+  closeMoveWordModal,
+  confirmMoveWord,
+  closeExportModal,
+  exportHierarchicalBundle,
+  exportCurrentSubBundle,
+  exportWorkingXmlOnly,
+  openMergePreview,
+  closeSettingsModal,
+  saveMergeSettings,
+  closeMergePreview,
+  toggleGearMenu,
+  openSettingsModal,
+  openEditGroupModal,
+  openMoveFlaggedModal,
+  jumpToQueueWord,
+});
 
 } // End of window.toneAnalysisInitialized guard
 

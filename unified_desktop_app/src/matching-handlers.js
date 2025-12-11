@@ -526,11 +526,23 @@ function initializeMatchingHandlers(state, app) {
     
     return {
       success: true,
+      session: {
+        currentSubBundle: subBundlePath,
+        queue: [...subBundleSession.queue],
+        groups: subBundleSession.groups || [],
+        records: state.sessionData.records || {},
+        selectedAudioVariantIndex: state.sessionData.selectedAudioVariantIndex || 0,
+        showReferenceNumbers: state.sessionData.showReferenceNumbers,
+        bundleType: 'hierarchical',
+        subBundles: state.sessionData.subBundles || [],
+      },
       subBundle: {
         ...subBundle,
         ...subBundleSession,
       },
       settings: state.bundleData.settings,
+      isReimport: (subBundleSession.groups || []).length > 0,
+      importedGroups: (subBundleSession.groups || []).length,
     };
   });
   
@@ -547,7 +559,21 @@ function initializeMatchingHandlers(state, app) {
     
     state.saveSession();
     
-    return { success: true };
+    return {
+      success: true,
+      session: {
+        currentSubBundle: null,
+        queue: [],
+        groups: [],
+        records: state.sessionData.records || {},
+        selectedAudioVariantIndex: state.sessionData.selectedAudioVariantIndex || 0,
+        showReferenceNumbers: state.sessionData.showReferenceNumbers,
+        bundleType: 'hierarchical',
+        subBundles: state.sessionData.subBundles || [],
+      },
+      hierarchy: state.bundleData.hierarchy || {},
+      subBundles: state.sessionData.subBundles || [],
+    };
   });
   
   console.log('[matching-handlers] Tone matching handlers initialized');
