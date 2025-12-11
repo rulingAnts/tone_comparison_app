@@ -40,6 +40,7 @@ let filterGroups = []; // Array of filter groups: [{logic: 'AND'|'OR', condition
 let nextFilterGroupId = 1;
 let nextFilterConditionId = 1;
 let isLinkedBundle = true; // Always create linked bundles in new workflow
+let isLoadingSettings = false; // Flag to prevent persistence during initial settings load
 
 // Drag and drop state for reordering values
 let draggedValueContainer = null;
@@ -214,16 +215,24 @@ function handleLinkedBundleChange() {
 }
 
 async function loadPersistedSettings() {
+  isLoadingSettings = true; // Set flag to prevent persistence during load
+  
   try {
     console.log('[import-data] Loading persisted settings...');
     persisted = await ipcRenderer.invoke('bundler:get-settings');
     console.log('[import-data] Got persisted settings:', persisted);
+    console.log('[import-data] Settings.hierarchyTree exists:', !!persisted?.settings?.hierarchyTree);
+    console.log('[import-data] Settings.filterGroups length:', persisted?.settings?.filterGroups?.length || 0);
+    if (persisted?.settings?.hierarchyTree) {
+      console.log('[import-data] hierarchyTree preview:', JSON.stringify(persisted.settings.hierarchyTree).substring(0, 300));
+    }
   } catch (error) {
     console.error('[import-data] Error loading settings:', error);
     persisted = null;
   }
   if (!persisted) {
     console.log('[import-data] No persisted settings found');
+    isLoadingSettings = false; // Clear flag
     return;
   }
 
@@ -368,13 +377,16 @@ async function loadPersistedSettings() {
   
   // Restore hierarchy levels
   // Restore hierarchy tree (supports both old hierarchyLevels format and new hierarchyTree format)
+  console.log('[import-data] Checking hierarchy tree restoration, s.hierarchyTree:', !!s.hierarchyTree, 's.hierarchyLevels:', !!s.hierarchyLevels);
   if (s.hierarchyTree) {
-    console.log('[import-data] Restoring hierarchy tree:', s.hierarchyTree);
+    console.log('[import-data] Restoring hierarchy tree:', JSON.stringify(s.hierarchyTree).substring(0, 200));
     hierarchyTree = restoreTreeNode(s.hierarchyTree);
+    console.log('[import-data] Hierarchy tree restored, rendering...');
     renderHierarchyTree();
     console.log('[import-data] Hierarchy tree rendered');
   } else if (Array.isArray(s.hierarchyLevels) && s.hierarchyLevels.length > 0) {
     // Migrate old format to new tree format (best effort - first level only)
+    console.log('[import-data] Migrating old hierarchy levels format');
     const firstLevel = s.hierarchyLevels[0];
     hierarchyTree = {
       field: firstLevel.field,
@@ -389,9 +401,12 @@ async function loadPersistedSettings() {
       }))
     };
     renderHierarchyTree();
+  } else {
+    console.log('[import-data] No hierarchy tree to restore');
   }
   
   // Restore filter groups
+  console.log('[import-data] Checking filter groups restoration, s.filterGroups:', Array.isArray(s.filterGroups) ? s.filterGroups.length : 'not array');
   if (Array.isArray(s.filterGroups) && s.filterGroups.length > 0) {
     console.log('[import-data] Restoring filter groups:', s.filterGroups.length, 'groups');
     filterGroups = s.filterGroups;
@@ -405,6 +420,7 @@ async function loadPersistedSettings() {
     const maxConditionId = Math.max(...allIds.conditionIds, 0);
     nextFilterGroupId = maxGroupId + 1;
     nextFilterConditionId = maxConditionId + 1;
+    console.log('[import-data] About to render filter groups...');
     renderFilterGroups();
     console.log('[import-data] Filter groups rendered');
   } else {
@@ -413,6 +429,9 @@ async function loadPersistedSettings() {
 
   console.log('[import-data] Settings restoration complete');
   checkFormValid();
+  
+  isLoadingSettings = false; // Clear flag - now persistence is allowed
+  console.log('[import-data] Settings loading complete, persistence re-enabled');
 }
 
 // Helper to migrate old filter group format to new nested format
@@ -596,6 +615,8 @@ function collectCurrentSettings() {
   const groupingFieldRadio = document.querySelector('input[name="groupingField"]:checked');
   const groupingField = groupingFieldRadio ? groupingFieldRadio.value : 'none';
   
+  console.log('[import-data] collectCurrentSettings - hierarchyTree:', !!hierarchyTree, 'filterGroups:', filterGroups?.length || 0);
+  
   return {
     xmlPath: xmlFilePath,
     audioFolder: audioFolderPath,
@@ -635,8 +656,20 @@ function collectCurrentSettings() {
 }
 
 async function persistSettings() {
+  // Skip persistence if we're in the middle of loading settings to avoid overwriting
+  if (isLoadingSettings) {
+    console.log('[import-data] Skipping persistence (loading settings in progress)');
+    return;
+  }
+  
   const patch = collectCurrentSettings();
-  try { await ipcRenderer.invoke('bundler:set-settings', patch); } catch {}
+  console.log('[import-data] Persisting settings, hierarchyTree:', !!patch.settings?.hierarchyTree, 'filterGroups:', patch.settings?.filterGroups?.length || 0);
+  try { 
+    await ipcRenderer.invoke('bundler:set-settings', patch);
+    console.log('[import-data] Settings persisted successfully');
+  } catch (error) {
+    console.error('[import-data] Error persisting settings:', error);
+  }
 }
 
 async function selectXmlFile() {
@@ -1058,14 +1091,17 @@ function getFilteredRecords() {
 }
 
 function initializeRootLevel() {
+  console.log('[import-data] initializeRootLevel called');
   if (!hierarchyTree) {
     hierarchyTree = {
       field: '',
       values: []
     };
+    console.log('[import-data] Created new hierarchyTree');
   }
   renderHierarchyTree();
   persistSettings();
+  console.log('[import-data] initializeRootLevel complete');
 }
 
 // Add child level to a specific value node
@@ -1094,8 +1130,12 @@ function removeChildLevel(path) {
 
 // Update field at a specific node
 function updateNodeField(path, field) {
+  console.log('[import-data] updateNodeField called, path:', path, 'field:', field);
   const node = path.length === 0 ? hierarchyTree : getNodeAtPath(path);
-  if (!node) return;
+  if (!node) {
+    console.log('[import-data] updateNodeField - node not found');
+    return;
+  }
   
   // If this is a value node with children, update the children's field
   if (path.length > 0 && node.children) {
@@ -1156,6 +1196,7 @@ function updateNodeField(path, field) {
     }
   }
   
+  console.log('[import-data] updateNodeField complete, hierarchyTree exists:', !!hierarchyTree, 'field:', hierarchyTree?.field);
   renderHierarchyTree();
   persistSettings();
 }
@@ -3005,7 +3046,8 @@ async function selectOutputFile() {
 }
 
 function checkFormValid() {
-  const isValid = xmlFilePath && audioFolderPath && outputFilePath;
+  // For unified workflow, we only need XML and audio folder (no output path needed)
+  const isValid = xmlFilePath && audioFolderPath;
   document.getElementById('createBtn').disabled = !isValid;
 }
 
@@ -3077,11 +3119,19 @@ async function importExistingBundle() {
 
 // Start Sorting - creates linked bundle and passes to Tone Analysis
 async function startSorting() {
+  console.log('[startSorting] Starting...');
   const statusEl = document.getElementById('status');
   statusEl.style.display = 'none';
-  const procContainer = document.getElementById('procProgress');
-  const procBar = document.getElementById('procBar');
-  const procMeta = document.getElementById('procMeta');
+  
+  // Validate required fields
+  if (!xmlFilePath) {
+    showStatus('error', 'Please select a Dekereke XML file');
+    return;
+  }
+  if (!audioFolderPath) {
+    showStatus('error', 'Please select an audio folder');
+    return;
+  }
   
   // Collect settings
   const showWrittenForm = document.getElementById('showWrittenForm').checked;
@@ -3095,7 +3145,7 @@ async function startSorting() {
   // Persist current state before bundling
   await persistSettings();
   
-  // Use collectCurrentSettings to get all settings including bundleType and hierarchyTree
+  // Use collectCurrentSettings to get all settings
   const fullConfig = collectCurrentSettings();
   const settings = fullConfig.settings;
 
@@ -3122,162 +3172,82 @@ async function startSorting() {
     return;
   }
   
-  console.log('[createBundle] bundleType:', settings.bundleType);
-  console.log('[createBundle] hierarchyTree exists:', !!settings.hierarchyTree);
+  // Force linked bundle creation (hierarchical)
+  settings.bundleType = 'hierarchical';
+  settings.createLinkedBundle = true;
+  
+  // Generate a temporary output path (required by backend but not used for linked bundles)
+  const tempOutputPath = `temp_bundle_${Date.now()}.tnset`;
+  
+  console.log('[startSorting] Creating linked bundle with settings:', {
+    bundleType: settings.bundleType,
+    createLinkedBundle: settings.createLinkedBundle,
+    xmlPath: xmlFilePath,
+    audioFolder: audioFolderPath
+  });
   
   const config = {
     xmlPath: xmlFilePath,
     audioFolder: audioFolderPath,
-    outputPath: outputFilePath,
+    outputPath: tempOutputPath,
     settings,
   };
   
   // Disable button during creation
-  document.getElementById('createBtn').disabled = true;
-  document.getElementById('createBtn').textContent = 'Creating Bundle...';
-
-  // Listen for audio processing progress events
-  ipcRenderer.removeAllListeners('audio-processing-progress');
-  ipcRenderer.on('audio-processing-progress', (event, info) => {
-    if (!procContainer) return;
-    if (info.type === 'start') {
-      procContainer.style.display = 'block';
-      procBar.style.width = '0%';
-      procMeta.textContent = 'Starting…';
-    } else if (info.type === 'file-done' || info.type === 'file-error') {
-      const pct = Math.round((info.completed / info.total) * 100);
-      procBar.style.width = pct + '%';
-      const elapsedMs = Date.now() - info.startTime;
-      const perFile = elapsedMs / Math.max(1, info.completed);
-      const remainingMs = (info.total - info.completed) * perFile;
-      procMeta.textContent = `${pct}% — ${info.completed}/${info.total} — elapsed ${formatDuration(elapsedMs)} — remaining ${formatDuration(remainingMs)}`;
-    } else if (info.type === 'done') {
-      const pct = 100;
-      procBar.style.width = '100%';
-      const elapsedMs = info.elapsedMs;
-      procMeta.textContent = `100% — ${info.completed}/${info.total} — elapsed ${formatDuration(elapsedMs)} — remaining 0:00`;
-      setTimeout(() => { procContainer.style.display = 'none'; }, 1500);
-    } else if (info.type === 'skipped') {
-      procContainer.style.display = 'none';
-    }
-  });
+  const createBtn = document.getElementById('createBtn');
+  createBtn.disabled = true;
+  createBtn.textContent = 'Preparing Analysis...';
   
-  // Listen for archive finalization progress events
-  ipcRenderer.removeAllListeners('archive-progress');
-  ipcRenderer.on('archive-progress', (event, info) => {
-    console.log('[renderer] Archive progress:', info.type, info);
-    if (!procContainer) return;
-    if (info.type === 'start') {
-      procContainer.style.display = 'block';
-      procBar.style.width = '0%';
-      procBar.style.background = '#007bff';
-      procBar.style.animation = 'none';
-      procMeta.textContent = 'Preparing to finalize archive…';
-    } else if (info.type === 'progress') {
-      const pct = info.percent || 0;
-      procBar.style.width = pct + '%';
-      procBar.style.background = '#007bff';
-      procBar.style.animation = 'none';
-      const mb = (info.processedBytes / 1024 / 1024).toFixed(2);
-      const totalMb = (info.totalBytes / 1024 / 1024).toFixed(2);
-      procMeta.textContent = `Compressing… ${pct}% — ${mb} MB / ${totalMb} MB`;
-    } else if (info.type === 'finalizing') {
-      // Indeterminate progress during finalization
-      const mb = (info.bytesWritten / 1024 / 1024).toFixed(2);
-      procContainer.style.display = 'block'; // Ensure visible
-      procBar.style.width = '100%';
-      procBar.style.background = 'linear-gradient(90deg, #4CAF50 25%, #81C784 50%, #4CAF50 75%)';
-      procBar.style.backgroundSize = '200% 100%';
-      procBar.style.animation = 'progress-animation 2s linear infinite';
-      procMeta.textContent = `Finalizing… ${mb} MB written`;
-    } else if (info.type === 'done') {
-      const mb = info.totalBytes ? (info.totalBytes / 1024 / 1024).toFixed(2) : '?';
-      procBar.style.width = '100%';
-      procBar.style.background = '#4CAF50';
-      procBar.style.animation = 'none';
-      procMeta.textContent = `Archive complete! ${mb} MB`;
-      setTimeout(() => { procContainer.style.display = 'none'; }, 1500);
-    }
-  });
-  
-  const result = await ipcRenderer.invoke('bundler:create-bundle', config);
-  
-  document.getElementById('createBtn').disabled = false;
-  document.getElementById('createBtn').textContent = 'Create Bundle';
-  
-  if (result.success) {
-    let message = `Bundle created successfully!\n\n`;
+  try {
+    const result = await ipcRenderer.invoke('bundler:create-bundle', config);
     
-    // Show hierarchical or legacy record counts
-    if (result.hierarchicalBundle && result.recordsIncluded !== undefined) {
-      message += `Records included: ${result.recordsIncluded}\n`;
-      message += `Records excluded: ${result.recordsExcluded}\n`;
-      message += `Total records: ${result.recordCount}\n`;
+    console.log('[startSorting] Bundle creation result:', result);
+    
+    if (result.success) {
+      console.log('[startSorting] Bundle created successfully, preparing to switch to Tone Analysis');
+      
+      // Prepare bundle metadata for Tone Analysis
+      const bundleMetadata = {
+        linkedXmlPath: xmlFilePath,
+        linkedAudioFolder: audioFolderPath,
+        settings: settings,
+        hierarchyTree: settings.hierarchyTree,
+        filterGroups: filterGroups,
+        recordsIncluded: result.recordsIncluded,
+        recordsExcluded: result.recordsExcluded,
+        recordCount: result.recordCount,
+        audioFileCount: result.audioFileCount,
+        missingSoundFiles: result.missingSoundFiles || []
+      };
+      
+      // Store bundle metadata for Tone Analysis to retrieve
+      await ipcRenderer.invoke('bundler:set-active-bundle', bundleMetadata);
+      
+      // Brief success message
+      showStatus('success', `Linked bundle ready! Records: ${result.recordsIncluded || result.recordCount}, Audio files: ${result.audioFileCount}`);
+      
+      // Switch to Tone Analysis tab after brief delay
+      setTimeout(async () => {
+        try {
+          console.log('[startSorting] Switching to Tone Analysis view');
+          await window.electronAPI.invoke('switch-view', 'analysis');
+        } catch (error) {
+          console.error('[startSorting] Failed to switch to Tone Analysis:', error);
+          showStatus('error', `Failed to open Tone Analysis: ${error.message}`);
+        }
+      }, 1500);
+      
     } else {
-      message += `Records: ${result.recordCount}\n`;
+      showStatus('error', `Failed to create bundle: ${result.error}`);
+      createBtn.disabled = false;
+      createBtn.textContent = '🎯 Start Analysis!';
     }
-    
-    message += `Audio files: ${result.audioFileCount}`;
-    
-    if (result.missingSoundFiles && Array.isArray(result.missingSoundFiles)) {
-      // Show detailed missing files list with scrolling
-      const statusEl = document.getElementById('status');
-      statusEl.className = 'status warning';
-      statusEl.style.display = 'block';
-      statusEl.style.maxHeight = '500px';
-      statusEl.style.overflowY = 'auto';
-      
-      // Build HTML content with proper formatting
-      let html = `<div style="font-weight: bold; margin-bottom: 10px;">${message}</div>`;
-      html += `<div style="margin-top: 15px; padding-top: 15px; border-top: 2px solid #856404;">`;
-      html += `<strong>⚠ Warning: ${result.missingSoundFiles.length} audio files not found</strong>`;
-      html += `</div>`;
-      
-      // Group by reference for better organization
-      const missingByRef = {};
-      result.missingSoundFiles.forEach(item => {
-        const ref = typeof item === 'string' ? 'unknown' : (item.ref || 'unknown');
-        if (!missingByRef[ref]) missingByRef[ref] = [];
-        missingByRef[ref].push(item);
-      });
-      
-      const uniqueRefs = Object.keys(missingByRef).sort();
-      html += `<div style="margin-top: 10px; margin-bottom: 5px;">Unique references affected: ${uniqueRefs.length}</div>`;
-      html += `<div style="margin-top: 10px; font-family: monospace; font-size: 12px; line-height: 1.6;">`;
-      
-      uniqueRefs.forEach(ref => {
-        const items = missingByRef[ref];
-        html += `<div style="margin-top: 8px; margin-bottom: 4px;"><strong>Ref ${ref}:</strong></div>`;
-        items.forEach(item => {
-          const fileName = typeof item === 'string' ? item : item.file;
-          const suffix = typeof item === 'string' ? '' : item.suffix;
-          html += `<div style="margin-left: 20px; color: #721c24;">  suffix '${suffix}': ${fileName}</div>`;
-        });
-      });
-      
-      html += `</div>`;
-      statusEl.innerHTML = html;
-    } else {
-      showStatus('success', message);
-    }
-    
-    // NEW WORKFLOW: Switch to Tone Analysis tab after successful bundle creation
-    setTimeout(async () => {
-      try {
-        // Notify Tone Analysis to load the linked bundle
-        await window.electronAPI.invoke('switch-view', 'analysis');
-        // TODO: Pass bundle configuration to Tone Analysis tab
-      } catch (error) {
-        console.error('Failed to switch to Tone Analysis:', error);
-      }
-    }, 1000);
-  } else {
-    showStatus('error', `Failed to create bundle: ${result.error}`);
+  } catch (error) {
+    console.error('[startSorting] Error:', error);
+    showStatus('error', `Error: ${error.message}`);
+    createBtn.disabled = false;
+    createBtn.textContent = '🎯 Start Analysis!';
   }
-  
-  // Re-enable button
-  document.getElementById('createBtn').disabled = false;
-  document.getElementById('createBtn').textContent = '🚀 Start Sorting!';
 }
 
 function formatDuration(ms) {
@@ -3408,15 +3378,28 @@ async function importAudioVariantsFromClipboard() {
     const menu = document.getElementById('importAudioVariantsMenu');
     if (menu) menu.style.display = 'none';
     
+    // Log electronAPI availability
+    console.log('[import-data] window.electronAPI:', !!window.electronAPI);
+    console.log('[import-data] window.electronAPI.clipboard:', !!window.electronAPI?.clipboard);
+    console.log('[import-data] window.electronAPI.clipboard.readText:', typeof window.electronAPI?.clipboard?.readText);
+    
     // Check if clipboard API is available
     if (!window.electronAPI || !window.electronAPI.clipboard) {
-      alert('Clipboard API not available. Please ensure the app has proper permissions.');
+      const details = `electronAPI: ${!!window.electronAPI}, clipboard: ${!!window.electronAPI?.clipboard}`;
+      alert(`Clipboard API not available. Please ensure the app has proper permissions.\\n\\nDebug: ${details}`);
       console.error('[import-data] window.electronAPI.clipboard not available');
       return;
     }
     
-    // Read clipboard text
-    const clipboardText = window.electronAPI.clipboard.readText();
+    // Check if readText method is available
+    if (typeof window.electronAPI.clipboard.readText !== 'function') {
+      alert('Clipboard readText method not available. This may be a preload script issue.');
+      console.error('[import-data] clipboard.readText is not a function:', typeof window.electronAPI.clipboard.readText);
+      return;
+    }
+    
+    // Read clipboard text (now async via IPC)
+    const clipboardText = await window.electronAPI.clipboard.readText();
     console.log('[import-data] Clipboard text:', clipboardText);
     
     if (!clipboardText || !clipboardText.trim()) {
@@ -3726,11 +3709,8 @@ function updateCreateButtonText() {
   const btn = document.getElementById('createBtn');
   if (!btn) return;
   
-  if (bundleType === 'hierarchical') {
-    btn.textContent = 'Create Macro-Bundle (.tnset)';
-  } else {
-    btn.textContent = 'Create Bundle (.tncmp)';
-  }
+  // Always show "Start Analysis!" for the unified workflow
+  btn.textContent = '🎯 Start Analysis!';
 }
 
 // Check for conflicts in source data

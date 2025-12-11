@@ -135,4 +135,21 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     switchView('import-mobile');
   }
+  // Cmd/Ctrl + R = Force reload current view (development)
+  if ((e.metaKey || e.ctrlKey) && e.key === 'r' && !e.shiftKey) {
+    e.preventDefault();
+    const currentTab = document.querySelector('.tab.active');
+    if (currentTab) {
+      const viewName = currentTab.getAttribute('data-view');
+      console.log('[main-window] Force reloading view:', viewName);
+      loadedViews.delete(viewName); // Remove from cache
+      const viewContainer = document.getElementById(`${viewName}-view`);
+      if (viewContainer) {
+        viewContainer.innerHTML = ''; // Clear content
+      }
+      loadViewContent(viewName).then(() => {
+        console.log('[main-window] View reloaded');
+      });
+    }
+  }
 });

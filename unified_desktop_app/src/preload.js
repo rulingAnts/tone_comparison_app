@@ -4,7 +4,7 @@
  * Exposes safe IPC communication to renderer processes
  */
 
-const { contextBridge, ipcRenderer, clipboard } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
@@ -26,7 +26,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'bundler:save-profile',
       'bundler:open-profile',
       'bundler:create-and-open',
+      'bundler:set-active-bundle',
+      'bundler:get-active-bundle',
       'matching:load-bundle',
+      'clipboard:read-text',
+      'clipboard:write-text',
     ];
     
     if (validChannels.includes(channel)) {
@@ -86,9 +90,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onBundleLoaded: (callback) => ipcRenderer.on('bundle-loaded', (event, data) => callback(data)),
   },
   
-  // Clipboard API
+  // Clipboard API - using IPC for better compatibility
   clipboard: {
-    readText: () => clipboard.readText(),
-    writeText: (text) => clipboard.writeText(text),
+    readText: () => ipcRenderer.invoke('clipboard:read-text'),
+    writeText: (text) => ipcRenderer.invoke('clipboard:write-text', text),
   },
 });

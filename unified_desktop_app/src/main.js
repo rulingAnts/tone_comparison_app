@@ -5,7 +5,7 @@
  * Phase 2: Porting bundler backend
  */
 
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const archiver = require('archiver');
@@ -66,6 +66,7 @@ function generateUuid() {
 let mainWindow;
 let currentView = 'bundler';
 let bundlerSettings = null;
+let activeBundleMetadata = null; // Store active bundle for Tone Analysis
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -194,11 +195,53 @@ ipcMain.handle('get-current-view', async () => {
 });
 
 // ============================================================================
+// IPC Handlers - Clipboard Operations
+// ============================================================================
+
+ipcMain.handle('clipboard:read-text', async () => {
+  try {
+    const text = clipboard.readText();
+    console.log('[main] Clipboard read, length:', text?.length || 0);
+    return text;
+  } catch (error) {
+    console.error('[main] Error reading clipboard:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('clipboard:write-text', async (event, text) => {
+  try {
+    clipboard.writeText(text);
+    console.log('[main] Clipboard written, length:', text?.length || 0);
+    return true;
+  } catch (error) {
+    console.error('[main] Error writing clipboard:', error);
+    throw error;
+  }
+});
+
+// ============================================================================
+// IPC Handlers - Bundle Metadata for Tone Analysis
+// ============================================================================
+
+ipcMain.handle('bundler:set-active-bundle', async (event, metadata) => {
+  console.log('[main] Setting active bundle metadata for Tone Analysis');
+  activeBundleMetadata = metadata;
+  return { success: true };
+});
+
+ipcMain.handle('bundler:get-active-bundle', async () => {
+  console.log('[main] Getting active bundle metadata');
+  return activeBundleMetadata;
+});
+
+// ============================================================================
 // IPC Handlers - Bundler (Phase 2: Full Implementation)
 // ============================================================================
 
 ipcMain.handle('bundler:get-settings', async () => {
   if (!bundlerSettings) loadBundlerSettings();
+  console.log('[main] get-settings called, hierarchyTree:', !!bundlerSettings?.settings?.hierarchyTree, 'filterGroups:', bundlerSettings?.settings?.filterGroups?.length || 0);
   return bundlerSettings;
 });
 
@@ -209,6 +252,7 @@ ipcMain.handle('bundler:set-settings', async (event, patch) => {
     for (const k of Object.keys(patch)) {
       if (k === 'settings' && typeof patch.settings === 'object') {
         next.settings = { ...(next.settings || {}), ...patch.settings };
+        console.log('[main] Merged settings, hierarchyTree:', !!next.settings.hierarchyTree, 'filterGroups:', next.settings.filterGroups?.length || 0);
       } else {
         next[k] = patch[k];
       }

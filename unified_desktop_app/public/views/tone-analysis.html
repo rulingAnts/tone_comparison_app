@@ -137,17 +137,6 @@
     </div>
   </div>
 
-  <script>
-    // Placeholder functionality - will be connected to IPC later
-    document.getElementById('load-bundle').addEventListener('click', () => {
-      console.log('Load bundle clicked');
-    });
-
-    document.getElementById('go-to-bundler').addEventListener('click', () => {
-      console.log('Create new bundle clicked');
-      // Request switch to bundler view
-      window.parent.postMessage({ type: 'switch-view', view: 'bundler' }, '*');
-    });
-  </script>
+  <script src="tone-analysis-renderer.js"></script>
 </body>
 </html>
