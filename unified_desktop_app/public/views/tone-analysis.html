@@ -1,142 +1,1419 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Matching</title>
+  <title>Tone Matching Desktop</title>
   <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-      padding: 2rem;
-      background: #f5f5f5;
+    * {
       margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: #f5f5f5;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      background: white;
+      padding: 15px 30px;
+      border-bottom: 2px solid #007bff;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .header h1 {
+      color: #333;
+      font-size: 24px;
+      margin-bottom: 5px;
+    }
+
+    .progress-indicator {
+      color: #666;
+      font-size: 14px;
     }
 
     .container {
-      max-width: 1200px;
-      margin: 0 auto;
+      flex: 1;
+      display: flex;
+      padding: 20px;
+      gap: 20px;
+      overflow: hidden;
+    }
+
+    .main-panel {
+      flex: 1;
       background: white;
+      padding: 30px;
       border-radius: 8px;
-      padding: 2rem;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
     }
 
-    h1 {
-      color: #2c3e50;
-      margin-bottom: 1rem;
+    .groups-panel {
+      width: 400px;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
     }
 
-    .description {
-      color: #7f8c8d;
-      margin-bottom: 2rem;
-      line-height: 1.6;
+    .welcome-screen {
+      text-align: center;
+      padding: 50px;
     }
 
-    .section {
-      margin-bottom: 2rem;
-      padding-bottom: 2rem;
-      border-bottom: 1px solid #ecf0f1;
-    }
-
-    .section:last-child {
-      border-bottom: none;
-    }
-
-    .section h2 {
-      color: #34495e;
-      font-size: 1.25rem;
-      margin-bottom: 1rem;
+    .welcome-screen h2 {
+      color: #555;
+      margin-bottom: 20px;
     }
 
     button {
-      padding: 0.75rem 1.5rem;
-      background: #3498db;
+      background: #007bff;
       color: white;
       border: none;
+      padding: 12px 24px;
       border-radius: 4px;
       cursor: pointer;
+      font-size: 14px;
       font-weight: 500;
-      transition: background 0.2s;
     }
 
     button:hover {
-      background: #2980b9;
+      background: #0056b3;
     }
 
     button:disabled {
-      background: #95a5a6;
+      background: #ccc;
       cursor: not-allowed;
     }
 
-    .placeholder {
-      padding: 3rem;
+    button.secondary {
+      background: #6c757d;
+    }
+
+    button.secondary:hover {
+      background: #545b62;
+    }
+
+    button.danger {
+      background: #dc3545;
+    }
+
+    button.danger:hover {
+      background: #c82333;
+    }
+
+    .word-panel {
+      margin-bottom: 30px;
+    }
+
+    .word-display {
+      background: #f9f9f9;
+      padding: 20px;
+      border-radius: 6px;
+      margin-bottom: 15px;
+    }
+
+    .word-line {
+      font-size: 24px;
+      color: #333;
+      margin-bottom: 10px;
+    }
+
+    .gloss-line {
+      font-size: 18px;
+      color: #666;
+      font-style: italic;
+    }
+
+    .audio-controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .audio-controls select {
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    .spelling-section {
+      margin-bottom: 20px;
+    }
+
+    .spelling-input-group {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .spelling-input-group input {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    .spelling-display {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      background: #e9ecef;
+      border-radius: 4px;
+    }
+
+    .spelling-text {
+      flex: 1;
+      font-size: 16px;
+      color: #333;
+    }
+
+    .edit-icon {
+      cursor: pointer;
+      font-size: 18px;
+      color: #007bff;
+    }
+
+    .helper-hint {
+      font-size: 12px;
+      color: #dc3545;
+      margin-top: 5px;
+    }
+
+    .add-word-section {
+      margin-bottom: 30px;
+    }
+
+    .groups-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+
+    .groups-header h2 {
+      font-size: 18px;
+      color: #333;
+    }
+
+    .groups-list {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .group-card {
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 15px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .group-card.active {
+      border-color: #007bff;
+      background: #f0f8ff;
+    }
+
+    .group-card:hover {
+      border-color: #007bff;
+    }
+    
+    .group-card.collapsed-drop-zone {
+      transition: background-color 0.2s;
+    }
+    
+    .group-card.collapsed-drop-zone:hover {
+      background-color: #f8f9fa;
+    }
+
+    .group-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .group-number {
+      font-size: 18px;
+      font-weight: bold;
+      color: #333;
+    }
+
+    .group-image-container {
       text-align: center;
-      color: #95a5a6;
+      margin-bottom: 10px;
+    }
+
+    .group-enhanced-display {
+      background: #f8f9fa;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 10px;
+      border: 1px solid #e9ecef;
+    }
+
+    .group-pitch-transcription {
+      font-family: 'Contour6SILDoulos', monospace;
+      font-size: 20px;
+      color: #495057;
+      margin-bottom: 6px;
+      text-align: center;
+      line-height: 1.4;
+      word-wrap: break-word;
+    }
+
+    .group-tone-abbreviation {
+      font-size: 16px;
+      font-weight: 600;
+      color: #007bff;
+      text-align: center;
+      margin-bottom: 6px;
+    }
+
+    .group-exemplar {
+      font-size: 14px;
+      color: #6c757d;
+      text-align: center;
+      font-style: italic;
+    }
+
+    .group-exemplar .ref {
+      font-weight: 500;
+      color: #495057;
+      margin-left: 4px;
+    }
+
+    .group-image {
+      max-width: 100%;
+      max-height: 150px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .image-placeholder {
+      height: 100px;
+      background: #e9ecef;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #999;
+      cursor: pointer;
+    }
+
+    .members-list {
+      margin-top: 10px;
+    }
+
+    .member-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px;
       background: #f9f9f9;
       border-radius: 4px;
-      border: 2px dashed #ddd;
+      margin-bottom: 5px;
+      cursor: move;
+      transition: background 0.2s, transform 0.2s;
+    }
+
+    .member-item:hover {
+      background: #f0f0f0;
+    }
+
+    .member-item.dragging {
+      opacity: 0.5;
+      transform: scale(0.98);
+    }
+
+    .queue-item {
+      padding: 10px;
+      margin-bottom: 8px;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      cursor: move;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .queue-item.selected {
+      background: #e3f2fd;
+      border-color: #2196f3;
+    }
+
+    .queue-item input[type="checkbox"] {
+      cursor: pointer;
+      width: 18px;
+      height: 18px;
+    }
+
+    .queue-item:hover {
+      background: #f8f9fa;
+      border-color: #007bff;
+    }
+
+    .queue-item.dragging {
+      opacity: 0.5;
+    }
+
+    .queue-item.current-word {
+      background: #e7f3ff;
+      border-color: #007bff;
+      font-weight: 500;
+    }
+
+    .queue-item .drag-handle {
+      color: #999;
+      font-size: 18px;
+      cursor: grab;
+    }
+
+    .queue-item .queue-position {
+      color: #666;
+      font-size: 12px;
+      min-width: 30px;
+    }
+
+    .queue-item .word-info {
+      flex: 1;
+    }
+
+    .queue-item .word-ref {
+      font-weight: 500;
+      color: #333;
+    }
+
+    .queue-item .word-text {
+      font-size: 12px;
+      color: #666;
+      margin-top: 2px;
+    }
+
+    .queue-item button {
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+
+    .member-text {
+      flex: 1;
+    }
+
+    .member-title {
+      font-size: 14px;
+      color: #333;
+      font-weight: 500;
+    }
+
+    .member-subtitle {
+      font-size: 12px;
+      color: #666;
+    }
+
+    .member-actions {
+      display: flex;
+      gap: 5px;
+    }
+
+    .icon-button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 4px 8px;
+      color: #007bff;
+    }
+
+    .icon-button:hover {
+      color: #0056b3;
+    }
+
+    .icon-button.danger {
+      color: #dc3545;
+    }
+
+    .icon-button.danger:hover {
+      color: #c82333;
+    }
+
+    .export-section {
+      padding: 20px;
+      background: #f9f9f9;
+      border-top: 1px solid #ddd;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .flex-gap {
+      display: flex;
+      gap: 10px;
     }
 
     .no-bundle {
-      padding: 4rem 2rem;
+      text-align: center;
+      padding: 20px;
+      color: #666;
+    }
+
+    /* RTL adjustments */
+    [dir="rtl"] body { direction: rtl; }
+    [dir="rtl"] .header h1 { text-align: right; }
+    [dir="rtl"] .welcome-screen { text-align: right; }
+    [dir="rtl"] .groups-header { flex-direction: row-reverse; }
+    [dir="rtl"] .groups-header h2 { text-align: right; }
+    [dir="rtl"] .group-header { flex-direction: row-reverse; }
+    [dir="rtl"] .group-number { text-align: right; }
+    [dir="rtl"] .member-item { flex-direction: row-reverse; }
+    [dir="rtl"] .member-actions { flex-direction: row-reverse; }
+    [dir="rtl"] .spelling-display { flex-direction: row-reverse; }
+    [dir="rtl"] .spelling-input-group { flex-direction: row-reverse; }
+    [dir="rtl"] .audio-controls { flex-direction: row-reverse; }
+
+    /* Navigation Screen Styles */
+    .navigation-screen {
+      padding: 20px;
+    }
+
+    /* Contour6 Font for Pitch Transcription */
+    @font-face {
+      font-family: 'Contour6SILDoulos';
+      src: url('fonts/Contour6SILDoulos.ttf') format('truetype');
+      font-weight: normal;
+      font-style: normal;
+    }
+
+    .navigation-screen h2 {
+      margin-bottom: 10px;
+      color: #333;
+    }
+
+    .navigation-screen .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+
+    .hierarchy-tree {
+      margin-top: 20px;
+    }
+
+    .hierarchy-level {
+      margin-left: 20px;
+    }
+
+    .hierarchy-level:first-child {
+      margin-left: 0;
+    }
+
+    .category-node {
+      margin-bottom: 8px;
+    }
+
+    .category-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: #f8f9fa;
+      border-radius: 4px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .category-header:hover {
+      background: #e9ecef;
+    }
+
+    .category-header.org-group-header {
+      background: #e3f2fd;
+      margin-top: 4px;
+    }
+
+    .category-header.org-group-header:hover {
+      background: #bbdefb;
+    }
+
+    .category-header.org-group-header .label {
+      color: #1976d2;
+      font-weight: 400;
+      font-size: 14px;
+    }
+
+    .category-header .toggle {
+      font-size: 12px;
+      color: #666;
+      width: 16px;
+    }
+
+    .category-header .label {
+      font-weight: 500;
+      color: #333;
+      flex: 1;
+    }
+
+    .category-header .count {
+      font-size: 12px;
+      color: #666;
+      background: #e9ecef;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+
+    .category-children {
+      margin-left: 20px;
+      margin-top: 4px;
+    }
+
+    .category-children.collapsed {
+      display: none;
+    }
+
+    .sub-bundle-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      margin: 4px 0;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .sub-bundle-item:hover {
+      border-color: #007bff;
+      background: #f8f9ff;
+      box-shadow: 0 2px 4px rgba(0,123,255,0.1);
+    }
+
+    .sub-bundle-item .info {
+      flex: 1;
+    }
+
+    .sub-bundle-item .name {
+      font-weight: 500;
+      color: #333;
+      margin-bottom: 4px;
+    }
+
+    .sub-bundle-item .progress-bar {
+      height: 6px;
+      background: #e9ecef;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 4px;
+    }
+
+    .sub-bundle-item .progress-fill {
+      height: 100%;
+      background: #28a745;
+      transition: width 0.3s;
+    }
+
+    .sub-bundle-item .progress-fill.partial {
+      background: #ffc107;
+    }
+
+    .sub-bundle-item .stats {
+      font-size: 12px;
+      color: #666;
+    }
+
+    .sub-bundle-item .review-status {
+      font-size: 20px;
+      min-width: 24px;
       text-align: center;
     }
 
-    .no-bundle h2 {
-      color: #7f8c8d;
-      font-weight: 400;
-      margin-bottom: 2rem;
+    .back-to-nav-btn {
+      position: fixed;
+      top: 80px;
+      left: 20px;
+      z-index: 1000;
+      background: #6c757d;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     }
 
-    .quick-actions {
+    .back-to-nav-btn:hover {
+      background: #545b62;
+    }
+
+    .current-sub-bundle-indicator {
+      background: #d4edda;
+      border: 1px solid #c3e6cb;
+      color: #155724;
+      padding: 8px 12px;
+      border-radius: 4px;
+      margin-bottom: 15px;
+      font-size: 14px;
+    }
+
+    .current-sub-bundle-indicator strong {
+      font-weight: 600;
+    }
+
+    /* Completion Message */
+    .completion-message {
+      background: #d4edda;
+      border: 2px solid #28a745;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      animation: slideDown 0.3s ease-out;
+    }
+
+    .completion-message.hidden {
+      display: none;
+    }
+
+    @keyframes slideDown {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .completion-content {
       display: flex;
-      gap: 1rem;
+      gap: 15px;
+      align-items: center;
+    }
+
+    .completion-icon {
+      font-size: 48px;
+      color: #28a745;
+      flex-shrink: 0;
+    }
+
+    .completion-text {
+      flex: 1;
+    }
+
+    .completion-text strong {
+      display: block;
+      color: #155724;
+      font-size: 16px;
+      margin-bottom: 5px;
+    }
+
+    .completion-text p {
+      color: #155724;
+      margin: 0;
+      font-size: 14px;
+    }
+
+    .completion-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .completion-actions button {
+      white-space: nowrap;
+      font-size: 14px;
+      padding: 8px 16px;
+    }
+
+    /* Modal Styles */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
       justify-content: center;
+      z-index: 2000;
+    }
+
+    .modal-overlay.hidden {
+      display: none;
+    }
+
+    .modal-content {
+      background: white;
+      border-radius: 8px;
+      padding: 30px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .modal-header h2 {
+      margin: 0;
+      color: #333;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      color: #999;
+      cursor: pointer;
+      padding: 0;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-close:hover {
+      color: #333;
+    }
+
+    .modal-body {
+      margin-bottom: 20px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 8px;
+      color: #333;
+    }
+
+    .form-group input[type="text"],
+    .form-group textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    .form-group textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .form-group textarea.pitch-input {
+      font-family: 'Contour6SILDoulos', monospace;
+      font-size: 18px;
+    }
+
+    .form-group input[type="checkbox"] {
+      margin-right: 8px;
+    }
+
+    .form-group .checkbox-label {
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+    }
+
+    .form-help {
+      font-size: 12px;
+      color: #666;
+      margin-top: 4px;
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    /* Move Word Tree Styles */
+    .move-word-tree {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 15px;
+      max-height: 400px;
+      overflow-y: auto;
+      background: #f9f9f9;
+    }
+
+    .move-tree-item {
+      margin: 5px 0;
+    }
+
+    .move-tree-category {
+      font-weight: 600;
+      color: #555;
+      margin: 10px 0 5px 0;
+      padding-left: 0;
+    }
+
+    .move-tree-sub-bundle {
+      padding: 8px 12px;
+      margin: 3px 0;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.2s;
+    }
+
+    .move-tree-sub-bundle:hover {
+      background: #e9ecef;
+    }
+
+    .move-tree-sub-bundle.current {
+      background: #d4edda;
+      border: 1px solid #c3e6cb;
+      color: #155724;
+      cursor: not-allowed;
+    }
+
+    .move-tree-sub-bundle.selected {
+      background: #cce5ff;
+      border: 1px solid #b8daff;
+      color: #004085;
+    }
+
+    .move-tree-sub-bundle input[type="radio"] {
+      margin: 0;
+    }
+
+    .move-tree-sub-bundle-label {
+      flex: 1;
+    }
+
+    .move-tree-sub-bundle-info {
+      font-size: 12px;
+      color: #666;
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>🎯 Tone Group Matching</h1>
-    <p class="description">
-      Assign words to tone groups by listening to audio and comparing tone melodies.
-      Works with both standalone bundles and linked bundles that directly modify your XML database.
-    </p>
-
-    <!-- No Bundle Loaded State -->
-    <div class="no-bundle">
-      <h2>No bundle loaded</h2>
-      <div class="quick-actions">
-        <button id="load-bundle">Load Bundle...</button>
-        <button id="go-to-bundler">Create New Bundle</button>
+  <div class="header">
+    <h1 data-i18n="tm_appTitle">Tone Matching Desktop</h1>
+    <div style="display:flex; gap:20px; align-items:center; margin-top:8px;">
+      <div class="progress-indicator" id="progressIndicator" data-i18n="tm_noBundleLoaded">No bundle loaded</div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <label for="localeSelect" data-i18n="tm_languageLabel">Language</label>
+        <select id="localeSelect">
+          <option value="en">English</option>
+          <option value="id">Bahasa Indonesia</option>
+          <option value="tpi">Tok Pisin</option>
+          <option value="de">Deutsch</option>
+          <option value="fr">Français</option>
+          <option value="es">Español</option>
+          <option value="pt">Português</option>
+          <option value="it">Italiano</option>
+          <option value="nl">Nederlands</option>
+          <option value="af">Afrikaans</option>
+          <option value="ar">العربية</option>
+          <option value="zh">中文</option>
+        </select>
       </div>
-    </div>
-
-    <!-- Bundle Interface (hidden until bundle loaded) -->
-    <div id="bundle-interface" style="display: none;">
-      <div class="section">
-        <h2>Current Word</h2>
-        <div class="placeholder">
-          Word display and audio player will appear here
-        </div>
-      </div>
-
-      <div class="section">
-        <h2>Tone Groups</h2>
-        <div class="placeholder">
-          Tone group cards will appear here
-        </div>
-      </div>
-
-      <div class="section">
-        <h2>Queue Management</h2>
-        <div class="placeholder">
-          Queue controls will appear here
-        </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <label for="showReferencesCheckbox" data-i18n="tm_showReferences">Show References</label>
+        <input type="checkbox" id="showReferencesCheckbox" checked>
       </div>
     </div>
   </div>
 
+  <div class="container">
+    <!-- Back to Navigation button (shown only when in sub-bundle) -->
+    <button id="backToNavBtn" class="back-to-nav-btn hidden" onclick="backToNavigation()">
+      ← Back to Navigation
+    </button>
+
+    <!-- Main Panel -->
+    <div class="main-panel">
+      <div id="welcomeScreen" class="welcome-screen">
+        <h2 data-i18n="tm_welcomeTitle">Welcome to Tone Matching Desktop</h2>
+        <p style="margin-bottom: 20px;" data-i18n="tm_welcomeMessage">Load a .tncmp bundle to begin tone group assignment</p>
+        <button onclick="loadBundle()" data-i18n="tm_loadBundle">Load Bundle</button>
+        <button id="clearBundleBtn" onclick="clearBundle()" class="danger" style="display: none; margin-top: 10px;" data-i18n="tm_clearBundle">Clear Current Bundle</button>
+      </div>
+
+      <!-- Navigation Screen for Hierarchical Bundles -->
+      <div id="navigationScreen" class="navigation-screen hidden">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+          <div>
+            <h2 data-i18n="tm_selectSubBundle">Select Sub-Bundle</h2>
+            <p class="subtitle" data-i18n="tm_selectSubBundle_subtitle">Choose a category to begin sorting tone groups</p>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button onclick="openExportModal()">Export…</button>
+            <button class="danger" onclick="clearBundle()" data-i18n="tm_loadDifferentBundle">Load Different Bundle</button>
+          </div>
+        </div>
+        
+        <div id="hierarchyTree" class="hierarchy-tree">
+          <!-- Tree will be populated by JavaScript -->
+        </div>
+      </div>
+
+      <div id="workArea" class="hidden">
+        <!-- Current Sub-Bundle Indicator (for hierarchical bundles) -->
+        <div id="subBundleIndicator" class="current-sub-bundle-indicator hidden">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <strong>Current:</strong> <span id="subBundlePath"></span>
+            </div>
+            <button id="markAllReviewedBtn" class="secondary" onclick="markAllGroupsReviewed()" style="display: none;">
+              Mark All Reviewed
+            </button>
+          </div>
+        </div>
+
+        <!-- Completion Message (for hierarchical bundles) -->
+        <div id="completionMessage" class="completion-message hidden">
+          <div class="completion-content">
+            <div class="completion-icon">✓</div>
+            <div class="completion-text">
+              <strong>All words in this sub-bundle have been assigned!</strong>
+              <p id="completionDetails"></p>
+            </div>
+            <div class="completion-actions">
+              <button onclick="markAllGroupsReviewed()">Mark All Reviewed</button>
+              <button class="secondary" onclick="backToNavigation()">Back to Navigation</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Current Word Panel -->
+        <div class="word-panel">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
+            <h2 style="margin: 0;" data-i18n="tm_currentWord">Current Word</h2>
+            <button id="manageQueueBtn" onclick="openQueueModal()" style="padding: 6px 12px; font-size: 13px;">
+              📋 Manage Queue (<span id="queueCount">0</span>)
+            </button>
+          </div>
+          
+          <div class="word-display" id="wordDisplay">
+            <div class="word-line" id="writtenFormLine"></div>
+            <div class="gloss-line" id="glossLine"></div>
+            <div class="reference-line" id="referenceLine" style="color: #666; font-size: 13px; margin-top: 4px; display: none;"></div>
+          </div>
+
+          <!-- Audio Controls -->
+          <div class="audio-controls">
+            <select id="audioVariantSelect"></select>
+            <button onclick="playAudio()" data-i18n="tm_play">Play</button>
+          </div>
+
+          <!-- Spelling Section -->
+          <div id="spellingSection" class="spelling-section hidden">
+            <div id="spellingInput" class="spelling-input-group">
+              <input type="text" id="spellingTextInput" data-i18n-placeholder="tm_enterSpelling_placeholder" placeholder="Enter spelling..." />
+              <button onclick="confirmSpelling()" data-i18n="tm_confirmSpelling">Confirm</button>
+            </div>
+            <div id="spellingDisplay" class="spelling-display hidden">
+              <div class="spelling-text" id="spellingText"></div>
+              <span class="edit-icon" onclick="editSpelling()">✏️</span>
+            </div>
+          </div>
+
+          <!-- Add Word Section -->
+          <div class="add-word-section">
+            <button id="addWordBtn" onclick="addWordToCurrentGroup()" disabled data-i18n="tm_addWordToCurrentGroup">Add Word to Current Group</button>
+            <button id="moveWordBtn" class="danger" onclick="initiateWordMove()" disabled style="margin-left: 10px; display: none;" data-i18n="tm_moveToCategory">Move to Different Category</button>
+            <div id="addWordHint" class="helper-hint hidden" data-i18n="tm_addWord_hint_needSpelling">Please confirm spelling before adding word to group</div>
+          </div>
+        </div>
+
+        <!-- Export Section -->
+        <div class="export-section">
+          <!-- Undo/Redo buttons -->
+          <div style="margin-bottom: 10px;">
+            <button id="undoBtn" onclick="undo()" disabled data-i18n="tm_undo">Undo</button>
+            <button id="redoBtn" onclick="redo()" disabled style="margin-left: 10px;" data-i18n="tm_redo">Redo</button>
+          </div>
+          
+          <!-- Hierarchical bundle exports -->
+          <div id="hierarchicalExportSection" class="hidden">
+            <button onclick="openExportModal()">Export…</button>
+            <button class="secondary" onclick="loadBundle()" style="margin-left: 10px;" data-i18n="tm_loadDifferentBundle">Load Different Bundle</button>
+            <button class="danger" onclick="resetSession()" style="margin-left: 10px;" data-i18n="tm_resetSession">Reset Session</button>
+          </div>
+          
+          <!-- Legacy bundle export -->
+          <div id="legacyExportSection">
+            <button onclick="exportBundle()" data-i18n="tm_exportResults">Export Results</button>
+            <button class="secondary" onclick="loadBundle()" style="margin-left: 10px;" data-i18n="tm_loadDifferentBundle">Load Different Bundle</button>
+            <button class="danger" onclick="resetSession()" style="margin-left: 10px;" data-i18n="tm_resetSession">Reset Session</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Groups Panel -->
+    <div class="groups-panel">
+      <div class="groups-header">
+        <h2 data-i18n="tm_toneGroups">Tone Groups</h2>
+        <div style="display: flex; gap: 8px;">
+          <button onclick="toggleCollapseAll()" id="collapseAllBtn" class="secondary" style="font-size: 12px; padding: 6px 12px;">Collapse All</button>
+          <button onclick="createNewGroup()" data-i18n="tm_newGroup">+ New Group</button>
+        </div>
+      </div>
+      
+      <div class="groups-list" id="groupsList">
+        <div class="no-bundle" data-i18n="tm_noGroups">No groups yet</div>
+      </div>
+    </div>
+  </div>
+
+  <audio id="audioPlayer"></audio>
+
+  <!-- Edit Group Modal -->
+  <div id="editGroupModal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="editGroupTitle">Edit Group</h2>
+        <button class="modal-close" onclick="closeEditGroupModal()">&times;</button>
+      </div>
+      
+      <div class="modal-body">
+        <!-- Pitch Transcription -->
+        <div class="form-group">
+          <label for="pitchTranscriptionInput">Pitch Transcription</label>
+          <textarea 
+            id="pitchTranscriptionInput" 
+            class="pitch-input"
+            placeholder="Enter pitch transcription using Contour6 font..."
+            rows="3"></textarea>
+          <div class="form-help">Use Contour6 characters to represent tone contours</div>
+        </div>
+
+        <!-- Tone Abbreviation -->
+        <div class="form-group">
+          <label for="toneAbbreviationInput">Tone Abbreviation</label>
+          <input 
+            type="text" 
+            id="toneAbbreviationInput" 
+            placeholder="e.g., LHL, MH, etc.">
+          <div class="form-help">Short code representing the tone pattern</div>
+        </div>
+
+        <!-- Exemplar Word -->
+        <div class="form-group">
+          <label for="exemplarWordInput">Exemplar Word</label>
+          <input 
+            type="text" 
+            id="exemplarWordInput" 
+            placeholder="Representative word for this tone group">
+          <div class="form-help">A typical word that represents this tone group</div>
+        </div>
+
+        <!-- Exemplar Word Reference -->
+        <div class="form-group">
+          <label for="exemplarWordRefInput">Exemplar Reference Number</label>
+          <input 
+            type="text" 
+            id="exemplarWordRefInput" 
+            placeholder="Reference number (optional)">
+          <div class="form-help">Reference number for the exemplar word</div>
+        </div>
+
+        <!-- Mark as Reviewed -->
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="markReviewedCheckbox">
+            <span>Mark this group as reviewed</span>
+          </label>
+          <div class="form-help">Clear the "needs review" badge for this group</div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="secondary" onclick="closeEditGroupModal()">Cancel</button>
+        <button onclick="saveGroupEdits()">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Move Flagged Words Modal -->
+  <div id="moveFlaggedModal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="moveFlaggedTitle">Move Flagged Words</h2>
+        <button class="modal-close" onclick="closeMoveFlaggedModal()">&times;</button>
+      </div>
+      
+      <div class="modal-body">
+        <p style="margin-bottom: 15px;">
+          Move <strong id="moveFlaggedCount"></strong> flagged word(s) to:
+        </p>
+        
+        <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 10px;">
+          <div id="targetGroupsList"></div>
+        </div>
+        
+        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
+          <button onclick="moveFlaggedToNewGroup()" style="width: 100%;">
+            + Create New Group for Flagged Words
+          </button>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="secondary" onclick="closeMoveFlaggedModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Queue Management Modal -->
+  <div id="queueModal" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2>Queue Management</h2>
+        <button class="modal-close" onclick="closeQueueModal()">&times;</button>
+      </div>
+      
+      <div class="modal-body">
+        <p style="margin-bottom: 15px; color: #666;">
+          <strong id="queueModalCount"></strong> words remaining in queue. Click to jump to any word, or drag to reorder.
+        </p>
+        
+        <div style="margin-bottom: 15px;">
+          <button onclick="moveCurrentWordToEnd()" style="width: 100%;" id="moveToEndBtn">
+            ⬇️ Move Current Word to End of Queue
+          </button>
+        </div>
+        
+        <div style="margin-bottom: 15px; display: none;" id="moveSelectedContainer">
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <button onclick="selectAllQueueWords()" class="secondary" style="flex: 1;">
+              Select All
+            </button>
+            <button onclick="deselectAllQueueWords()" class="secondary" style="flex: 1;">
+              Deselect All
+            </button>
+            <button onclick="initiateMultiWordMove()" id="moveSelectedBtn" disabled style="flex: 2;">
+              📦 Move Selected Words (<span id="selectedCount">0</span>)
+            </button>
+          </div>
+        </div>
+        
+        <div style="max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 10px;">
+          <div id="queueList"></div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="secondary" onclick="closeQueueModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Move Word Modal (Hierarchical bundles only) -->
+  <div id="moveWordModal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="moveWordTitle">Move Word to Sub-Bundle</h2>
+        <button class="modal-close" onclick="closeMoveWordModal()">&times;</button>
+      </div>
+      
+      <div class="modal-body">
+        <p style="margin-bottom: 15px;">
+          <span id="moveWordText"></span>
+        </p>
+        
+        <div id="moveWordTree" class="move-word-tree">
+          <!-- Tree will be populated by JavaScript -->
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="secondary" onclick="closeMoveWordModal()">Cancel</button>
+        <button id="confirmMoveBtn" onclick="confirmMoveWord()" disabled><span id="confirmMoveText">Move Word</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export Modal -->
+  <div id="exportModal" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2>Export Options</h2>
+        <button class="modal-close" onclick="closeExportModal()">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <p style="margin-bottom: 12px; color: #666;">
+          Choose how you want to export or merge your session data.
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <button onclick="exportHierarchicalBundle()">✓ Export Complete Session (Hierarchical)</button>
+          <button id="exportSubBundleBtn" class="secondary" onclick="exportCurrentSubBundle()">Export Current Sub-Bundle</button>
+          <button class="secondary" onclick="exportWorkingXmlOnly()">Export XML Only</button>
+          <button class="danger" onclick="openMergePreview()">Merge to Dekereke…</button>
+        </div>
+        <div class="form-help" style="margin-top: 12px;">
+          Sub-Bundle export is enabled only when a sub-bundle is selected.
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="secondary" onclick="closeExportModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2>Merge Settings</h2>
+        <button class="modal-close" onclick="closeSettingsModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="maxCountDeltaInput">Max record count delta (fraction)</label>
+          <input type="text" id="maxCountDeltaInput" placeholder="e.g., 0.02">
+          <div class="form-help">If working vs original count differs more than this fraction (or 5), show warning.</div>
+        </div>
+        <div class="form-group">
+          <label for="minChangeRatioInput">Min change ratio</label>
+          <input type="text" id="minChangeRatioInput" placeholder="e.g., 0.001">
+          <div class="form-help">Warn if too few changes to justify merge.</div>
+        </div>
+        <div class="form-group">
+          <label for="maxChangeRatioInput">Max change ratio</label>
+          <input type="text" id="maxChangeRatioInput" placeholder="e.g., 0.8">
+          <div class="form-help">Warn if extremely high percentage of records will change.</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="secondary" onclick="closeSettingsModal()">Cancel</button>
+        <button onclick="saveMergeSettings()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Merge Preview Modal -->
+  <div id="mergePreviewModal" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 800px; max-height: 80vh; overflow-y: auto;">
+      <div class="modal-header">
+        <h2>Merge Preview</h2>
+        <button class="modal-close" onclick="closeMergePreview()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex; justify-content:flex-end; margin-bottom:8px; position:relative;">
+          <div id="gearMenuContainer">
+            <button class="secondary" onclick="toggleGearMenu()">⚙️</button>
+            <div id="gearMenu" class="hidden" style="position:absolute; right:0; top:36px; background:#fff; border:1px solid #ddd; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.15); min-width:180px; z-index:10;">
+              <button class="icon-button" style="width:100%; text-align:left; padding:8px 12px;" onclick="openSettingsModal()">Settings…</button>
+              <button class="icon-button" style="width:100%; text-align:left; padding:8px 12px;" onclick="openLastMergeReport()">Last Merge Report…</button>
+            </div>
+          </div>
+        </div>
+        <div id="mergeSanitySummary" style="margin-bottom: 12px; color: #555;"></div>
+        <div style="margin-bottom: 10px;">
+          <strong id="mergeCounts"></strong>
+        </div>
+        <div id="missingRecordsSummary" style="margin-bottom:10px; color:#a33;"></div>
+        <div id="mergeChangesList" style="max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 10px; background: #f9f9f9;"></div>
+        <div class="form-help" style="margin-top: 10px;">
+          This will update the selected Dekereke XML in place and create a backup in a local 'backups/' folder.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="secondary" onclick="closeMergePreview()">Cancel</button>
+        <button onclick="applyMergeToDekereke()" class="danger">Apply Merge</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Merge Report Modal -->
+  <div id="mergeReportModal" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 800px; max-height: 80vh; overflow-y:auto;">
+      <div class="modal-header">
+        <h2>Last Merge Report</h2>
+        <button class="modal-close" onclick="closeMergeReportModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="mergeReportSummary" style="margin-bottom:10px; color:#555;"></div>
+        <div id="mergeReportList" style="max-height: 400px; overflow-y:auto; border:1px solid #ddd; border-radius:4px; padding:10px; background:#f9f9f9;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="secondary" onclick="openMergeReportInFinder()">Show in Finder</button>
+        <button class="secondary" onclick="closeMergeReportModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Conflict Resolution Modal -->
+  <div id="conflictModal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 900px; max-height: 80vh; overflow-y: auto;">
+      <div class="modal-header">
+        <h2>⚠️ Data Conflicts Detected</h2>
+      </div>
+      
+      <div class="modal-body">
+        <p style="margin-bottom: 16px;">
+          Some words in your tone groups have values that differ from the group's majority. 
+          If you proceed with export, these values will be <strong>overwritten</strong> to ensure consistency.
+        </p>
+        
+        <div id="conflictList" style="max-height: 400px; overflow-y: auto; margin: 20px 0; border: 1px solid #ddd; border-radius: 4px; padding: 12px;">
+          <!-- Conflicts will be rendered here -->
+        </div>
+        
+        <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 12px; border-radius: 4px; margin: 16px 0;">
+          <strong>Alternative Options:</strong>
+          <ul style="margin: 8px 0 0 0; padding-left: 24px;">
+            <li>Configure different output field names in the bundle to preserve original data</li>
+            <li>Manually fix inconsistencies in your source XML file</li>
+            <li>Remove problematic fields from bundle configuration</li>
+          </ul>
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button class="secondary" onclick="cancelConflictExport()">Cancel Export</button>
+        <button onclick="approveConflictExport()" style="background: #dc3545; color: white;">
+          Overwrite Conflicts and Export
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../../src/utils/localization.js"></script>
   <script src="tone-analysis-renderer.js"></script>
 </body>
 </html>

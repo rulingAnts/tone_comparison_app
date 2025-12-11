@@ -3,6 +3,18 @@
 // Track which views have been loaded
 const loadedViews = new Set();
 
+// Expose to window for access from child scripts
+window.loadedViews = loadedViews;
+window.forceReloadView = function(viewName) {
+  console.log('[main-window] Force reloading view:', viewName);
+  loadedViews.delete(viewName);
+  const viewContainer = document.getElementById(`${viewName}-view`);
+  if (viewContainer) {
+    viewContainer.innerHTML = '';
+  }
+  return loadViewContent(viewName);
+};
+
 // Load a view's HTML content dynamically
 async function loadViewContent(viewName) {
   if (loadedViews.has(viewName)) {
@@ -14,10 +26,10 @@ async function loadViewContent(viewName) {
 
   try {
     const viewFiles = {
-      'import': 'views/import-data.html',
-      'analysis': 'views/tone-analysis.html',
-      'export': 'views/export-mobile.html',
-      'import-mobile': 'views/import-mobile.html'
+      'import': 'import-data.html',
+      'analysis': 'tone-analysis.html',
+      'export': 'export-mobile.html',
+      'import-mobile': 'import-mobile.html'
     };
 
     const response = await fetch(viewFiles[viewName]);
@@ -27,11 +39,26 @@ async function loadViewContent(viewName) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
     
+    // Clear the container first to prevent duplicates
+    viewContainer.innerHTML = '';
+    
     // Copy styles from the loaded HTML
     const styles = doc.querySelectorAll('style');
     styles.forEach(style => {
       const newStyle = document.createElement('style');
-      newStyle.textContent = style.textContent;
+      // Scope styles to this view to prevent cross-view pollution
+      const scopedCSS = style.textContent.replace(
+        /([^{}]+)\{/g, 
+        (match, selector) => {
+          // Don't scope @-rules or already scoped selectors
+          if (selector.trim().startsWith('@') || selector.includes(`#${viewName}-view`)) {
+            return match;
+          }
+          // Scope selector to this view
+          return `#${viewName}-view ${selector}{`;
+        }
+      );
+      newStyle.textContent = scopedCSS;
       viewContainer.appendChild(newStyle);
     });
     
@@ -44,14 +71,9 @@ async function loadViewContent(viewName) {
       const newScript = document.createElement('script');
       let srcPath = script.getAttribute('src');
       
-      // Adjust relative paths to be relative to index.html instead of the view file
-      if (srcPath.startsWith('../')) {
-        // Remove ../ prefix (e.g., ../filter-functions.js -> filter-functions.js)
-        srcPath = srcPath.substring(3);
-      } else if (!srcPath.startsWith('/') && !srcPath.startsWith('http')) {
-        // Add views/ prefix for relative paths (e.g., import-data-renderer.js -> views/import-data-renderer.js)
-        srcPath = 'views/' + srcPath;
-      }
+      // All paths are already correct since index.html is in the same
+      // directory as all view HTML files (views/)
+      // Just use the paths as-is - they're relative to the current document location
       
       newScript.src = srcPath;
       await new Promise((resolve, reject) => {
@@ -70,6 +92,16 @@ async function loadViewContent(viewName) {
     });
     
     loadedViews.add(viewName);
+    
+    // Trigger view-specific initialization
+    if (viewName === 'analysis') {
+      // Give the scripts time to load and execute
+      setTimeout(() => {
+        if (window.initializeToneAnalysisView) {
+          window.initializeToneAnalysisView();
+        }
+      }, 100);
+    }
   } catch (error) {
     console.error(`Error loading view ${viewName}:`, error);
   }

@@ -379,7 +379,7 @@ async function createHierarchicalBundle(config, mainWindow, liteNormalizer, app)
     const {
       xmlPath,
       audioFolder,
-      outputPath,
+      outputPath: providedOutputPath,
       settings,
     } = config;
     
@@ -388,6 +388,21 @@ async function createHierarchicalBundle(config, mainWindow, liteNormalizer, app)
     if (settingsWithMeta.bundleDescription == null) settingsWithMeta.bundleDescription = '';
     
     const isLinkedBundle = settingsWithMeta.createLinkedBundle === true;
+    
+    // For linked bundles without an output path, create temp file in userData
+    let outputPath = providedOutputPath;
+    if (!outputPath && isLinkedBundle) {
+      const tempDir = path.join(app.getPath('userData'), 'temp-bundles');
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+      outputPath = path.join(tempDir, `bundle_${Date.now()}.tnset`);
+      console.log('[hierarchical] Created temp bundle path:', outputPath);
+    }
+    
+    if (!outputPath) {
+      throw new Error('Output path is required');
+    }
     
     if (isLinkedBundle) {
       console.log('[hierarchical] Creating LINKED bundle');
@@ -701,6 +716,7 @@ async function createHierarchicalBundle(config, mainWindow, liteNormalizer, app)
       missingSoundFiles: missingSoundFiles.length > 0 ? missingSoundFiles : null,
       subBundleCount: subBundles.length,
       hierarchicalBundle: true,
+      bundlePath: outputPath, // Return the bundle file path
     };
   } catch (error) {
     return {

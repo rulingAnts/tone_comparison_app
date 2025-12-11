@@ -18,6 +18,7 @@ const {
 const { validateBundleAudio, checkDuplicateReferences } = require('./validator');
 const { applyFilters } = require('./filter-engine');
 const { createLegacyBundle, createHierarchicalBundle } = require('./bundler-creator');
+const { initializeMatchingHandlers } = require('./matching-handlers');
 
 // Import bundler utility modules
 const liteNormalizer = (() => {
@@ -68,6 +69,118 @@ let currentView = 'bundler';
 let bundlerSettings = null;
 let activeBundleMetadata = null; // Store active bundle for Tone Analysis
 
+// ============================================================================
+// Tone Matching State (from desktop_matching_app)
+// ============================================================================
+let sessionData = null;
+let bundleData = null;
+let extractedPath = null;
+let bundleType = 'legacy'; // 'legacy' or 'hierarchical'
+let hierarchyConfig = null; // For hierarchical bundles
+let currentSubBundlePath = null; // Track which sub-bundle is currently loaded
+
+// Import change tracker after we have the utility
+const AdmZip = require('adm-zip');
+const { changeTracker, ChangeTracker } = (() => {
+  try {
+    return require('./utils/changeTracker');
+  } catch (e) {
+    console.warn('[unified] changeTracker not available:', e.message);
+    // Return stub if not available
+    return {
+      changeTracker: {
+        initialize: () => {},
+        trackChange: () => {},
+        getHistory: () => [],
+      },
+      ChangeTracker: {
+        loadChangeHistory: () => [],
+      },
+    };
+  }
+})();
+
+function getSessionPath() {
+  try {
+    return path.join(app.getPath('userData'), 'unified_matching_session.json');
+  } catch {
+    return path.join(process.cwd(), 'unified_matching_session.json');
+  }
+}
+
+function getExtractedBundlePath() {
+  try {
+    return path.join(app.getPath('userData'), 'extracted_bundle');
+  } catch {
+    return path.join(process.cwd(), 'extracted_bundle');
+  }
+}
+
+function loadSession() {
+  const p = getSessionPath();
+  try {
+    const raw = fs.readFileSync(p, 'utf8');
+    sessionData = JSON.parse(raw);
+  } catch {
+    sessionData = null;
+  }
+}
+
+function saveSession() {
+  try {
+    const p = getSessionPath();
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, JSON.stringify(sessionData || {}, null, 2), 'utf8');
+    console.log('[unified] Session saved to', p);
+  } catch (e) {
+    console.warn('Failed to save session:', e.message);
+  }
+}
+
+// Find most common metadata values in a group
+function findMostCommonGroupMetadata(members, dataForms, pitchKey, abbreviationKey, exemplarKey) {
+  const pitchCounts = new Map();
+  const abbrevCounts = new Map();
+  const exemplarCounts = new Map();
+  
+  members.forEach(ref => {
+    const record = dataForms.find(df => normalizeRefString(df.Reference) === ref);
+    if (!record) return;
+    
+    if (pitchKey && record[pitchKey]) {
+      const val = record[pitchKey];
+      pitchCounts.set(val, (pitchCounts.get(val) || 0) + 1);
+    }
+    if (abbreviationKey && record[abbreviationKey]) {
+      const val = record[abbreviationKey];
+      abbrevCounts.set(val, (abbrevCounts.get(val) || 0) + 1);
+    }
+    if (exemplarKey && record[exemplarKey]) {
+      const val = record[exemplarKey];
+      exemplarCounts.set(val, (exemplarCounts.get(val) || 0) + 1);
+    }
+  });
+  
+  const getMostCommon = (countMap) => {
+    if (countMap.size === 0) return undefined;
+    let maxCount = 0;
+    let mostCommon = undefined;
+    countMap.forEach((count, value) => {
+      if (count > maxCount) {
+        maxCount = count;
+        mostCommon = value;
+      }
+    });
+    return mostCommon;
+  };
+  
+  return {
+    pitchTranscription: getMostCommon(pitchCounts),
+    toneAbbreviation: getMostCommon(abbrevCounts),
+    exemplarWord: getMostCommon(exemplarCounts),
+  };
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -83,7 +196,7 @@ function createWindow() {
     show: false, // Don't show until ready
   });
 
-  mainWindow.loadFile(path.join(__dirname, '../public/index.html'));
+  mainWindow.loadFile(path.join(__dirname, '../public/views/index.html'));
 
   // Show window when ready
   mainWindow.once('ready-to-show', () => {
@@ -101,7 +214,30 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  loadSession(); // Load tone matching session if it exists
   createWindow();
+  
+  // Initialize tone matching handlers with shared state
+  const matchingState = {
+    get mainWindow() { return mainWindow; },
+    get sessionData() { return sessionData; },
+    set sessionData(val) { sessionData = val; },
+    get bundleData() { return bundleData; },
+    set bundleData(val) { bundleData = val; },
+    get extractedPath() { return extractedPath; },
+    set extractedPath(val) { extractedPath = val; },
+    get bundleType() { return bundleType; },
+    set bundleType(val) { bundleType = val; },
+    get hierarchyConfig() { return hierarchyConfig; },
+    set hierarchyConfig(val) { hierarchyConfig = val; },
+    get currentSubBundlePath() { return currentSubBundlePath; },
+    set currentSubBundlePath(val) { currentSubBundlePath = val; },
+    saveSession,
+    findMostCommonGroupMetadata,
+  };
+  
+  initializeMatchingHandlers(matchingState, app);
+  console.log('[unified] Matching handlers initialized');
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -588,6 +724,40 @@ ipcMain.handle('matching:load-bundle', async () => {
     success: false,
     error: 'Bundle loading not yet implemented',
   };
+});
+
+// Get filtered records for tone matching
+ipcMain.handle('bundler:get-filtered-records', async (event, config) => {
+  try {
+    const { xmlPath, filterGroups } = config;
+    
+    // Read and parse XML
+    const xmlData = fs.readFileSync(xmlPath, 'utf16le');
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: '@_',
+      trimValues: true,
+      parseAttributeValue: false,
+      parseTagValue: false,
+    });
+    const result = parser.parse(xmlData);
+    
+    const phonData = result.phon_data;
+    const dataForms = Array.isArray(phonData.data_form) 
+      ? phonData.data_form 
+      : [phonData.data_form];
+    
+    // Apply filters if provided
+    let filteredRecords = dataForms;
+    if (filterGroups && filterGroups.length > 0) {
+      filteredRecords = applyFilters(dataForms, filterGroups);
+    }
+    
+    return filteredRecords;
+  } catch (error) {
+    console.error('[bundler:get-filtered-records] Error:', error);
+    return [];
+  }
 });
 
 // ============================================================================

@@ -3176,8 +3176,8 @@ async function startSorting() {
   settings.bundleType = 'hierarchical';
   settings.createLinkedBundle = true;
   
-  // Generate a temporary output path (required by backend but not used for linked bundles)
-  const tempOutputPath = `temp_bundle_${Date.now()}.tnset`;
+  // We don't need an output path for the temp bundle - backend will provide one
+  // Just pass null and let the backend handle temp file creation
   
   console.log('[startSorting] Creating linked bundle with settings:', {
     bundleType: settings.bundleType,
@@ -3189,7 +3189,7 @@ async function startSorting() {
   const config = {
     xmlPath: xmlFilePath,
     audioFolder: audioFolderPath,
-    outputPath: tempOutputPath,
+    outputPath: null, // Backend will create temp path
     settings,
   };
   
@@ -3206,22 +3206,16 @@ async function startSorting() {
     if (result.success) {
       console.log('[startSorting] Bundle created successfully, preparing to switch to Tone Analysis');
       
-      // Prepare bundle metadata for Tone Analysis
-      const bundleMetadata = {
-        linkedXmlPath: xmlFilePath,
-        linkedAudioFolder: audioFolderPath,
-        settings: settings,
-        hierarchyTree: settings.hierarchyTree,
-        filterGroups: filterGroups,
-        recordsIncluded: result.recordsIncluded,
-        recordsExcluded: result.recordsExcluded,
-        recordCount: result.recordCount,
-        audioFileCount: result.audioFileCount,
-        missingSoundFiles: result.missingSoundFiles || []
-      };
+      // Store the bundle file path for Tone Analysis to load
+      const bundlePath = result.bundlePath;
+      if (!bundlePath) {
+        throw new Error('Bundle creation did not return a bundle path');
+      }
       
-      // Store bundle metadata for Tone Analysis to retrieve
-      await ipcRenderer.invoke('bundler:set-active-bundle', bundleMetadata);
+      console.log('[startSorting] Bundle file created at:', bundlePath);
+      
+      // Store bundle path for Tone Analysis to retrieve
+      await ipcRenderer.invoke('bundler:set-active-bundle', { bundlePath });
       
       // Brief success message
       showStatus('success', `Linked bundle ready! Records: ${result.recordsIncluded || result.recordCount}, Audio files: ${result.audioFileCount}`);

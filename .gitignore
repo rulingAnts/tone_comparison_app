@@ -1,3 +1,5 @@
+# Temporary Bundles
+temp_bundle_*
 # macOS
 .DS_Store
 .AppleDouble
